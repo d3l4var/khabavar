@@ -173,7 +173,7 @@ func (s *DBStore) ListOrderItems(ctx context.Context, orderID string) ([]OrderIt
 		return nil, err
 	}
 	defer rows.Close()
-	var out []OrderItem
+	out := make([]OrderItem, 0)
 	for rows.Next() {
 		var it OrderItem
 		var attrs []byte
@@ -303,7 +303,7 @@ func (s *DBStore) ListRefunds(ctx context.Context, orderID string) ([]Refund, er
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Refund
+	out := make([]Refund, 0)
 	for rows.Next() {
 		var r Refund
 		var completedAt pgtype.Timestamptz

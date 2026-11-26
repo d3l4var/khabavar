@@ -66,7 +66,7 @@ func (s *DBStore) SearchProducts(ctx context.Context, f SearchFilter) ([]SearchR
 		return nil, 0, err
 	}
 	defer rows.Close()
-	var out []SearchResult
+	out := make([]SearchResult, 0)
 	for rows.Next() {
 		var p Product
 		var brandID, shortDesc, desc, mfr, country, sleepRel, specSrc pgtype.Text

@@ -101,29 +101,29 @@ type CartItem struct {
 // handler or service orchestrator) resolves variant snapshots and unit prices from
 // catalog/pricing BEFORE calling CreateOrder — commerce never reads those tables.
 type OrderInput struct {
-	CustomerID    string // empty for guest checkout
-	GuestPhone    string // required when CustomerID is empty
-	OrderNumber   string // e.g. "KHA-ORD-2026-000001" (§۴.۱/§۱۵)
-	Currency      string // defaults to IRR
-	Items         []OrderItemInput
-	ShippingAddr  json.RawMessage // snapshot — JSONB in DB
-	DiscountTotal int64
-	ShippingTotal int64
-	TaxTotal      int64
+	CustomerID    string           `json:"customer_id,omitempty"`  // empty for guest checkout
+	GuestPhone    string           `json:"guest_phone,omitempty"`  // required when CustomerID is empty
+	OrderNumber   string           `json:"order_number,omitempty"` // e.g. "KHA-ORD-2026-000001" (§۴.۱/§۱۵)
+	Currency      string           `json:"currency,omitempty"`     // defaults to IRR
+	Items         []OrderItemInput `json:"items"`
+	ShippingAddr  json.RawMessage  `json:"shipping_address"` // snapshot — JSONB in DB
+	DiscountTotal int64            `json:"discount_total"`
+	ShippingTotal int64            `json:"shipping_total"`
+	TaxTotal      int64            `json:"tax_total"`
 }
 
 // OrderItemInput is a single line item resolved from a cart item + pricing.
 type OrderItemInput struct {
-	ProductID          string
-	VariantID          string
-	SKUSnapshot        string
-	TitleSnapshot      string
-	AttributesSnapshot json.RawMessage
-	Quantity           int
-	UnitPrice          int64
-	DiscountAmount     int64
-	TaxAmount          int64
-	SupplyType         string // OWNED_INVENTORY | SUPPLIER_SOURCED
+	ProductID          string          `json:"product_id"`
+	VariantID          string          `json:"variant_id"`
+	SKUSnapshot        string          `json:"sku_snapshot"`
+	TitleSnapshot      string          `json:"title_snapshot"`
+	AttributesSnapshot json.RawMessage `json:"attributes_snapshot,omitempty"`
+	Quantity           int             `json:"quantity"`
+	UnitPrice          int64           `json:"unit_price"`
+	DiscountAmount     int64           `json:"discount_amount"`
+	TaxAmount          int64           `json:"tax_amount"`
+	SupplyType         string          `json:"supply_type"` // OWNED_INVENTORY | SUPPLIER_SOURCED
 }
 
 // Order mirrors orders.

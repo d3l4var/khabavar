@@ -162,7 +162,7 @@ func scanCostRow(row rowScanner) (*CostRecord, error) {
 }
 
 func scanCostRows(rows pgx.Rows) ([]CostRecord, error) {
-	var out []CostRecord
+	out := make([]CostRecord, 0)
 	for rows.Next() {
 		c, err := scanCostRow(rows)
 		if err != nil {
@@ -206,7 +206,7 @@ func scanPriceRow(row rowScanner) (*PriceRecord, error) {
 }
 
 func scanPriceRows(rows pgx.Rows) ([]PriceRecord, error) {
-	var out []PriceRecord
+	out := make([]PriceRecord, 0)
 	for rows.Next() {
 		p, err := scanPriceRow(rows)
 		if err != nil {

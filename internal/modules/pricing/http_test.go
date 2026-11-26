@@ -44,7 +44,7 @@ func TestStorefrontPriceHandler_ApprovedVariant(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// Customer-visible fields present.
-	for _, want := range []string{`"SellingPrice":10000000`, `"Discount":500000`, `"NetRevenue":9500000`, `"Currency":"IRR"`} {
+	for _, want := range []string{`"selling_price":10000000`, `"discount":500000`, `"net_revenue":9500000`, `"currency":"IRR"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q: %s", want, body)
 		}

@@ -24,6 +24,8 @@ skills/
 # tsc must never emit next to the design-system sources: Vite resolves .js before
 # .tsx, so a stray emitted file would silently shadow the real component.
 web/shared/*.js
+# verification-only IIFE build (Lightpanda cannot run ES modules)
+web/*/dist-lp/
 __pycache__/
 *.pyc
 

@@ -329,11 +329,11 @@ func (s *Service) ListPriceHistory(ctx context.Context, variantID string) ([]Pri
 // net revenue only. Cost/contribution are confidential (R-05 §۲۴ line 489) and never
 // appear here.
 type StorefrontPrice struct {
-	VariantID    string
-	SellingPrice int64
-	Discount     int64
-	NetRevenue   int64
-	Currency     string
+	VariantID    string `json:"variant_id"`
+	SellingPrice int64  `json:"selling_price"`
+	Discount     int64  `json:"discount"`
+	NetRevenue   int64  `json:"net_revenue"`
+	Currency     string `json:"currency"`
 }
 
 // StorefrontPrice returns the currently-valid APPROVED price for a variant, or

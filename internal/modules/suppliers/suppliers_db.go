@@ -195,7 +195,7 @@ func (s *DBStore) ListSupplierVariantsByVariant(ctx context.Context, variantID s
 		return nil, err
 	}
 	defer rows.Close()
-	var out []SupplierVariant
+	out := make([]SupplierVariant, 0)
 	for rows.Next() {
 		var sv SupplierVariant
 		var sku pgtype.Text
@@ -270,7 +270,7 @@ func (s *DBStore) ListPriceHistory(ctx context.Context, supplierVariantID string
 		return nil, err
 	}
 	defer rows.Close()
-	var out []PriceHistoryEntry
+	out := make([]PriceHistoryEntry, 0)
 	for rows.Next() {
 		var e PriceHistoryEntry
 		var validUntil pgtype.Timestamptz
@@ -312,7 +312,7 @@ func (s *DBStore) ListEvaluationsBySupplier(ctx context.Context, supplierID stri
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Evaluation
+	out := make([]Evaluation, 0)
 	for rows.Next() {
 		var ev Evaluation
 		var reviewer, notes pgtype.Text

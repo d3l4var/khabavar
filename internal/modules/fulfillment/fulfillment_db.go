@@ -60,7 +60,7 @@ func (s *DBStore) ListFulfillmentOrdersByOrder(ctx context.Context, orderID stri
 		return nil, err
 	}
 	defer rows.Close()
-	var out []FulfillmentOrder
+	out := make([]FulfillmentOrder, 0)
 	for rows.Next() {
 		var fo FulfillmentOrder
 		var warehouseID, supplierID pgtype.Text
@@ -139,7 +139,7 @@ func (s *DBStore) ListFulfillmentItemsByFulfillment(ctx context.Context, fulfill
 		return nil, err
 	}
 	defer rows.Close()
-	var out []FulfillmentItem
+	out := make([]FulfillmentItem, 0)
 	for rows.Next() {
 		var fi FulfillmentItem
 		if err := rows.Scan(&fi.ID, &fi.FulfillmentOrderID, &fi.OrderItemID, &fi.Quantity,
@@ -207,7 +207,7 @@ func (s *DBStore) ListShipmentsByFulfillment(ctx context.Context, fulfillmentOrd
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Shipment
+	out := make([]Shipment, 0)
 	for rows.Next() {
 		var sh Shipment
 		var serviceType, tracking pgtype.Text
@@ -269,7 +269,7 @@ func (s *DBStore) ListShipmentItemsByShipment(ctx context.Context, shipmentID st
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ShipmentItem
+	out := make([]ShipmentItem, 0)
 	for rows.Next() {
 		var si ShipmentItem
 		if err := rows.Scan(&si.ID, &si.ShipmentID, &si.FulfillmentItemID, &si.Quantity); err != nil {
@@ -301,7 +301,7 @@ func (s *DBStore) ListShipmentEvents(ctx context.Context, shipmentID string) ([]
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ShipmentEvent
+	out := make([]ShipmentEvent, 0)
 	for rows.Next() {
 		var ev ShipmentEvent
 		var desc, extRef pgtype.Text

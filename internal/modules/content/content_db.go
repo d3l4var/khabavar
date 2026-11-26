@@ -53,7 +53,7 @@ func (s *DBStore) ListTopics(ctx context.Context) ([]Topic, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Topic
+	out := make([]Topic, 0)
 	for rows.Next() {
 		var t Topic
 		var parentID pgtype.Text
@@ -237,7 +237,7 @@ func (s *DBStore) ListArticleSources(ctx context.Context, articleID string) ([]A
 		return nil, err
 	}
 	defer rows.Close()
-	var out []ArticleSource
+	out := make([]ArticleSource, 0)
 	for rows.Next() {
 		var src ArticleSource
 		var url pgtype.Text
@@ -285,7 +285,7 @@ func (s *DBStore) ListTopicsForArticle(ctx context.Context, articleID string) ([
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Topic
+	out := make([]Topic, 0)
 	for rows.Next() {
 		var t Topic
 		var parentID pgtype.Text
@@ -345,7 +345,7 @@ func (s *DBStore) RemoveProductArticleRelation(ctx context.Context, id string) e
 // ── scan helpers ──────────────────────────────────────────────────────────────
 
 func scanArticles(rows pgx.Rows, total int) ([]Article, int, error) {
-	var out []Article
+	out := make([]Article, 0)
 	for rows.Next() {
 		var a Article
 		var summary, sourceURL, parentID, authorID, editorID pgtype.Text
@@ -367,7 +367,7 @@ func scanArticles(rows pgx.Rows, total int) ([]Article, int, error) {
 }
 
 func scanRelations(rows pgx.Rows) ([]ProductArticleRelation, error) {
-	var out []ProductArticleRelation
+	out := make([]ProductArticleRelation, 0)
 	for rows.Next() {
 		var rel ProductArticleRelation
 		if err := rows.Scan(&rel.ID, &rel.ProductID, &rel.ArticleID, &rel.RelationType,

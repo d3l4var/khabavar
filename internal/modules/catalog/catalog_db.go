@@ -36,7 +36,7 @@ func (s *DBStore) ListCategories(ctx context.Context) ([]Category, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Category
+	out := make([]Category, 0)
 	for rows.Next() {
 		var c Category
 		var parentID, desc, imageID pgtype.Text
@@ -210,7 +210,7 @@ func (s *DBStore) ListVariantsByProduct(ctx context.Context, productID string) (
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Variant
+	out := make([]Variant, 0)
 	for rows.Next() {
 		var v Variant
 		var barcode pgtype.Text
@@ -266,7 +266,7 @@ func (s *DBStore) GetVariantBySKU(ctx context.Context, sku string) (*Variant, er
 // ── scan helpers ───────────────────────────────────────────────────────────────
 
 func scanProducts(rows pgx.Rows) ([]Product, error) {
-	var out []Product
+	out := make([]Product, 0)
 	for rows.Next() {
 		var p Product
 		var brandID, shortDesc, desc, manufacturer, origin, sleepRel, specSrc pgtype.Text

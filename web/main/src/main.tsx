@@ -80,10 +80,10 @@ function HomeScreen() {
         <h2>تازه‌ترین مقالات</h2>
         {articles.loading ? <StateBlock kind="loading" /> : null}
         {articles.error ? <StateBlock kind="error" message={articles.error} onRetry={articles.retry} /> : null}
-        {articles.data && articles.data.data.length === 0 ? <StateBlock kind="empty" message="هنوز مقاله‌ای منتشر نشده است." /> : null}
-        {articles.data && articles.data.data.length > 0 ? (
+        {articles.data && (articles.data.data ?? []).length === 0 ? <StateBlock kind="empty" message="هنوز مقاله‌ای منتشر نشده است." /> : null}
+        {articles.data && (articles.data.data ?? []).length > 0 ? (
           <Grid>
-            {articles.data.data.map((a: Article) => (
+            {(articles.data.data ?? []).map((a: Article) => (
               <ArticleCard key={a.id} article={a} href={`#/article/${encodeURIComponent(a.slug)}`} />
             ))}
           </Grid>
@@ -94,10 +94,10 @@ function HomeScreen() {
         <h2>محصولات</h2>
         {products.loading ? <StateBlock kind="loading" /> : null}
         {products.error ? <StateBlock kind="error" message={products.error} onRetry={products.retry} /> : null}
-        {products.data && products.data.data.length === 0 ? <StateBlock kind="empty" message="محصولی برای نمایش نیست." /> : null}
-        {products.data && products.data.data.length > 0 ? (
+        {products.data && (products.data.data ?? []).length === 0 ? <StateBlock kind="empty" message="محصولی برای نمایش نیست." /> : null}
+        {products.data && (products.data.data ?? []).length > 0 ? (
           <Grid>
-            {products.data.data.map((hit) => (
+            {(products.data.data ?? []).map((hit) => (
               <ProductCard key={hit.Product.id} product={hit.Product} href={`#/product/${encodeURIComponent(hit.Product.id)}`} />
             ))}
           </Grid>
@@ -142,10 +142,10 @@ function ShopScreen() {
 
       {result.loading ? <StateBlock kind="loading" /> : null}
       {result.error ? <StateBlock kind="error" message={result.error} onRetry={result.retry} /> : null}
-      {result.data && result.data.data.length === 0 ? <StateBlock kind="empty" message="محصولی با این مشخصات پیدا نشد." /> : null}
-      {result.data && result.data.data.length > 0 ? (
+      {result.data && (result.data.data ?? []).length === 0 ? <StateBlock kind="empty" message="محصولی با این مشخصات پیدا نشد." /> : null}
+      {result.data && (result.data.data ?? []).length > 0 ? (
         <Grid>
-          {result.data.data.map((hit) => (
+          {(result.data.data ?? []).map((hit) => (
             <ProductCard key={hit.Product.id} product={hit.Product} href={`#/product/${encodeURIComponent(hit.Product.id)}`} />
           ))}
         </Grid>
@@ -195,9 +195,9 @@ function MagazineScreen() {
   return (
     <Container>
       <h1 style={{ marginTop: 'var(--kh-space-5)' }}>مجله</h1>
-      {topics.data && topics.data.data.length > 0 ? (
+      {topics.data && (topics.data.data ?? []).length > 0 ? (
         <div style={{ display: 'flex', gap: 'var(--kh-space-2)', flexWrap: 'wrap', margin: 'var(--kh-space-3) 0' }}>
-          {topics.data.data.map((t) => (
+          {(topics.data.data ?? []).map((t) => (
             <span key={t.id} style={{ fontSize: 'var(--kh-text-sm)', color: 'var(--kh-text-muted)' }}>
               {t.name}
             </span>
@@ -207,10 +207,10 @@ function MagazineScreen() {
 
       {articles.loading ? <StateBlock kind="loading" /> : null}
       {articles.error ? <StateBlock kind="error" message={articles.error} onRetry={articles.retry} /> : null}
-      {articles.data && articles.data.data.length === 0 ? <StateBlock kind="empty" message="هنوز مقاله‌ای منتشر نشده است." /> : null}
-      {articles.data && articles.data.data.length > 0 ? (
+      {articles.data && (articles.data.data ?? []).length === 0 ? <StateBlock kind="empty" message="هنوز مقاله‌ای منتشر نشده است." /> : null}
+      {articles.data && (articles.data.data ?? []).length > 0 ? (
         <Grid>
-          {articles.data.data.map((a) => (
+          {(articles.data.data ?? []).map((a) => (
             <ArticleCard key={a.id} article={a} href={`#/article/${encodeURIComponent(a.slug)}`} />
           ))}
         </Grid>

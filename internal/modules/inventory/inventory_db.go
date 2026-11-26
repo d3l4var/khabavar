@@ -243,7 +243,7 @@ func (s *DBStore) ListMovements(ctx context.Context, warehouseID, variantID stri
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Movement
+	out := make([]Movement, 0)
 	for rows.Next() {
 		var m Movement
 		var refType, refID, createdBy pgtype.Text
@@ -314,7 +314,7 @@ func (s *DBStore) ListExpiredActiveReservations(ctx context.Context, now time.Ti
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Reservation
+	out := make([]Reservation, 0)
 	for rows.Next() {
 		var r Reservation
 		var warehouseID, supplierID pgtype.Text
