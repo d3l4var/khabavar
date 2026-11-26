@@ -1318,6 +1318,28 @@ retry همان اعلان → 200 (already_confirmed)
 
 **بازرسی مسیرها: ۶ → ۵.**
 
+### ۴.۴۹ درخواست مرجوعی مشتری — کامیت `feat(return-requests)`
+
+`POST /orders/{id}/return-requests` — تنها مسیر مشتری باقی‌مانده و از نظر مالی حساس.
+
+**مهاجرت `000016_return_requests`:** جدول تازه با CHECK روی وضعیت
+(`REQUESTED|APPROVED|REJECTED|RECEIVED|REFUNDED`) و **ایندکس یکتای جزئی** روی
+`(order_id) WHERE status IN ('REQUESTED','APPROVED','RECEIVED')` — مشتری نمی‌تواند
+درخواست‌های موازی روی یک سفارش بسازد، ولی تاریخچه بعد از تصمیم باز می‌ماند.
+
+**قاعده‌ها:** مرجوعی فقط بعد از پرداخت (`PAID`/`IN_FULFILLMENT`/`SHIPPED`/`COMPLETED`)؛
+سفارش با `customer_id` محدود است (سفارش مشتری دیگر → ۴۰۴)؛ دلیل الزامی؛ تعداد مثبت؛
+و نوشتن در **Audit** با actorType `CUSTOMER` — خطای audit برگردانده می‌شود، نه بلعیده.
+
+**Idempotency:** مسیر پشت `Idempotent(s.idem, "return-request", …)` است تا دوبار کلیک
+دو درخواست نسازد.
+
+**شاهد (PG):** `TestPG_ReturnRequest` — رد شدن مرجوعی روی `PENDING_PAYMENT`، رد شدن دلیل
+خالی و تعداد صفر، رد شدن مشتری غریبه، ساخت موفق، و **۴۰۹‌مانند** شدن درخواست دوم از
+طریق ایندکس یکتا (`ErrReturnAlreadyOpen`).
+
+**بازرسی مسیرها: ۶ → ۴.**
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

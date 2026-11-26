@@ -718,3 +718,71 @@ func TestPG_FindIntentByProviderReference(t *testing.T) {
 		t.Fatalf("unknown reference = %q/%q, want empty", missingIntent, missingOrder)
 	}
 }
+
+// TestPG_ReturnRequest covers the customer's return claim: ownership scoping, the status
+// gate, the one-open-request rule, and the audit write.
+func TestPG_ReturnRequest(t *testing.T) {
+	pool, svc, store := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-RET-1")
+	customerID := seedCustomerRow(t, ctx, pool)
+
+	orderID, err := svc.CreateOrder(ctx, OrderInput{
+		CustomerID: customerID, Currency: "IRR",
+		Items: []OrderItemInput{{
+			ProductID: productID, VariantID: variantID, SKUSnapshot: "SKU-RET-1",
+			TitleSnapshot: "x", Quantity: 1, UnitPrice: 1000, SupplyType: "OWNED_INVENTORY",
+		}},
+		ShippingAddr: json.RawMessage(`{"city":"تهران"}`),
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	// A return needs the money taken first.
+	if _, err := svc.CreateReturnRequest(ctx, orderID, customerID, 1, "خرابی"); !errors.Is(err, ErrReturnNotAllowed) {
+		t.Fatalf("return on PENDING_PAYMENT = %v, want ErrReturnNotAllowed", err)
+	}
+	// Pay it: an intent plus a SUCCEEDED attempt is what ConfirmPaymentForOrder requires.
+	intentID, err := svc.CreatePaymentIntent(ctx, orderID)
+	if err != nil {
+		t.Fatalf("CreatePaymentIntent: %v", err)
+	}
+	if _, err := store.CreateAttempt(ctx, PaymentAttempt{
+		PaymentIntentID: intentID, Provider: "mock", ProviderReference: "REF-RET-" + uuid.NewString(),
+		Amount: 1000, Status: "SUCCEEDED", IdempotencyKey: "idem-" + uuid.NewString(),
+		CompletedAt: ptrTime(time.Now()),
+	}); err != nil {
+		t.Fatalf("CreateAttempt: %v", err)
+	}
+	if err := svc.ConfirmPaymentForOrder(ctx, orderID); err != nil {
+		t.Fatalf("ConfirmPaymentForOrder: %v", err)
+	}
+
+	if _, err := svc.CreateReturnRequest(ctx, orderID, customerID, 1, ""); !errors.Is(err, ErrReturnReasonRequired) {
+		t.Fatalf("empty reason = %v, want ErrReturnReasonRequired", err)
+	}
+	if _, err := svc.CreateReturnRequest(ctx, orderID, customerID, 0, "خرابی"); !errors.Is(err, ErrReturnQuantityInvalid) {
+		t.Fatalf("zero quantity = %v, want ErrReturnQuantityInvalid", err)
+	}
+	// Another customer must not be able to file against this order.
+	if _, err := svc.CreateReturnRequest(ctx, orderID, seedCustomerRow(t, ctx, pool), 1, "خرابی"); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("foreign customer = %v, want ErrOrderNotFound", err)
+	}
+
+	rr, err := svc.CreateReturnRequest(ctx, orderID, customerID, 1, "خرابی")
+	if err != nil {
+		t.Fatalf("CreateReturnRequest: %v", err)
+	}
+	if rr.Status != ReturnRequested || rr.Quantity != 1 {
+		t.Fatalf("request = %+v", rr)
+	}
+	// The partial unique index must stop a second open claim.
+	if _, err := svc.CreateReturnRequest(ctx, orderID, customerID, 1, "دوباره"); !errors.Is(err, ErrReturnAlreadyOpen) {
+		t.Fatalf("second open request = %v, want ErrReturnAlreadyOpen", err)
+	}
+
+	list, err := store.ListReturnRequestsByOrder(ctx, orderID)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list = %v, %v", list, err)
+	}
+}

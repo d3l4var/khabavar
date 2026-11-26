@@ -2,8 +2,12 @@ package commerce
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"time"
+
+	"github.com/khabavar/khabavar/internal/modules/authorization"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -62,4 +66,30 @@ func (s *DBStore) FindCartBySession(ctx context.Context, sessionToken string) (*
 		return nil, err
 	}
 	return &c, nil
+}
+
+// CreateReturnRequestHandler serves POST /api/v1/orders/{id}/return-requests (customer
+// auth). It is mounted behind Idempotent: a double-clicked "return" must not create two
+// claims.
+func CreateReturnRequestHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Quantity int    `json:"quantity"`
+			Reason   string `json:"reason"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json", "code": "invalid_body"})
+			return
+		}
+		if req.Quantity == 0 {
+			req.Quantity = 1 // the whole-order return is the common case
+		}
+		rr, err := svc.CreateReturnRequest(r.Context(), r.PathValue("id"),
+			authorization.CustomerID(r.Context()), req.Quantity, req.Reason)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, rr)
+	}
 }
