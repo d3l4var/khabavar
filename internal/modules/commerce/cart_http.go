@@ -104,7 +104,7 @@ func CheckoutHandler(svc *Service) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json", "code": "invalid_body"})
 			return
 		}
-		res, err := svc.Checkout(r.Context(), "", r.Header.Get(guestTokenHeader), in)
+		res, err := svc.Checkout(r.Context(), authorization.CustomerID(r.Context()), r.Header.Get(guestTokenHeader), in)
 		if err != nil {
 			var unavailable *ErrCheckoutUnavailable
 			if errors.As(err, &unavailable) {
