@@ -43,7 +43,7 @@ func TestEveryAdminRouteIsGuarded(t *testing.T) {
 		denyAllChecker{},
 		nil,
 	)
-	api := newAPIMux(mux, guard)
+	api := newAPIMux(mux, guard, func(context.Context, string) (string, string, bool) { return "", "", false })
 	for pattern := range adminPermissions {
 		api.admin(pattern, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -67,14 +67,14 @@ func TestAdminMountPanicsWithoutPermission(t *testing.T) {
 			t.Fatal("mounting an unmapped admin route must panic")
 		}
 	}()
-	api := newAPIMux(http.NewServeMux(), newAdminGuard(nil, denyAllChecker{}, nil))
+	api := newAPIMux(http.NewServeMux(), newAdminGuard(nil, denyAllChecker{}, nil), func(context.Context, string) (string, string, bool) { return "", "", false })
 	api.admin("POST /api/v1/admin/not-mapped", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 }
 
 // TestPublicRoutesNeedNoToken: storefront reads stay open.
 func TestPublicRoutesNeedNoToken(t *testing.T) {
 	mux := http.NewServeMux()
-	api := newAPIMux(mux, newAdminGuard(nil, denyAllChecker{}, nil))
+	api := newAPIMux(mux, newAdminGuard(nil, denyAllChecker{}, nil), func(context.Context, string) (string, string, bool) { return "", "", false })
 	api.public("GET /api/v1/products/{id}", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -91,7 +91,7 @@ func TestPublicRoutesNeedNoToken(t *testing.T) {
 // /orders/{id}/fulfillment), so this test is the startup smoke check.
 func TestMountRoutesHasNoPatternConflicts(t *testing.T) {
 	mux := http.NewServeMux()
-	api := newAPIMux(mux, newAdminGuard(nil, denyAllChecker{}, nil))
+	api := newAPIMux(mux, newAdminGuard(nil, denyAllChecker{}, nil), func(context.Context, string) (string, string, bool) { return "", "", false })
 	mountRoutes(api, services{}) // panics on a conflicting pattern
 	if len(api.mounted) < 50 {
 		t.Fatalf("only %d routes mounted — route table looks truncated", len(api.mounted))

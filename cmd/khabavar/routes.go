@@ -135,19 +135,27 @@ var seedPermissionCodes = []string{
 type apiMux struct {
 	mux     *http.ServeMux
 	guard   func(permission string, next http.Handler) http.Handler
+	resolve authorization.SubjectResolver
 	mounted map[string]string
 }
 
 // newAPIMux builds the mux wrapper. guard must authenticate the caller and check the
 // permission code; runAPI passes authorization.Authenticate ∘ RequireAudited.
-func newAPIMux(mux *http.ServeMux, guard func(string, http.Handler) http.Handler) *apiMux {
-	return &apiMux{mux: mux, guard: guard, mounted: map[string]string{}}
+func newAPIMux(mux *http.ServeMux, guard func(string, http.Handler) http.Handler, resolve authorization.SubjectResolver) *apiMux {
+	return &apiMux{mux: mux, guard: guard, resolve: resolve, mounted: map[string]string{}}
 }
 
 // public mounts a route that needs no staff permission (storefront reads, health).
 func (a *apiMux) public(pattern string, h http.Handler) {
 	a.mux.Handle(pattern, h)
 	a.mounted[pattern] = ""
+}
+
+// customer mounts a route that requires a *customer* bearer token (never a staff one),
+// and puts the customer id in the request context for the handler.
+func (a *apiMux) customer(pattern string, h http.Handler) {
+	a.mux.Handle(pattern, authorization.AuthenticateCustomer(a.resolve, h))
+	a.mounted[pattern] = "customer"
 }
 
 // admin mounts a staff route behind authentication + the permission mapped to pattern.
@@ -195,6 +203,8 @@ type services struct {
 	media       *media.Service
 	content     *content.Service
 	ecosystem   *ecosystem.Service
+	resolve     authorization.SubjectResolver
+	customer    identity.CustomerStore
 	catList     *catalog.AdminListStore
 	idem        commerce.IdempotencyStore
 	invAdmin    *inventory.AdminStore
@@ -229,6 +239,14 @@ func mountRoutes(api *apiMux, s services) {
 
 	// ── commerce (P4) ──
 	// Server-side cart (DB §14.1). Guests are identified by X-Guest-Cart-Token.
+	// Customer surface (/me). A staff token is rejected here: the customer API must not
+	// be a back door into staff identity.
+	api.customer("GET /api/v1/me", identity.MeHandler(s.customer))
+	api.customer("GET /api/v1/me/addresses", identity.ListAddressesHandler(s.customer))
+	api.customer("POST /api/v1/me/addresses", identity.CreateAddressHandler(s.customer))
+	api.customer("PATCH /api/v1/me/addresses/{id}", identity.UpdateAddressHandler(s.customer))
+	api.customer("DELETE /api/v1/me/addresses/{id}", identity.DeleteAddressHandler(s.customer))
+
 	api.public("GET /api/v1/cart", commerce.CartHandler(s.commerce))
 	// Checkout is money-touching, so a retry must not create a second order
 	// (ADR-ARCH-008). The wrapper enforces the Idempotency-Key header.

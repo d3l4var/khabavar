@@ -22,6 +22,10 @@ var (
 	ErrMaxAttempts      = errors.New("identity: max otp attempts exceeded")
 	ErrAlreadyConsumed  = errors.New("identity: otp already consumed")
 	ErrInvalidCode      = errors.New("identity: invalid otp code")
+
+	// Customer surface (/me): a missing customer row, or an address that is not theirs.
+	ErrCustomerNotFound = errors.New("identity: customer not found")
+	ErrAddressNotFound  = errors.New("identity: address not found")
 )
 
 // Purpose values (otp_challenges.purpose CHECK constraint).

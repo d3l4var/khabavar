@@ -126,7 +126,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	}
 	checker := authorization.NewDBChecker(pool.Pool)
 	auditor := audit.NewRecorder(pool.Pool)
-	api := newAPIMux(mux, newAdminGuard(resolve, checker, auditor))
+	api := newAPIMux(mux, newAdminGuard(resolve, checker, auditor), resolve)
 
 	catSvc := catalog.NewService(catalog.NewDBStore(pool.Pool))
 	catSvc.SetSearchStore(catalog.NewDBStore(pool.Pool))
@@ -157,6 +157,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 		media:       mediaSvc,
 		content:     contentSvc,
 		ecosystem:   ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc}),
+		customer:    identity.NewDBCustomerStore(pool.Pool),
 		catList:     catalog.NewAdminListStore(pool.Pool),
 		idem:        commerce.NewDBStore(pool.Pool),
 		invAdmin:    inventory.NewAdminStore(pool.Pool),
