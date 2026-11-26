@@ -1304,6 +1304,20 @@ retry همان اعلان → 200 (already_confirmed)
 `POST /admin/users`، `POST /admin/orders/{}/fulfillments`، `POST /oauth/logout`،
 `POST /orders/{}/return-requests`).
 
+### ۴.۴۸ fulfillment از مسیر سفارش — کامیت `feat(order-fulfillments)`
+
+`POST /admin/orders/{id}/fulfillments` — حلقهٔ گمشدهٔ زنجیرهٔ عملیاتی.
+
+- handler موجود، `order_id` را از **بدنه** می‌گرفت؛ قرارداد آن را در **مسیر** می‌خواهد.
+  در نسخهٔ مسیرمحور، مسیر مرجع است: اگر بدنه `order_id` متفاوتی بفرستد **۴۰۰** می‌دهد،
+  نه اینکه بی‌صدا نادیده بگیرد — وگرنه می‌شد سفارش اشتباه را fulfillment کرد.
+- `CreateFulfillmentOrder` از قبل بود و تست PG داشت؛ این فقط لایهٔ HTTP + mount است.
+
+**شاهد:** `TestCreateOrderFulfillmentRejectsContradictingBody` (بدنهٔ متناقض → ۴۰۰، و
+گارد **قبل از** هر فراخوانی سرویس فعال است — با سرویس `nil` تست شده).
+
+**بازرسی مسیرها: ۶ → ۵.**
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

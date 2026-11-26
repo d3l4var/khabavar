@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"time"
 )
@@ -233,5 +234,37 @@ func RecordShipmentEventHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusCreated, map[string]any{"id": id})
+	}
+}
+
+// CreateOrderFulfillmentHandler serves POST /api/v1/admin/orders/{id}/fulfillments.
+// The order id comes from the path and is authoritative: a body order_id that disagrees
+// is rejected rather than silently ignored, so a client cannot fulfil the wrong order.
+func CreateOrderFulfillmentHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			OrderID     string `json:"order_id"`
+			SourceType  string `json:"source_type"`
+			WarehouseID string `json:"warehouse_id"`
+			SupplierID  string `json:"supplier_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			writeFulErr(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		orderID := r.PathValue("id")
+		if req.OrderID != "" && req.OrderID != orderID {
+			writeFulErr(w, http.StatusBadRequest, "order_id in the body contradicts the path")
+			return
+		}
+		id, err := svc.CreateFulfillmentOrder(r.Context(), FulfillmentOrder{
+			OrderID: orderID, SourceType: req.SourceType,
+			WarehouseID: req.WarehouseID, SupplierID: req.SupplierID,
+		})
+		if err != nil {
+			writeFulSvcErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "order_id": orderID})
 	}
 }
