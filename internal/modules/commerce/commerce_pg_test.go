@@ -7,8 +7,10 @@ package commerce
 
 import (
 	"context"
+
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"testing"
 	"time"
 
@@ -293,5 +295,79 @@ func TestPG_StatusUpdatesRejectUnknownOrder(t *testing.T) {
 	}
 	if err := store.UpdateOrderPaid(ctx, missing, 1000, OrderPaid); !errors.Is(err, ErrOrderNotFound) {
 		t.Fatalf("UpdateOrderPaid on a missing order: %v, want ErrOrderNotFound", err)
+	}
+}
+
+// TestPG_PaymentIntentAndAttemptReads covers the money-path store methods that had no
+// test against the real schema: the active intent lookup, the attempt aggregates that
+// reconciliation relies on, and the refunded-total write.
+func TestPG_PaymentIntentAndAttemptReads(t *testing.T) {
+	pool, svc, store := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-PAY-1")
+
+	orderID, err := svc.CreateOrder(ctx, orderInput(productID, variantID, ""))
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+
+	intentID := uuid.NewString()
+	if _, err := store.CreatePaymentIntent(ctx, PaymentIntent{
+		ID: intentID, OrderID: orderID, Amount: 900000, Currency: "IRR",
+		Status: IntentRequiresPayment, ExpiresAt: ptrTime(time.Now().Add(time.Hour)),
+	}); err != nil {
+		t.Fatalf("CreatePaymentIntent: %v", err)
+	}
+
+	active, err := store.GetActivePaymentIntent(ctx, orderID)
+	if err != nil || active == nil {
+		t.Fatalf("GetActivePaymentIntent: %v", err)
+	}
+	if active.ID != intentID || active.Amount != 900000 {
+		t.Fatalf("active intent = %+v, want id %s amount 900000", active, intentID)
+	}
+
+	attemptID, err := store.CreateAttempt(ctx, PaymentAttempt{
+		PaymentIntentID: intentID, Provider: "MOCK", Amount: 900000,
+		Status: "SUCCEEDED", IdempotencyKey: "idem-" + uuid.NewString(),
+		CompletedAt: ptrTime(time.Now()),
+	})
+	if err != nil {
+		t.Fatalf("CreateAttempt: %v", err)
+	}
+
+	gotAttempt, err := store.SuccessfulAttemptID(ctx, orderID)
+	if err != nil {
+		t.Fatalf("SuccessfulAttemptID: %v", err)
+	}
+	if gotAttempt != attemptID {
+		t.Fatalf("SuccessfulAttemptID = %q, want %q", gotAttempt, attemptID)
+	}
+
+	sum, err := store.SumSucceededAttempts(ctx, orderID)
+	if err != nil {
+		t.Fatalf("SumSucceededAttempts: %v", err)
+	}
+	if sum != 900000 {
+		t.Fatalf("SumSucceededAttempts = %d, want 900000", sum)
+	}
+
+	if err := store.UpdateOrderRefunded(ctx, orderID, 200000, OrderPaid); err != nil {
+		t.Fatalf("UpdateOrderRefunded: %v", err)
+	}
+	o, err := store.GetOrder(ctx, orderID)
+	if err != nil || o == nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if o.RefundedTotal != 200000 {
+		t.Fatalf("refunded_total = %d, want 200000", o.RefundedTotal)
+	}
+
+	// A zero-row update must not be reported as success.
+	if err := store.UpdateOrderRefunded(ctx, "00000000-0000-0000-0000-000000000000", 1, OrderPaid); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("UpdateOrderRefunded on a missing order: %v, want ErrOrderNotFound", err)
+	}
+	if err := store.UpdatePaymentIntentStatus(ctx, "00000000-0000-0000-0000-000000000000", "CANCELLED"); !errors.Is(err, ErrPaymentIntentNotFound) {
+		t.Fatalf("UpdatePaymentIntentStatus on a missing intent: %v, want ErrPaymentIntentNotFound", err)
 	}
 }

@@ -294,3 +294,58 @@ func TestPG_AllocationInvariantRejectsOverAllocation(t *testing.T) {
 }
 
 var _ = time.Now
+
+// TestPG_ShipmentWrites covers the fulfillment writes that had no test on the real
+// schema: the shipment, its status change, the event log and the allocation sum.
+func TestPG_ShipmentWrites(t *testing.T) {
+	pool, svc, store := setupFulfillment(t)
+	ctx := context.Background()
+	orderID, itemID := seedOrderItemGraph(t, ctx, pool, "KHA-ORD-2026-000401", "SKU-FUL-9")
+	whID := seedWarehouse(t, ctx, pool, "WH-FUL-9")
+
+	foID, err := svc.CreateFulfillmentOrder(ctx, FulfillmentOrder{
+		OrderID: orderID, SourceType: SourceOwnedInventory, WarehouseID: whID,
+	})
+	if err != nil {
+		t.Fatalf("CreateFulfillmentOrder: %v", err)
+	}
+	if err := svc.AddFulfillmentItem(ctx, FulfillmentItem{
+		FulfillmentOrderID: foID, OrderItemID: itemID, Quantity: 2,
+	}, 3); err != nil {
+		t.Fatalf("AddFulfillmentItem: %v", err)
+	}
+
+	allocated, err := store.SumAllocatedForOrderItem(ctx, itemID)
+	if err != nil {
+		t.Fatalf("SumAllocatedForOrderItem: %v", err)
+	}
+	if allocated != 2 {
+		t.Fatalf("allocated = %d, want 2", allocated)
+	}
+
+	shID, err := store.CreateShipment(ctx, Shipment{
+		FulfillmentOrderID: foID, Carrier: "POST", ServiceType: "EXPRESS",
+		TrackingNumber: "TRK-1", ShippingCost: 50000, Status: ShipmentLabelCreated,
+	})
+	if err != nil {
+		t.Fatalf("CreateShipment: %v", err)
+	}
+
+	if err := store.UpdateShipmentStatus(ctx, shID, ShipmentInTransit, time.Now()); err != nil {
+		t.Fatalf("UpdateShipmentStatus: %v", err)
+	}
+
+	if _, err := store.RecordShipmentEvent(ctx, ShipmentEvent{
+		ShipmentID: shID, EventCode: "IN_TRANSIT", Description: "خروج از انبار",
+		OccurredAt: time.Now(), Source: EventSourceCarrier,
+	}); err != nil {
+		t.Fatalf("RecordShipmentEvent: %v", err)
+	}
+	events, err := store.ListShipmentEvents(ctx, shID)
+	if err != nil {
+		t.Fatalf("ListShipmentEvents: %v", err)
+	}
+	if len(events) != 1 || events[0].EventCode != "IN_TRANSIT" {
+		t.Fatalf("events = %+v, want one IN_TRANSIT", events)
+	}
+}

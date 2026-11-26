@@ -800,6 +800,34 @@ POST /oauth/token (code+PKCE)     → {"access_token":"df328d27…","token_type"
 تست‌های PG جدید: `TestPG_UpsertCustomerByPhoneIsIdempotent`،
 `TestOTPVerify_DefaultsPurposeToLogin` — هر دو PASS.
 
+### ۴.۲۷ بازرسی پوشش PG و بستن سه شکاف پرمخاطره — کامیت `test(pg-coverage)`
+
+**درس دو باگ قبلی:** هر متد store که SQL اجرا می‌کند باید حداقل یک بار روی schema واقعی
+اجرا شود؛ تست با store حافظه‌ای `42P10` و نوشتن خاموش را نمی‌بیند.
+
+**ابزار تکرارپذیر:** `scripts/audit-pg-coverage.py` — فهرست متدهای SQL-دار بدون تست PG را
+می‌دهد و با `--fail-under` می‌تواند در CI گیت شود.
+
+```
+قبل:  SQL methods=82  covered=48 (58.5%)  uncovered=34
+بعد:  SQL methods=82  covered=60 (73.2%)  uncovered=22
+```
+
+**تست‌های تازه (همه PASS روی schema واقعی):**
+
+- `TestPG_PaymentIntentAndAttemptReads` — intent فعال، `SuccessfulAttemptID`،
+  `SumSucceededAttempts`، `UpdateOrderRefunded`
+- `TestPG_ReservationAndBalanceWrites` — upsert موجودی (دو بار: باید update کند نه
+  duplicate)، رزرو، خواندن، تغییر وضعیت
+- `TestPG_ShipmentWrites` — محموله، تغییر وضعیت، رخداد، جمع تخصیص
+
+**باگ چهارم از همین کلاس در حین تست:** `UpdatePaymentIntentStatus` هم `RowsAffected` را
+بررسی نمی‌کرد → حالا `ErrPaymentIntentNotFound`.
+
+**۲۲ متد باقی‌مانده** (همه خواندنی یا مسیرهای کم‌ریسک: `GetCart`, `GetTopic`,
+`GetWarehouse`, `media.*`, `suppliers.ListSupplierVariantsByVariant`, …) در فهرست
+`scripts/audit-pg-coverage.py` ثبت شده‌اند.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

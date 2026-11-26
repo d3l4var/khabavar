@@ -63,18 +63,19 @@ const (
 // ── Sentinel errors ───────────────────────────────────────────────────────────
 
 var (
-	ErrCartNotFound        = errors.New("commerce: cart not found")
-	ErrCartEmpty           = errors.New("commerce: cart is empty")
-	ErrOrderNotFound       = errors.New("commerce: order not found")
-	ErrInvalidTransition   = errors.New("commerce: invalid status transition")
-	ErrTotalsMismatch      = errors.New("commerce: order totals do not reconcile")
-	ErrLineTotalsMismatch  = errors.New("commerce: order item line_total does not reconcile")
-	ErrIntentExists        = errors.New("commerce: an active payment intent already exists for this order")
-	ErrIntentNotSucceeded  = errors.New("commerce: payment intent has not succeeded")
-	ErrAlreadyPaid         = errors.New("commerce: order is already paid")
-	ErrCannotCancel        = errors.New("commerce: order cannot be cancelled in its current state")
-	ErrContactRequired     = errors.New("commerce: customer_id or guest_phone is required")
-	ErrOrderNumberRequired = errors.New("commerce: order_number is required")
+	ErrCartNotFound          = errors.New("commerce: cart not found")
+	ErrCartEmpty             = errors.New("commerce: cart is empty")
+	ErrOrderNotFound         = errors.New("commerce: order not found")
+	ErrPaymentIntentNotFound = errors.New("commerce: payment intent not found")
+	ErrInvalidTransition     = errors.New("commerce: invalid status transition")
+	ErrTotalsMismatch        = errors.New("commerce: order totals do not reconcile")
+	ErrLineTotalsMismatch    = errors.New("commerce: order item line_total does not reconcile")
+	ErrIntentExists          = errors.New("commerce: an active payment intent already exists for this order")
+	ErrIntentNotSucceeded    = errors.New("commerce: payment intent has not succeeded")
+	ErrAlreadyPaid           = errors.New("commerce: order is already paid")
+	ErrCannotCancel          = errors.New("commerce: order cannot be cancelled in its current state")
+	ErrContactRequired       = errors.New("commerce: customer_id or guest_phone is required")
+	ErrOrderNumberRequired   = errors.New("commerce: order_number is required")
 )
 
 // ── Domain types ──────────────────────────────────────────────────────────────

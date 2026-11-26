@@ -251,3 +251,64 @@ func TestPG_ExpireReservationsSweep(t *testing.T) {
 		t.Fatalf("after sweep: %+v, want reserved=0 sellable=3", bal)
 	}
 }
+
+// TestPG_ReservationAndBalanceWrites covers the inventory writes that had no test on
+// the real schema: the balance upsert (twice, to prove it updates rather than
+// duplicates), a reservation, its read-back and its status change.
+func TestPG_ReservationAndBalanceWrites(t *testing.T) {
+	pool, _, store := setupInventory(t)
+	ctx := context.Background()
+	itemID, variantID := seedOrderItem(t, ctx, pool, "KHA-ORD-2026-000301", "SKU-INV-9")
+	whID := seedWarehouseRow(t, ctx, pool, "WH-INV-9")
+
+	bal := StockBalance{WarehouseID: whID, VariantID: variantID, OnHandQuantity: 10, ReservedQuantity: 0}
+	if err := store.UpsertStockBalance(ctx, bal); err != nil {
+		t.Fatalf("UpsertStockBalance insert: %v", err)
+	}
+	bal.OnHandQuantity = 15
+	if err := store.UpsertStockBalance(ctx, bal); err != nil {
+		t.Fatalf("UpsertStockBalance update: %v", err)
+	}
+	var onHand, rows int
+	if err := pool.QueryRow(ctx,
+		`SELECT on_hand_quantity, count(*) OVER () FROM stock_balances WHERE warehouse_id=$1 AND variant_id=$2`,
+		whID, variantID).Scan(&onHand, &rows); err != nil {
+		t.Fatalf("read balance: %v", err)
+	}
+	if onHand != 15 || rows != 1 {
+		t.Fatalf("balance on_hand=%d rows=%d, want 15 and 1 (upsert must update, not duplicate)", onHand, rows)
+	}
+
+	resID, err := store.CreateReservation(ctx, Reservation{
+		OrderItemID: itemID, VariantID: variantID, WarehouseID: whID,
+		Quantity: 2, Status: "ACTIVE", ExpiresAt: time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("CreateReservation: %v", err)
+	}
+	res, err := store.GetReservation(ctx, resID)
+	if err != nil || res == nil {
+		t.Fatalf("GetReservation: %v", err)
+	}
+	if res.Quantity != 2 || res.Status != "ACTIVE" {
+		t.Fatalf("reservation = %+v, want qty 2 ACTIVE", res)
+	}
+	if err := store.UpdateReservationStatus(ctx, resID, "RELEASED"); err != nil {
+		t.Fatalf("UpdateReservationStatus: %v", err)
+	}
+	res, _ = store.GetReservation(ctx, resID)
+	if res.Status != "RELEASED" {
+		t.Fatalf("reservation status = %q, want RELEASED", res.Status)
+	}
+}
+
+// seedWarehouseRow inserts a warehouse for the inventory tests.
+func seedWarehouseRow(t *testing.T, ctx context.Context, pool *pgxpool.Pool, code string) string {
+	t.Helper()
+	var id string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO warehouses (warehouse_code, name) VALUES ($1,'انبار') RETURNING id`, code).Scan(&id); err != nil {
+		t.Fatalf("seed warehouse: %v", err)
+	}
+	return id
+}

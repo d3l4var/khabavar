@@ -248,9 +248,17 @@ func (s *DBStore) GetActivePaymentIntent(ctx context.Context, orderID string) (*
 	return &pi, nil
 }
 
+// UpdatePaymentIntentStatus moves an intent to a new status. A zero-row update means
+// the intent does not exist and must not be reported as success.
 func (s *DBStore) UpdatePaymentIntentStatus(ctx context.Context, id, status string) error {
-	_, err := s.pool.Exec(ctx, `UPDATE payment_intents SET status = $2 WHERE id = $1`, id, status)
-	return err
+	ct, err := s.pool.Exec(ctx, `UPDATE payment_intents SET status = $2 WHERE id = $1`, id, status)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrPaymentIntentNotFound
+	}
+	return nil
 }
 
 // DBEventEnqueuer INSERTs domain_events rows. In production this should run inside
