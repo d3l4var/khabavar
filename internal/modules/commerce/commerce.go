@@ -214,6 +214,18 @@ type PaymentAttemptStore interface {
 // SetAttemptStore wires the payment-attempt recorder.
 func (s *Service) SetAttemptStore(as PaymentAttemptStore) { s.attempts = as }
 
+// FindIntentByProviderReference is used by the payment webhook to resolve the intent
+// from the gateway's transaction id.
+func (s *Service) FindIntentByProviderReference(ctx context.Context, reference string) (intentID, orderID string, err error) {
+	store, ok := s.store.(interface {
+		FindIntentByProviderReference(ctx context.Context, reference string) (string, string, error)
+	})
+	if !ok {
+		return "", "", errors.New("commerce: provider reference lookup not supported by this store")
+	}
+	return store.FindIntentByProviderReference(ctx, reference)
+}
+
 // SetPaymentProvider sets the provider name stamped on payment attempts (the
 // mock-first adapter name comes from KH_PAYMENT_ADAPTER, ADR-ARCH-011).
 func (s *Service) SetPaymentProvider(name string) {

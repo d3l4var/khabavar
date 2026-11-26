@@ -158,6 +158,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 		content:     contentSvc,
 		ecosystem:   ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc}),
 		customer:    identity.NewDBCustomerStore(pool.Pool),
+		cfg:         cfg,
 		catList:     catalog.NewAdminListStore(pool.Pool),
 		idem:        commerce.NewDBStore(pool.Pool),
 		invAdmin:    inventory.NewAdminStore(pool.Pool),

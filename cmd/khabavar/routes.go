@@ -24,6 +24,7 @@ import (
 	"github.com/khabavar/khabavar/internal/modules/pricing"
 	"github.com/khabavar/khabavar/internal/modules/shared"
 	"github.com/khabavar/khabavar/internal/modules/suppliers"
+	"github.com/khabavar/khabavar/internal/platform/config"
 )
 
 // adminPermissions maps each mounted admin route pattern to the seed permission code
@@ -205,6 +206,7 @@ type services struct {
 	ecosystem   *ecosystem.Service
 	resolve     authorization.SubjectResolver
 	customer    identity.CustomerStore
+	cfg         config.Config
 	catList     *catalog.AdminListStore
 	idem        commerce.IdempotencyStore
 	invAdmin    *inventory.AdminStore
@@ -252,6 +254,8 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/cart", commerce.CartHandler(s.commerce))
 	// Checkout is money-touching, so a retry must not create a second order
 	// (ADR-ARCH-008). The wrapper enforces the Idempotency-Key header.
+	api.public("POST /api/v1/payments/webhook", commerce.PaymentWebhookHandler(s.commerce, commerce.PaymentWebhookSecret(s.cfg.PaymentWebhookSecret)))
+	api.public("GET /api/v1/payments/return", commerce.PaymentReturnHandler(s.cfg.StorefrontBaseURL))
 	api.public("POST /api/v1/checkout", commerce.Idempotent(s.idem, "POST /api/v1/checkout", commerce.CheckoutHandler(s.commerce)))
 	api.public("POST /api/v1/cart/items", commerce.AddCartItemHandler(s.commerce))
 	api.public("PATCH /api/v1/cart/items/{id}", commerce.UpdateCartItemHandler(s.commerce))

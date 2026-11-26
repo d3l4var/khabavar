@@ -676,3 +676,45 @@ func TestPG_MergeGuestCartAndCustomerOrders(t *testing.T) {
 		t.Fatalf("another customer sees %d orders, want 0", len(other))
 	}
 }
+
+// TestPG_FindIntentByProviderReference: the webhook resolves the intent from the
+// gateway's transaction id, so this lookup is the only bridge between them.
+func TestPG_FindIntentByProviderReference(t *testing.T) {
+	pool, svc, store := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-WH-1")
+
+	orderID, err := svc.CreateOrder(ctx, orderInput(productID, variantID, ""))
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	intentID, err := svc.CreatePaymentIntent(ctx, orderID)
+	if err != nil {
+		t.Fatalf("CreatePaymentIntent: %v", err)
+	}
+	ref := "REF-" + uuid.NewString()
+	if _, err := store.CreateAttempt(ctx, PaymentAttempt{
+		PaymentIntentID: intentID, Provider: "mock", ProviderReference: ref,
+		Amount: 1000, Status: "SUCCEEDED", IdempotencyKey: "idem-" + uuid.NewString(),
+		CompletedAt: ptrTime(time.Now()),
+	}); err != nil {
+		t.Fatalf("CreateAttempt: %v", err)
+	}
+
+	gotIntent, gotOrder, err := store.FindIntentByProviderReference(ctx, ref)
+	if err != nil {
+		t.Fatalf("FindIntentByProviderReference: %v", err)
+	}
+	if gotIntent != intentID || gotOrder != orderID {
+		t.Fatalf("intent/order = %q/%q, want %q/%q", gotIntent, gotOrder, intentID, orderID)
+	}
+
+	// An unknown reference must be empty, not an error: the webhook answers 202 for it.
+	missingIntent, missingOrder, err := store.FindIntentByProviderReference(ctx, "REF-does-not-exist")
+	if err != nil {
+		t.Fatalf("unknown reference errored: %v", err)
+	}
+	if missingIntent != "" || missingOrder != "" {
+		t.Fatalf("unknown reference = %q/%q, want empty", missingIntent, missingOrder)
+	}
+}
