@@ -4,9 +4,10 @@
 extends: ["spectral:oas"]
 rules:
   # Contract-wide conventions (R-07 "قواعد عمومی قرارداد")
-  # The approved v1.1.0 contract carries no operationIds. Turning this on is a
-  # contract revision (v1.2.0) that needs owner approval — see docs/ACTIVITY-LOG.md.
-  operation-operationId: off
+  # The contract carries a unique camelCase operationId on all 58 operations, so the
+  # gate is on: a new operation without one (or a duplicate) fails CI.
+  operation-operationId: error
+  operation-operationId-unique: error
   operation-tags: error
   operation-description: warn
   oas3-api-servers: error

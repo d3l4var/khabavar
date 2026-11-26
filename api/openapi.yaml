@@ -1104,6 +1104,7 @@ paths:
       operationId: postAuthOtpVerify
       tags: [identity]
       summary: تأیید کد OTP
+      description: تأیید کد OTP و صدور توکن مشتری؛ کد خام هرگز ذخیره نمی‌شود.
       security: []
       requestBody:
         required: true
@@ -1148,6 +1149,7 @@ paths:
       operationId: postOauthToken
       tags: [identity]
       summary: تبادل کد با توکن
+      description: تبدیل کد مجوز به توکن با PKCE (S256).
       security: []
       requestBody:
         required: true
@@ -1179,6 +1181,7 @@ paths:
       operationId: getMe
       tags: [identity]
       summary: پروفایل کاربر جاری
+      description: پروفایل مشتری احرازشده. توکن کارمند روی این مسیر رد می‌شود.
       security:
         - oauth2: [customer.basic]
       responses:
@@ -1194,6 +1197,7 @@ paths:
       operationId: getMeAddresses
       tags: [identity]
       summary: فهرست آدرس‌های من
+      description: فهرست آدرس‌های مشتری احرازشده.
       security:
         - oauth2: [customer.basic]
       responses:
@@ -1212,6 +1216,7 @@ paths:
       operationId: postMeAddresses
       tags: [identity]
       summary: افزودن آدرس
+      description: افزودن آدرس؛ آدرس پیش‌فرض قبلی در همان تراکنش جایگزین می‌شود.
       security:
         - oauth2: [customer.basic]
       requestBody:
@@ -1233,6 +1238,7 @@ paths:
       operationId: patchMeAddressesAddressId
       tags: [identity]
       summary: ویرایش آدرس یا تنظیم پیش‌فرض
+      description: ویرایش آدرس؛ تنظیم پیش‌فرض، آدرس پیش‌فرض قبلی را در همان تراکنش پاک می‌کند.
       security:
         - oauth2: [customer.basic]
       parameters:
@@ -1254,6 +1260,7 @@ paths:
       operationId: deleteMeAddressesAddressId
       tags: [identity]
       summary: حذف آدرس
+      description: حذف آدرس خود مشتری؛ آیدی مشتری دیگر ۴۰۴ می‌دهد.
       security:
         - oauth2: [customer.basic]
       parameters:
@@ -1269,6 +1276,7 @@ paths:
       operationId: getCatalogCategories
       tags: [catalog]
       summary: درخت دسته‌بندی‌ها
+      description: درخت دسته‌بندی‌های منتشرشده برای ویترین.
       security: []
       responses:
         "200":
@@ -1309,6 +1317,7 @@ paths:
       operationId: getCatalogProductsSlug
       tags: [catalog]
       summary: جزئیات محصول
+      description: صفحهٔ محصول با slug؛ فقط محصول منتشرشده برمی‌گردد.
       security: []
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -1342,6 +1351,7 @@ paths:
       operationId: postCartItems
       tags: [cart]
       summary: افزودن Variant به سبد
+      description: افزودن واریانت به سبد؛ قیمت واحد از رکورد قیمت تأییدشده خوانده می‌شود، نه از کلاینت.
       security: []
       parameters:
         - { name: X-Guest-Cart-Token, in: header, schema: { type: string } }
@@ -1364,6 +1374,7 @@ paths:
       operationId: patchCartItemsCartItemId
       tags: [cart]
       summary: تغییر تعداد
+      description: تغییر تعداد یک قلم سبد.
       security: []
       parameters:
         - { name: cartItemId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1383,6 +1394,7 @@ paths:
       operationId: deleteCartItemsCartItemId
       tags: [cart]
       summary: حذف آیتم
+      description: حذف یک قلم از سبد.
       security: []
       parameters:
         - { name: cartItemId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1395,6 +1407,7 @@ paths:
       operationId: postCartMerge
       tags: [cart]
       summary: ادغام سبد مهمان پس از ورود
+      description: ادغام سبد مهمان در سبد مشتری احرازشده (MA-8). توکنی که سبد ندارد no-op است.
       security:
         - oauth2: [customer.commerce]
       requestBody:
@@ -1511,6 +1524,7 @@ paths:
       operationId: getMeOrders
       tags: [orders]
       summary: سفارش‌های من
+      description: سفارش‌های خود مشتری؛ در SQL به customer_id محدود است.
       security:
         - oauth2: [customer.commerce]
       parameters:
@@ -1586,6 +1600,7 @@ paths:
       operationId: getMagazineArticles
       tags: [magazine]
       summary: فهرست مقالات منتشرشده
+      description: فهرست مقالات منتشرشدهٔ مجله با صفحه‌بندی.
       security: []
       parameters:
         - { name: topic_slug, in: query, schema: { type: string } }
@@ -1604,6 +1619,7 @@ paths:
       operationId: getMagazineArticlesSlug
       tags: [magazine]
       summary: متن کامل مقاله
+      description: مقالهٔ منتشرشده با slug؛ پیش‌نویس هرگز از این مسیر برنمی‌گردد.
       security: []
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -1620,6 +1636,7 @@ paths:
       operationId: getMagazineTopics
       tags: [magazine]
       summary: موضوعات مجله
+      description: موضوعات مجله.
       security: []
       responses:
         "200":
@@ -1677,6 +1694,7 @@ paths:
       operationId: patchAdminProductsProductId
       tags: [admin-products]
       summary: ویرایش محصول
+      description: ویرایش محصول. وضعیت انتشار از این مسیر تغییر نمی‌کند؛ مسیر status و دروازهٔ انتشار را دارد.
       security:
         - oauth2: [staff]
       parameters:
@@ -1773,6 +1791,7 @@ paths:
       operationId: patchAdminSuppliersSupplierId
       tags: [admin-supply]
       summary: ویرایش یا تغییر وضعیت تأمین‌کننده
+      description: ویرایش پروفایل تأمین‌کننده. وضعیت از این مسیر تغییر نمی‌کند؛ مسیر /status را دارد.
       security:
         - oauth2: [staff]
       parameters:
@@ -1822,6 +1841,7 @@ paths:
       operationId: getAdminStock
       tags: [admin-supply]
       summary: موجودی انبارها
+      description: موجودی جاری واریانت‌ها در انبارها؛ فقط خواندنی.
       security:
         - oauth2: [staff]
       parameters:
@@ -1864,6 +1884,7 @@ paths:
       operationId: getAdminReservations
       tags: [admin-supply]
       summary: رزروهای موجودی
+      description: فهرست رزروهای موجودی برای پایش و آزادسازی.
       security:
         - oauth2: [staff]
       parameters:
@@ -1943,6 +1964,7 @@ paths:
       operationId: getAdminOrders
       tags: [admin-orders]
       summary: فهرست سفارش‌ها
+      description: فهرست سفارش‌ها با فیلتر وضعیت و صفحه‌بندی برای پنل عملیات.
       security:
         - oauth2: [staff]
       parameters:
@@ -2091,6 +2113,7 @@ paths:
       operationId: patchAdminArticlesArticleId
       tags: [admin-content]
       summary: ویرایش مقاله
+      description: ویرایش فیلدهای مقاله (عنوان، اسلاگ، خلاصه، متن، زبان). وضعیت از این مسیر تغییر نمی‌کند؛ گردش کار مسیرهای بازبینی و انتشار را دارد.
       security:
         - oauth2: [staff]
       parameters:
@@ -2215,6 +2238,7 @@ paths:
       operationId: getAdminPermissions
       tags: [admin-system]
       summary: فهرست مجوزها
+      description: فهرست کدهای مجوز seed؛ منبع حقیقت ماتریس RBAC سمت سرور است و کلاینت آن را بازسازی نمی‌کند.
       security:
         - oauth2: [staff]
       responses:
@@ -2251,6 +2275,7 @@ paths:
       operationId: patchAdminUsersUserId
       tags: [admin-system]
       summary: تغییر وضعیت یا نقش‌های کاربر پرسنل
+      description: ویرایش نام و وضعیت و جایگزینی نقش‌ها. گذرواژه از این مسیر تغییر نمی‌کند.
       security:
         - oauth2: [staff]
       parameters:
