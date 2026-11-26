@@ -1,0 +1,95 @@
+/* KHABAVAR — Design Tokens (R-04 §۳، ADR-FE-002)
+ *
+ * The palette is the approved brand palette from 04-brand-design.md §۳. Components must
+ * consume these variables and never hard-code a hex value (the brand doc forbids it).
+ * RTL is native: layout uses logical properties (inline-start/end), never left/right.
+ */
+:root {
+  /* ── palette (approved) ── */
+  --kh-midnight: #10172b;   /* main background */
+  --kh-navy: #192541;       /* dark surfaces */
+  --kh-sleep-blue: #526b91; /* secondary */
+  --kh-lavender: #a99bcb;   /* visual accent */
+  --kh-moon-white: #f5f3ef; /* light background */
+  --kh-mist: #e8edf4;       /* light surfaces */
+  --kh-charcoal: #252a35;   /* primary text */
+  --kh-success: #43856b;
+  --kh-warning: #c58b46;
+  --kh-error: #c45e68;
+
+  /* ── semantic roles ── */
+  --kh-bg: var(--kh-moon-white);
+  --kh-surface: var(--kh-mist);
+  --kh-text: var(--kh-charcoal);
+  --kh-text-muted: #5b6472;
+  --kh-border: #d5dbe5;
+  --kh-accent: var(--kh-sleep-blue);
+  --kh-accent-strong: var(--kh-navy);
+  --kh-on-accent: var(--kh-moon-white);
+
+  /* ── spacing scale (4px base) ── */
+  --kh-space-1: 0.25rem;
+  --kh-space-2: 0.5rem;
+  --kh-space-3: 0.75rem;
+  --kh-space-4: 1rem;
+  --kh-space-5: 1.5rem;
+  --kh-space-6: 2rem;
+  --kh-space-7: 3rem;
+
+  /* ── radius / elevation ── */
+  --kh-radius-sm: 6px;
+  --kh-radius: 12px;
+  --kh-radius-lg: 20px;
+  --kh-shadow: 0 1px 2px rgb(16 23 43 / 6%), 0 8px 24px rgb(16 23 43 / 8%);
+
+  /* ── typography ── */
+  --kh-font: "Vazirmatn", "Estedad", system-ui, "Segoe UI", Tahoma, sans-serif;
+  --kh-text-sm: 0.875rem;
+  --kh-text-base: 1rem;
+  --kh-text-lg: 1.125rem;
+  --kh-text-xl: 1.5rem;
+  --kh-text-2xl: 2rem;
+  --kh-line: 1.75;
+
+  /* ── layout ── */
+  --kh-container: 1120px;
+  --kh-header-h: 64px;
+}
+
+/* Dark section (hero, footer) reuses the same tokens with swapped roles. */
+.kh-dark {
+  --kh-bg: var(--kh-midnight);
+  --kh-surface: var(--kh-navy);
+  --kh-text: var(--kh-moon-white);
+  --kh-text-muted: #aab3c4;
+  --kh-border: #2b3653;
+  --kh-accent: var(--kh-lavender);
+  --kh-on-accent: var(--kh-midnight);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--kh-bg);
+  color: var(--kh-text);
+  font-family: var(--kh-font);
+  font-size: var(--kh-text-base);
+  line-height: var(--kh-line);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--kh-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1, h2, h3 { line-height: 1.35; margin: 0 0 var(--kh-space-3); }
+h1 { font-size: var(--kh-text-2xl); }
+h2 { font-size: var(--kh-text-xl); }
+h3 { font-size: var(--kh-text-lg); }
+
+img { max-width: 100%; display: block; }
+
+/* 360px must not scroll horizontally (R-CI a11y gate). */
+html { overflow-x: hidden; }

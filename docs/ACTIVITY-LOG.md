@@ -463,6 +463,54 @@ fulfillment  24.1% → 52.2%
 
 **پوشش (با PG):** commerce ۴۴٪ → ۶۶.۹٪ · content ۲۱.۵٪ → ۴۴.۴٪
 
+### ۴.۱۷ شروع فرانت‌اند: Design System + اپ `main` — کامیت `feat(web-main)`
+
+تا اینجا هر چهار اپ ۱۰ خط scaffold بودند. اکنون:
+
+**`web/shared/` — Design System مشترک (P2)**
+- `tokens.css`: پالت **مصوب** برند (Midnight `#10172B`، Deep Navy، Sleep Blue، Lavender،
+  Moon White، Mist، Charcoal، Success/Warning/Error) به‌صورت CSS custom property،
+  به‌علاوهٔ مقیاس فاصله/شعاع/سایه/تایپوگرافی. کامپوننت‌ها فقط از توکن استفاده می‌کنند —
+  قاعدهٔ سند برند («استفادهٔ مستقیم از کد رنگ ممنوع»).
+- `components.tsx`: `Container`, `Button`, `Badge`, `Card`, `Grid`, `Header`, `Footer`,
+  `ProductCard`, `ArticleCard`, `StateBlock` (سه حالت مشترک Loading/Empty/Error) و
+  `useAsync` که همان سه حالت را یک‌جا مدیریت می‌کند.
+- `api.ts`: کلاینت تایپ‌شدهٔ API با پاکت خطای یکسان، به‌علاوهٔ `formatToman` (تبدیل ریال→تومان
+  فقط در لایهٔ نمایش، ADR-DATA-001).
+
+**`web/main` — سایت اصلی**
+- روتر hash بدون هیچ وابستگی جدید (لیست deps عمداً کوچک است).
+- صفحه‌ها: خانه (مقالات + محصولات)، فروشگاه با جست‌وجو، جزئیات محصول، مجله، جزئیات مقاله،
+  جست‌وجوی یکپارچه (product+article از ماژول ecosystem).
+- RTL بومی (`dir="rtl"`, `lang="fa-IR"`, ویژگی‌های منطقی CSS).
+
+**زیرساخت:** `web/package.json` با npm workspaces (`shared`, `main`, `shop`, `magazine`,
+`admin`) تا `web/shared` بتواند `react` را از store مشترک resolve کند — بدون آن، tsc و
+Vite فایل‌های بیرون از ریشهٔ اپ را نمی‌توانستند type-check/باندل کنند.
+
+**دو ایراد در scaffold که اصلاح شد:**
+1. `tsconfig.json` گزینهٔ نامعتبر `"rtl": true` داشت (tsc چنین گزینه‌ای ندارد) → حذف شد.
+2. اسکریپت build `tsc -b` بود که فایل `.js` را **کنار سورس** منتشر می‌کرد
+   (`src/main.js`). به `tsc --noEmit && vite build` تغییر کرد و `*.tsbuildinfo` به
+   `.gitignore` رفت.
+
+**شاهد:**
+
+```
+npm run build (web/main)      tsc --noEmit + vite build ✓
+                              dist/assets/index-*.js 156.69 kB │ gzip 49.89 kB
+dev server                    /  → 200، <html lang="fa-IR" dir="rtl">
+                              /src/main.tsx → 200
+                              /@fs/.../shared/components.tsx → 200
+                              /@fs/.../shared/tokens.css → 200
+پروکسی API                    /api/v1/navigation → 200 (payload واقعی ecosystem)
+                              /api/v1/articles   → 200
+```
+
+> محدودیت ثبت‌شده: مرورگر در این محیط در دسترس نبود (Lightpanda نصب نیست)، پس رندر
+> سمت کلاینت با اسکرین‌شات تأیید نشد؛ آنچه تأیید شد سرو شدن کل گراف ماژول، موفقیت
+> build تولیدی و پاسخ‌دهی پروکسی API است.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
@@ -470,8 +518,9 @@ fulfillment  24.1% → 52.2%
 1. **روت‌های ادمین** — کاتالوگ، قیمت‌گذاری (§۴.۱۰/§۴.۱۱) و پنل تأمین (§۴.۱۲) بسته شدند.
    سطح HTTP قرارداد اکنون کامل است؛ اختلاف باقی‌مانده فقط در **مسیرها** است
    (`/api/v1/products/{id}` در برابر `/catalog/products/{slug}`) که تصمیم مالک می‌خواهد.
-2. **فرانت‌اند** — `web/{main,shop,magazine,admin}` هر کدام ۱۰ خط scaffold است. P2
-   (Design System) و سپس صفحات UJ. تا آن زمان دروازهٔ a11y فقط هشدار می‌دهد.
+2. **فرانت‌اند** — Design System (`web/shared`) و اپ `main` در §۴.۱۷ ساخته شدند.
+   باقی: سه اپ `shop`/`magazine`/`admin` (هنوز scaffold)، صفحهٔ سبد/تسویه، و
+   Storybook + دروازهٔ axe برای a11y.
 3. **پوشش تست** — آستانهٔ R-CI §۳: ≥۹۰٪ مالی/موجودی، ≥۷۵٪ سایر. پس از تست‌های
    انتگرال §۴.۱۵: pricing ۶۱.۷٪، suppliers ۶۰.۱٪، catalog ۶۲٪، fulfillment ۵۲.۲٪،
    inventory ۴۴.۳٪. وضعیت پیش از آن:

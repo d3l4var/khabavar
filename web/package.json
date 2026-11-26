@@ -1,0 +1,8 @@
+{
+  "name": "khabavar-web",
+  "private": true,
+  "workspaces": ["shared", "main", "shop", "magazine", "admin"],
+  "scripts": {
+    "build": "npm run build --workspace main"
+  }
+}

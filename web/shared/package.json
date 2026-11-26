@@ -1,0 +1,9 @@
+{
+  "name": "@khabavar/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Design tokens, UI primitives and the typed API client shared by the four KHABAVAR apps",
+  "main": "components.tsx",
+  "peerDependencies": { "react": "^18.3.0" }
+}

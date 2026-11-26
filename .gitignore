@@ -20,6 +20,7 @@ web/*/.vite/
 skills/
 
 # Build artifacts
+*.tsbuildinfo
 __pycache__/
 *.pyc
 

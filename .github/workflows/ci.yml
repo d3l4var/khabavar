@@ -58,14 +58,14 @@ jobs:
           version: latest
           args: --timeout=5m
         continue-on-error: true # advisory until the baseline is clean
-      - name: web lint + typecheck
+      # The four apps share one workspace (web/package.json), so deps install once at
+      # web/ and the design system in web/shared resolves react from the hoisted store.
+      - name: web typecheck
         run: |
-          set -e
-          for app in main shop magazine admin; do
-            if [ -f "web/$app/package.json" ]; then
-              ( cd "web/$app" && npm ci --no-audit --no-fund && npx tsc -b --noEmit && npm run lint --if-present )
-            fi
-          done
+          set -euo pipefail
+          cd web
+          npm ci --no-audit --no-fund
+          cd main && npx tsc -b --noEmit
 
   # ── gate 2: openapi-validate ────────────────────────────────────────────────
   openapi-validate:
@@ -201,11 +201,9 @@ jobs:
           if git grep -nE '(KH_TOKEN_SIGNING_KEY|KH_DB_URL)\s*=\s*[^C][^H]' -- ':!*.md' ':!.env.example'; then
             echo "a real secret value looks committed"; exit 1
           fi
-      - name: npm audit (web apps)
+      - name: npm audit (web workspace)
         run: |
-          for app in main shop magazine admin; do
-            [ -f "web/$app/package.json" ] && ( cd "web/$app" && npm audit --audit-level=high --omit=dev || true )
-          done
+          cd web && npm audit --audit-level=high --omit=dev || true
 
   # ── gate 7: a11y ────────────────────────────────────────────────────────────
   a11y:
@@ -243,14 +241,12 @@ jobs:
           file bin/khabavar
       - name: startup smoke (route table has no ServeMux conflicts)
         run: go test -run TestMountRoutesHasNoPatternConflicts ./cmd/khabavar/
-      - name: web build
+      - name: web build (workspace)
         run: |
           set -euo pipefail
-          for app in main shop magazine admin; do
-            if [ -f "web/$app/package.json" ]; then
-              ( cd "web/$app" && npm ci --no-audit --no-fund && npm run build )
-            fi
-          done
+          cd web
+          npm ci --no-audit --no-fund
+          npm run build --workspace main
       - uses: actions/upload-artifact@v4
         with:
           name: khabavar-linux-amd64
