@@ -77,3 +77,14 @@ func bearerFromCookie(r *http.Request) string {
 	}
 	return strings.TrimSpace(c.Value)
 }
+
+// LogoutHandler serves POST /api/v1/oauth/logout. It clears the browser session cookie and
+// answers 204 for everyone — including a caller with no session — because a logout that
+// leaks whether a session existed is an oracle, and a client must be able to log out
+// idempotently.
+func LogoutHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ClearSessionCookie(w, r)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

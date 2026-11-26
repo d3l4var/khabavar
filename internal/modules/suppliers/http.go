@@ -191,3 +191,31 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// UpdateSupplierHandler serves PATCH /api/v1/admin/suppliers/{id}. Status is not editable
+// here: it has its own guarded transition.
+func UpdateSupplierHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Name        *string `json:"name"`
+			ContactName *string `json:"contact_name"`
+			Phone       *string `json:"phone"`
+			Email       *string `json:"email"`
+			Address     *string `json:"address"`
+			Website     *string `json:"website"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeSupErr(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		sup, err := svc.UpdateSupplier(r.Context(), r.PathValue("id"), SupplierPatch{
+			Name: req.Name, ContactName: req.ContactName, Phone: req.Phone,
+			Email: req.Email, Address: req.Address, Website: req.Website,
+		})
+		if err != nil {
+			writeSupSvcErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, sup)
+	}
+}

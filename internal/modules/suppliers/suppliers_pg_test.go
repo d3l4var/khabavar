@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/khabavar/khabavar/internal/platform/testpg"
@@ -247,5 +248,47 @@ func TestPG_ListSupplierVariantsByVariant(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].SupplierSKU != "SUP-SKU-9" {
 		t.Fatalf("rows = %+v, want the one supplier variant", rows)
+	}
+}
+
+// TestPG_UpdateSupplier: the editable profile columns are written, the status is not
+// touched by a profile edit, and an unknown id is a not-found rather than a silent no-op.
+func TestPG_UpdateSupplier(t *testing.T) {
+	_, svc, store := setupSuppliers(t)
+	ctx := context.Background()
+
+	id, err := svc.CreateSupplier(ctx, Supplier{
+		Name: "تأمین‌کنندهٔ اول", SupplierType: "MANUFACTURER", Phone: "02100000000",
+	})
+	if err != nil {
+		t.Fatalf("CreateSupplier: %v", err)
+	}
+	before, err := store.GetSupplier(ctx, id)
+	if err != nil || before == nil {
+		t.Fatalf("GetSupplier: %v", err)
+	}
+
+	name, phone := "تأمین‌کنندهٔ دوم", "02111111111"
+	sup, err := svc.UpdateSupplier(ctx, id, SupplierPatch{Name: &name, Phone: &phone})
+	if err != nil {
+		t.Fatalf("UpdateSupplier: %v", err)
+	}
+	if sup.Name != name || sup.Phone != phone {
+		t.Fatalf("updated = %+v", sup)
+	}
+	after, _ := store.GetSupplier(ctx, id)
+	if after.Name != name || after.Phone != phone {
+		t.Fatalf("reloaded = %+v", after)
+	}
+	if after.Status != before.Status {
+		t.Fatalf("status changed by a profile edit: %q -> %q", before.Status, after.Status)
+	}
+
+	blank := ""
+	if _, err := svc.UpdateSupplier(ctx, id, SupplierPatch{Name: &blank}); !errors.Is(err, ErrSupplierNameRequired) {
+		t.Fatalf("blank name = %v, want ErrSupplierNameRequired", err)
+	}
+	if _, err := svc.UpdateSupplier(ctx, uuid.NewString(), SupplierPatch{Name: &name}); !errors.Is(err, ErrSupplierNotFound) {
+		t.Fatalf("unknown id = %v, want ErrSupplierNotFound", err)
 	}
 }

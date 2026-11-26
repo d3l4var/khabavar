@@ -1357,6 +1357,24 @@ retry همان اعلان → 200 (already_confirmed)
 
 **بازرسی مسیرها: ۴ → ۲** (`PATCH /admin/suppliers`، `POST /oauth/logout`).
 
+### ۴.۵۱ ویرایش تأمین‌کننده + خروج — کامیت `feat(supplier-patch-logout)`
+
+آخرین دو مسیر قرارداد.
+
+- **`PATCH /admin/suppliers/{id}`**: `Service.UpdateSupplier` + `DBStore.UpdateSupplier`.
+  فیلدها pointer-based، نام الزامی، و **وضعیت قابل ویرایش نیست** (مسیر محافظت‌شدهٔ
+  `/{id}/status` را دارد). id ناشناخته → ۴۰۴، نه نوشتن خاموش.
+- **`POST /oauth/logout`**: کوکی `kh_session` را پاک می‌کند و **۲۰۴ برای همه** می‌دهد —
+  حتی بدون نشست. یک logout که لو بدهد نشستی وجود داشت یا نه، یک oracle است؛ و کلاینت
+  باید بتواند idempotent خارج شود.
+
+**شاهد (PG):** `TestPG_UpdateSupplier` — نام/تلفن نوشته می‌شوند، **وضعیت با ویرایش
+پروفایل تغییر نمی‌کند**، نام خالی رد می‌شود، id ناشناخته → `ErrSupplierNotFound`.
+
+**بازرسی مسیرها: ۲ → ۰.** بخش «DECLARED BUT NOT MOUNTED» از خروجی
+`scripts/audit-routes.py` حذف شد — یعنی هیچ مسیر قراردادی بدون mount نمانده
+(اسکریپت آن بخش را فقط وقتی چاپ می‌کند که فهرست خالی نباشد).
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

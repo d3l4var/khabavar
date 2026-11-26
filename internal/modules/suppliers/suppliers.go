@@ -57,6 +57,7 @@ var EvalWeights = map[string]float64{
 // Sentinel errors. HTTP handlers map these to status codes.
 var (
 	ErrSupplierNotFound         = errors.New("suppliers: supplier not found")
+	ErrSupplierNameRequired     = errors.New("suppliers: supplier name is required")
 	ErrSupplierProductNotFound  = errors.New("suppliers: supplier product not found")
 	ErrSupplierVariantNotFound  = errors.New("suppliers: supplier variant not found")
 	ErrInvalidStatus            = errors.New("suppliers: invalid status transition")
@@ -160,6 +161,7 @@ type Store interface {
 
 	CreateEvaluation(ctx context.Context, ev Evaluation) (string, error)
 	ListEvaluationsBySupplier(ctx context.Context, supplierID string) ([]Evaluation, error)
+	UpdateSupplier(ctx context.Context, sup Supplier) error
 }
 
 // Service is the suppliers module boundary (SAD §۴.۲).
@@ -380,4 +382,52 @@ func (s *Service) ListEvaluationsBySupplier(ctx context.Context, supplierID stri
 		return nil, ErrSupplierNotFound
 	}
 	return s.store.ListEvaluationsBySupplier(ctx, supplierID)
+}
+
+// SupplierPatch carries the editable fields; nil means "leave it alone", so a PATCH cannot
+// blank a field the caller never mentioned.
+type SupplierPatch struct {
+	Name        *string
+	ContactName *string
+	Phone       *string
+	Email       *string
+	Address     *string
+	Website     *string
+}
+
+// UpdateSupplier edits a supplier's profile. The name is required: it is the only field
+// the rest of the system displays.
+func (s *Service) UpdateSupplier(ctx context.Context, id string, patch SupplierPatch) (*Supplier, error) {
+	sup, err := s.store.GetSupplier(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if sup == nil {
+		return nil, ErrSupplierNotFound
+	}
+	if patch.Name != nil {
+		sup.Name = *patch.Name
+	}
+	if patch.ContactName != nil {
+		sup.ContactName = *patch.ContactName
+	}
+	if patch.Phone != nil {
+		sup.Phone = *patch.Phone
+	}
+	if patch.Email != nil {
+		sup.Email = *patch.Email
+	}
+	if patch.Address != nil {
+		sup.Address = *patch.Address
+	}
+	if patch.Website != nil {
+		sup.Website = *patch.Website
+	}
+	if sup.Name == "" {
+		return nil, ErrSupplierNameRequired
+	}
+	if err := s.store.UpdateSupplier(ctx, *sup); err != nil {
+		return nil, err
+	}
+	return sup, nil
 }

@@ -392,3 +392,21 @@ func nullableI64Ptr(p *int64) any {
 
 // Compile-time assertion that DBStore satisfies Store.
 var _ Store = (*DBStore)(nil)
+
+// UpdateSupplier rewrites the editable profile fields. Status is not editable here: it has
+// its own guarded transition (UpdateSupplierStatus).
+func (s *DBStore) UpdateSupplier(ctx context.Context, sup Supplier) error {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE suppliers
+		    SET name = $2, contact_name = $3, phone = $4, email = $5,
+		        address = $6, website = $7, updated_at = now()
+		  WHERE id = $1`,
+		sup.ID, sup.Name, sup.ContactName, sup.Phone, sup.Email, sup.Address, sup.Website)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrSupplierNotFound
+	}
+	return nil
+}

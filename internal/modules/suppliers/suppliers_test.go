@@ -52,6 +52,19 @@ func (m *memStore) CreateSupplier(_ context.Context, sup Supplier) (string, erro
 	return id, nil
 }
 
+// UpdateSupplier mirrors the DB store: the editable profile columns only.
+func (m *memStore) UpdateSupplier(_ context.Context, sup Supplier) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cur, ok := m.suppliers[sup.ID]
+	if !ok {
+		return ErrSupplierNotFound
+	}
+	cur.Name, cur.ContactName, cur.Phone = sup.Name, sup.ContactName, sup.Phone
+	cur.Email, cur.Address, cur.Website = sup.Email, sup.Address, sup.Website
+	return nil
+}
+
 func (m *memStore) GetSupplier(_ context.Context, id string) (*Supplier, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

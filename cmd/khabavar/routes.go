@@ -38,6 +38,7 @@ var adminPermissions = map[string]string{
 
 	// ── suppliers (SUPPLIER_OPERATOR) ──
 	"POST /api/v1/admin/suppliers":                           "supplier.manage",
+	"PATCH /api/v1/admin/suppliers/{id}":                     "supplier.manage",
 	"PATCH /api/v1/admin/suppliers/{id}/status":              "supplier.manage",
 	"GET /api/v1/admin/supplier-variants/{id}/price-history": "supplier.manage",
 	"POST /api/v1/admin/suppliers/{id}/evaluations":          "supplier.evaluate",
@@ -264,6 +265,7 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/cart", commerce.CartHandler(s.commerce))
 	// Checkout is money-touching, so a retry must not create a second order
 	// (ADR-ARCH-008). The wrapper enforces the Idempotency-Key header.
+	api.public("POST /api/v1/oauth/logout", identity.LogoutHandler())
 	api.public("POST /api/v1/payments/webhook", commerce.PaymentWebhookHandler(s.commerce, commerce.PaymentWebhookSecret(s.cfg.PaymentWebhookSecret)))
 	api.public("GET /api/v1/payments/return", commerce.PaymentReturnHandler(s.cfg.StorefrontBaseURL))
 	api.public("POST /api/v1/checkout", commerce.Idempotent(s.idem, "POST /api/v1/checkout", commerce.CheckoutHandler(s.commerce)))
@@ -286,6 +288,7 @@ func mountRoutes(api *apiMux, s services) {
 
 	// ── suppliers (P5c) ──
 	api.admin("POST /api/v1/admin/suppliers", suppliers.CreateSupplierHandler(s.suppliers))
+	api.admin("PATCH /api/v1/admin/suppliers/{id}", suppliers.UpdateSupplierHandler(s.suppliers))
 	api.admin("PATCH /api/v1/admin/suppliers/{id}/status", suppliers.UpdateSupplierStatusHandler(s.suppliers))
 	api.public("GET /api/v1/variants/{id}/suppliers", suppliers.ListSupplierVariantsHandler(s.suppliers))
 	api.admin("GET /api/v1/admin/supplier-variants/{id}/price-history", suppliers.ListPriceHistoryHandler(s.suppliers))
