@@ -91,6 +91,8 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 	hh := health.New(pool)
 	hh.Mount(mux)
 	mux.HandleFunc("POST /api/v1/auth/otp/start", identity.OTPStartHandler(svc, mockSmsDeliver(logger)))
+	// Contract alias (R-07 names it /auth/otp/request).
+	mux.HandleFunc("POST /api/v1/auth/otp/request", identity.OTPStartHandler(svc, mockSmsDeliver(logger)))
 	mux.HandleFunc("POST /api/v1/auth/otp/verify", identity.OTPVerifyHandler(svc))
 	// Browser login page the authorize redirect points at (closes the dead end).
 	mux.HandleFunc("GET /api/v1/auth/otp/login", identity.OTPLoginPageHandler())

@@ -1057,6 +1057,38 @@ scripts/audit-routes.py
 `:8080` است — یعنی با unit `api` روی همان پورت تصادم می‌کرد و یکی از دو سرویس بالا
 نمی‌آمد. در فایل worker `KH_HTTP_ADDR=:8082` تنظیم شد.
 
+### ۴.۳۸ گزینهٔ ب: کد از قرارداد تبعیت می‌کند — کامیت `feat(contract-aliases)`
+
+تصمیم مالک: مسیرهای قرارداد باید کار کنند (نه اینکه قرارداد بازنویسی شود). aliasها با
+**همان handler** اضافه شدند، نه پیاده‌سازی دوم:
+
+```
+GET  /catalog/categories            → CategoryTreeHandler
+GET  /catalog/products              → SearchProductsHandler
+GET  /catalog/products/{id}         → ProductDetailHandler
+GET  /magazine/articles             → ListPublishedArticlesHandler
+GET  /magazine/articles/{slug}      → GetArticleBySlugHandler
+GET  /magazine/topics               → ListTopicsHandler
+POST /auth/otp/request              → OTPStartHandler
+POST /admin/articles/{id}/relations → AddProductRelationHandler (content.relation.manage)
+POST /admin/orders/{id}/cancel      → CancelOrderHandler (order.manage)
+```
+
+**شاهد — برابری بایت‌به‌بایت هر جفت مسیر روی باینری واقعی:**
+
+```
+PASS catalog/categories    200:1666    PASS magazine/articles        200:793
+PASS catalog/products      200:1313    PASS magazine/topics          200:1947
+PASS catalog/products/{id} 200:501     PASS magazine/articles/{slug} 200:1202
+```
+
+aliasهای ادمین بدون توکن **۴۰۱** می‌دهند (mount شده‌اند و گارد RBAC جلویشان است، نه ۴۰۴)؛
+`otp/request` هم مثل `otp/start` پاسخ **۲۰۲** می‌دهد.
+
+**بازرسی مسیرها: ۳۶ → ۲۵.** ۲۵ مسیر باقی‌مانده **قابلیت پیاده‌نشده‌اند**، نه alias: سبد
+خرید HTTP، `/me` مشتری، پرداخت (webhook/return)، return-requests، oauth logout،
+PATCHهای پنل، shipment events، `GET /catalog/products/{id}/articles`.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

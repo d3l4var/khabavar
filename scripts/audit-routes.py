@@ -25,8 +25,8 @@ for f in ROUTES:
     src = open(f, encoding='utf-8').read()
     for m in re.finditer(r'"(GET|POST|PUT|PATCH|DELETE) (/[^"]+)"', src):
         method, path = m.group(1), m.group(2)
-        if path.startswith(PREFIX):
-            mounted.add((method, norm(path[len(PREFIX):] or '/')))
+        # Root-level routes (/oauth/*, /healthz) are part of the contract too.
+        mounted.add((method, norm(path[len(PREFIX):] if path.startswith(PREFIX) else path)))
 
 contract = set()
 src = open(CONTRACT, encoding='utf-8').read()

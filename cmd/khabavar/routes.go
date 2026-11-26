@@ -110,6 +110,8 @@ var adminPermissions = map[string]string{
 	"POST /api/v1/admin/articles/{id}/sources":   "content.article.edit",
 	"POST /api/v1/admin/articles/{id}/topics":    "content.article.edit",
 	"POST /api/v1/admin/articles/{id}/products":  "content.relation.manage",
+	"POST /api/v1/admin/articles/{id}/relations": "content.relation.manage",
+	"POST /api/v1/admin/orders/{id}/cancel":      "order.manage",
 }
 
 // seedPermissionCodes is the 24-permission catalogue from 001_seed_baseline.sql
@@ -210,6 +212,17 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/products/{id}", catalog.ProductDetailHandler(s.catalog))
 	api.public("GET /api/v1/products/search", catalog.SearchProductsHandler(s.catalog))
 
+	// ── contract aliases (R-07) ────────────────────────────────────────────────
+	// The contract names /catalog/* and /magazine/*; the canonical routes above are
+	// /products/* and /articles/*. Both are served by the same handler so a client
+	// written against the contract works without a second implementation.
+	api.public("GET /api/v1/catalog/categories", catalog.CategoryTreeHandler(s.catalog))
+	api.public("GET /api/v1/catalog/products", catalog.SearchProductsHandler(s.catalog))
+	api.public("GET /api/v1/catalog/products/{id}", catalog.ProductDetailHandler(s.catalog))
+	api.public("GET /api/v1/magazine/articles", content.ListPublishedArticlesHandler(s.content))
+	api.public("GET /api/v1/magazine/articles/{slug}", content.GetArticleBySlugHandler(s.content))
+	api.public("GET /api/v1/magazine/topics", content.ListTopicsHandler(s.content))
+
 	// ── pricing (P5b) ──
 	api.public("GET /api/v1/variants/{id}/price", pricing.StorefrontPriceHandler(s.pricing))
 
@@ -284,6 +297,9 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(s.content))
+	// Contract aliases (R-07): same handlers, contract path names.
+	api.admin("POST /api/v1/admin/articles/{id}/relations", content.AddProductRelationHandler(s.content))
+	api.admin("POST /api/v1/admin/orders/{id}/cancel", commerce.CancelOrderHandler(s.commerce))
 
 	// ── supply panel (R-07 admin-supply) ──
 	api.admin("GET /api/v1/admin/stock", inventory.ListStockHandler(s.invAdmin))
