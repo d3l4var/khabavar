@@ -145,9 +145,19 @@ type Store interface {
 
 // Service is the inventory module boundary (SAD §۴.۲).
 type Service struct {
-	store Store
-	now   func() time.Time
+	store   Store
+	now     func() time.Time
+	auditor AuditRecorder // optional; nil → no audit writes
 }
+
+// AuditRecorder records a sensitive action (IAM §۷). Declaring the interface here keeps
+// inventory free of an audit import, the same shape commerce and catalog use.
+type AuditRecorder interface {
+	Record(ctx context.Context, actorType, actorID, action, entityType, entityID string, oldValues, newValues any, ip string) error
+}
+
+// SetAuditor wires the audit recorder (nil = no audit writes).
+func (s *Service) SetAuditor(a AuditRecorder) { s.auditor = a }
 
 // NewService wires the store. now is injected for deterministic tests.
 func NewService(store Store) *Service {
@@ -223,7 +233,10 @@ func (s *Service) ReceiveStock(ctx context.Context, warehouseID, variantID strin
 		CreatedAt:     now,
 		CreatedBy:     createdBy,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // AdjustStock records a manual adjustment: applies delta (any sign) to on_hand
@@ -246,7 +259,22 @@ func (s *Service) AdjustStock(ctx context.Context, warehouseID, variantID string
 		CreatedAt:     now,
 		CreatedBy:     createdBy,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// A stock change is one of the seven audited categories (IAM §۷). The audit follows the
+	// movement row, so the trail never claims a change that was not recorded, and an audit
+	// failure is returned rather than swallowed.
+	if s.auditor != nil {
+		if aerr := s.auditor.Record(ctx, "ADMIN", createdBy, "inventory.adjust", "variant", variantID,
+			nil, map[string]any{
+				"warehouse_id": warehouseID, "delta": delta,
+				"reference_type": referenceType, "reference_id": referenceID, "notes": notes,
+			}, ""); aerr != nil {
+			return fmt.Errorf("audit stock adjustment: %w", aerr)
+		}
+	}
+	return nil
 }
 
 // ReserveForOrder creates a reservation for an order item, reserves the stock in

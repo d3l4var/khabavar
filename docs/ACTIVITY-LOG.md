@@ -1437,6 +1437,31 @@ svc.AddToCart(r.Context(), "", r.Header.Get(guestTokenHeader), …)
 
 **پوشش commerce: ۶۱.۸٪ → ۶۷.۸٪** (آستانهٔ مالی ۹۰٪).
 
+### ۴.۵۵ جاروب کلاس باگ هویت + audit موجودی — کامیت `feat(inventory-audit)`
+
+**جاروب سیستماتیک (اسکریپت، نه چشم):** همهٔ mountهای `api.customer` (۸) و
+`api.admin` (۷۱) استخراج و بدنهٔ handlerشان بررسی شد.
+
+- **مسیرهای مشتری:** تنها موردِ مشکوک، `return-requests` بود که false positive است —
+  handler داخل `Idempotent(...)` پیچیده و اسکریپت بدنهٔ wrapper را دیده بود؛ خودِ handler
+  `CustomerID` را می‌خواند. **هیچ مسیر مشتری بدون هویت نماند.**
+- **مسیرهای ادمین:** **۶۷ از ۷۱** handler هرگز به actor دست نمی‌زنند. یعنی IAM §۷
+  (هفت دستهٔ حساس) عملاً فقط برای بازپرداخت و بخشی از کاتالوگ اجرا می‌شد.
+
+**گام اول از آن ۶۷: تغییر موجودی.** ماژول `inventory` هیچ auditor نداشت:
+
+- `AuditRecorder` + `SetAuditor` (همان شکل commerce/catalog، بدون import چرخه‌ای)
+- `AdjustStock` بعد از ثبت movement رکورد audit می‌نویسد — **ترتیب مهم است**: audit بعد از
+  movement، تا تریل ادعای تغییری نکند که ثبت نشده
+- خطای audit **برگردانده می‌شود**، نه بلعیده
+- در `main.go` وصل شد (`invSvc.SetAuditor(auditor)`)
+
+**شاهد:** `TestAdjustStockWritesAudit` — یک رکورد audit با `action=inventory.adjust` و
+actor درست؛ `delta=0` رد می‌شود و **audit نمی‌شود**؛ و خطای auditor به فراخواننده برمی‌گردد.
+
+**یک باگ حین کار:** نسخهٔ اول بلوک audit را با الگوی متنی اشتباه در `ReceiveStock` جا
+داد (جایی که `delta`/`notes` وجود ندارد) — کامپایل گرفت و اصلاح شد.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
