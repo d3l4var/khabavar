@@ -254,6 +254,73 @@ export async function adminLogin(email: string, password: string) {
   return body.access_token
 }
 
+// ── OIDC (Authorization Code + PKCE, cookie session) ─────────────────────────
+// The authorize endpoint is reached by a full-page navigation, so it cannot carry an
+// Authorization header; the staff login also sets an HttpOnly cookie scoped to /oauth.
+// The verifier stays in sessionStorage and the code is useless without it.
+
+const PKCE_KEY = 'kh.pkce'
+export const ADMIN_CLIENT_ID = 'khabavar-admin'
+
+function b64url(bytes: Uint8Array): string {
+  let s = ''
+  for (const b of bytes) s += String.fromCharCode(b)
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+export function adminRedirectURI(): string {
+  return `${window.location.origin}/auth/callback`
+}
+
+// beginOIDCLogin authenticates the staff member and returns the URL to navigate to.
+export async function beginOIDCLogin(email: string, password: string): Promise<string> {
+  await adminLogin(email, password) // sets the HttpOnly /oauth cookie
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)))
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+  const state = b64url(crypto.getRandomValues(new Uint8Array(12)))
+  sessionStorage.setItem(PKCE_KEY, JSON.stringify({ verifier, state }))
+  const params = new URLSearchParams({
+    client_id: ADMIN_CLIENT_ID,
+    redirect_uri: adminRedirectURI(),
+    response_type: 'code',
+    scope: 'openid profile staff',
+    code_challenge: b64url(new Uint8Array(digest)),
+    code_challenge_method: 'S256',
+    state,
+  })
+  return `/oauth/authorize?${params.toString()}`
+}
+
+// completeOIDCLogin exchanges ?code= for tokens when the callback lands. It does not
+// touch history: the code is single-use and a minimal browser can hang on replaceState.
+export async function completeOIDCLogin(): Promise<boolean> {
+  const url = new URL(window.location.href)
+  const code = url.searchParams.get('code')
+  if (!code) return false
+  const raw = sessionStorage.getItem(PKCE_KEY)
+  sessionStorage.removeItem(PKCE_KEY)
+  if (!raw) throw new ApiError(400, 'pkce_missing', 'جریان ورود منقضی شده است؛ دوباره وارد شوید.')
+  const saved = JSON.parse(raw) as { verifier: string; state: string }
+  if (url.searchParams.get('state') !== saved.state) {
+    throw new ApiError(400, 'state_mismatch', 'پاسخ ورود با درخواست هم‌خوان نیست.')
+  }
+  const res = await fetch('/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: ADMIN_CLIENT_ID,
+      code,
+      redirect_uri: adminRedirectURI(),
+      code_verifier: saved.verifier,
+    }),
+  })
+  if (!res.ok) throw new ApiError(res.status, 'oidc_token_failed', 'تبدیل کد به توکن ناموفق بود.')
+  const tokens = (await res.json()) as { access_token: string }
+  setAdminToken(tokens.access_token)
+  return true
+}
+
 export type AdminOrder = {
   id: string
   order_number: string

@@ -13,7 +13,8 @@ import { Badge, Button, Card, Container, Footer, Header, StateBlock, useAsync } 
 import {
   adminListAudit,
   adminListOrders,
-  adminLogin,
+  beginOIDCLogin,
+  completeOIDCLogin,
   adminListProducts,
   adminCreateProduct,
   adminListRoles,
@@ -48,19 +49,20 @@ function useHashRoute() {
   return hash
 }
 
-function LoginScreen({ onDone }: { onDone: () => void }) {
+function LoginScreen({ initialError }: { initialError?: string | null }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError ?? null)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setBusy(true)
     try {
-      await adminLogin(email, password)
-      onDone()
+      // Full-page navigation: authorize authenticates with the HttpOnly cookie the
+      // login just set, which a fetch cannot carry across a redirect.
+      window.location.href = await beginOIDCLogin(email, password)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ورود ناموفق بود.')
     } finally {
@@ -399,6 +401,16 @@ function RolesScreen() {
 function App() {
   const hash = useHashRoute()
   const [authed, setAuthed] = useState(() => Boolean(adminToken()))
+  const [booting, setBooting] = useState(() => new URL(window.location.href).searchParams.has('code'))
+  const [bootError, setBootError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!booting) return
+    completeOIDCLogin()
+      .then((ok) => ok && setAuthed(true))
+      .catch((err: unknown) => setBootError(err instanceof Error ? err.message : 'ورود ناموفق بود.'))
+      .finally(() => setBooting(false))
+  }, [booting])
   const route = useMemo(() => {
     const segs = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
     return { name: segs[0] || 'orders', param: segs[1] ? decodeURIComponent(segs[1]) : '' }
@@ -409,7 +421,7 @@ function App() {
       <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         <Header items={[]} />
         <main style={{ flex: 1 }}>
-          <LoginScreen onDone={() => setAuthed(true)} />
+          <LoginScreen initialError={bootError} />
         </main>
         <Footer />
       </div>
