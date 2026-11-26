@@ -15,6 +15,7 @@ import {
   adminListOrders,
   adminLogin,
   adminListProducts,
+  adminCreateProduct,
   adminListRoles,
   adminListStock,
   adminPatchProduct,
@@ -209,6 +210,8 @@ function ProductsScreen() {
         />
         <Button type="submit">جست‌وجو</Button>
       </form>
+
+      <NewProductForm onCreated={(id) => { window.location.hash = `#/product/${encodeURIComponent(id)}` }} />
 
       {msg ? <p style={{ color: 'var(--kh-text-muted)' }}>{msg}</p> : null}
       {products.loading ? <StateBlock kind="loading" /> : null}
@@ -455,3 +458,89 @@ function App() {
 }
 
 createRoot(document.getElementById('root')!).render(<App />)
+
+// NewProductForm creates a DRAFT product and jumps to its detail page, where the
+// publish gate, categories, variants and pricing live. The slug is derived from the
+// title when left blank, and the API rejects a duplicate.
+function NewProductForm({ onCreated }: { onCreated: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({ title: '', slug: '', short_description: '' })
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const field: React.CSSProperties = {
+    width: '100%',
+    padding: 'var(--kh-space-2)',
+    borderRadius: 'var(--kh-radius-sm)',
+    border: '1px solid var(--kh-border)',
+    background: 'var(--kh-surface)',
+    color: 'var(--kh-text)',
+    font: 'inherit',
+  }
+
+  if (!open) {
+    return (
+      <div style={{ margin: 'var(--kh-space-3) 0' }}>
+        <Button onClick={() => setOpen(true)}>محصول جدید</Button>
+      </div>
+    )
+  }
+
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault()
+        setBusy(true)
+        setMsg(null)
+        try {
+          const slug =
+            form.slug.trim() ||
+            form.title
+              .trim()
+              .toLowerCase()
+              .replace(/[^\p{L}\p{N}]+/gu, '-')
+              .replace(/^-|-$/g, '')
+          const created = await adminCreateProduct({
+            title: form.title.trim(),
+            slug,
+            short_description: form.short_description.trim() || undefined,
+          })
+          setForm({ title: '', slug: '', short_description: '' })
+          setOpen(false)
+          onCreated(created.id)
+        } catch (err) {
+          setMsg(err instanceof Error ? err.message : 'ایجاد محصول ناموفق بود.')
+        } finally {
+          setBusy(false)
+        }
+      }}
+      style={{ display: 'grid', gap: 'var(--kh-space-2)', maxWidth: '520px', margin: 'var(--kh-space-3) 0' }}
+    >
+      <label>
+        عنوان
+        <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required style={field} />
+      </label>
+      <label>
+        اسلاگ (اختیاری)
+        <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} style={field} placeholder="auto" />
+      </label>
+      <label>
+        خلاصه
+        <input
+          value={form.short_description}
+          onChange={(e) => setForm({ ...form, short_description: e.target.value })}
+          style={field}
+        />
+      </label>
+      {msg ? <p style={{ color: 'var(--kh-text-muted)' }}>{msg}</p> : null}
+      <div style={{ display: 'flex', gap: 'var(--kh-space-2)' }}>
+        <Button type="submit" disabled={busy}>
+          ایجاد
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+          انصراف
+        </Button>
+      </div>
+    </form>
+  )
+}

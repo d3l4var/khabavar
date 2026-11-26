@@ -15,6 +15,8 @@ import {
   adminPatchProduct,
   adminPublishProduct,
   formatToman,
+  listCategories,
+  type CategoryNode,
   type AdminVariant,
 } from '../../shared/api'
 
@@ -241,6 +243,8 @@ export function ProductDetailScreen({ id }: { id: string }) {
         </Button>
       </form>
 
+      <CategoryPicker productId={id} selected={p.category_ids ?? []} onSaved={() => product.retry()} />
+
       <h2 style={{ marginTop: 'var(--kh-space-6)' }}>گزینه‌ها و قیمت</h2>
       <div style={{ display: 'grid', gap: 'var(--kh-space-3)' }}>
         {(p.variants ?? []).map((v) => (
@@ -274,5 +278,83 @@ export function ProductDetailScreen({ id }: { id: string }) {
         </Button>
       </form>
     </Container>
+  )
+}
+
+// CategoryPicker edits the product's category set. The list is the public category
+// tree; PATCH replaces the whole set, so the current selection is loaded from the
+// product first — an operator can never silently wipe categories they cannot see.
+function CategoryPicker({
+  productId,
+  selected,
+  onSaved,
+}: {
+  productId: string
+  selected: string[]
+  onSaved: () => void
+}) {
+  const tree = useAsync(() => listCategories(), [])
+  const [picked, setPicked] = useState<string[]>(selected)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const flat = (nodes: CategoryNode[], depth = 0): Array<{ id: string; label: string }> =>
+    nodes.flatMap((n) => [
+      { id: n.id, label: `${'— '.repeat(depth)}${n.name}` },
+      ...(n.children ? flat(n.children, depth + 1) : []),
+    ])
+
+  const toggle = (id: string) =>
+    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
+
+  return (
+    <section style={{ marginTop: 'var(--kh-space-5)' }}>
+      <h2>دسته‌بندی‌ها</h2>
+      {tree.loading ? <StateBlock kind="loading" /> : null}
+      {tree.error ? <StateBlock kind="error" message={tree.error} onRetry={tree.retry} /> : null}
+      {tree.data ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--kh-space-2)', maxWidth: '640px' }}>
+          {flat(tree.data.data ?? []).map((c) => (
+            <label
+              key={c.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--kh-space-1)',
+                padding: 'var(--kh-space-1) var(--kh-space-2)',
+                border: '1px solid var(--kh-border)',
+                borderRadius: 'var(--kh-radius-sm)',
+                fontSize: 'var(--kh-text-sm)',
+              }}
+            >
+              <input type="checkbox" checked={picked.includes(c.id)} onChange={() => toggle(c.id)} />
+              {c.label}
+            </label>
+          ))}
+        </div>
+      ) : null}
+      <div style={{ marginTop: 'var(--kh-space-2)', display: 'flex', gap: 'var(--kh-space-2)', alignItems: 'center' }}>
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            setMsg(null)
+            try {
+              await adminPatchProduct(productId, { category_ids: picked })
+              setMsg('دسته‌بندی‌ها ذخیره شد.')
+              onSaved()
+            } catch (err) {
+              setMsg(err instanceof Error ? err.message : 'ذخیره ناموفق بود.')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          ذخیرهٔ دسته‌بندی
+        </Button>
+        {msg ? <span style={{ color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>{msg}</span> : null}
+      </div>
+    </section>
   )
 }

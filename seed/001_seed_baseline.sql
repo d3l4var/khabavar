@@ -66,6 +66,29 @@ ON CONFLICT DO NOTHING;
 -- ── موضوعات پایه مجله — ۱۱ موضوع مستند در DB v2 §12.2 ──
 -- توجه: SAD §۷.۱ «۱۲ دسته پایه» گفته است؛ سند DB فقط ۱۱ مورد را نام برده —
 -- موضوع دوازدهم نیازمند تصمیم مالک است و در Seed فعلی لحاظ نشده (بدون ابداع).
+-- ── دسته‌بندی پایه کاتالوگ ──
+-- بدون دسته، محصول قابل دسته‌بندی و فروشگاه بدون ناوبری است. درخت دو سطحی: چهار
+-- دستهٔ اصلی و شش زیردسته. slug یکتا است، پس اجرای دوبارهٔ seed بی‌اثر می‌ماند.
+INSERT INTO categories (name, slug, sort_order) VALUES
+    ('تشک و تخت',        'mattresses',      1),
+    ('بالش',             'pillows',         2),
+    ('پتو و روتختی',     'blankets',        3),
+    ('ملزومات خواب',     'sleep-accessories', 4)
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO categories (name, slug, parent_id, sort_order)
+SELECT v.name, v.slug, c.id, v.sort_order
+  FROM (VALUES
+        ('تشک بادی',   'air-mattresses',  'mattresses',       1),
+        ('تشک فنری',   'spring-mattresses','mattresses',      2),
+        ('بالش طبی',   'orthopedic-pillows','pillows',        1),
+        ('بالش مموری', 'memory-pillows',  'pillows',          2),
+        ('پتوی وزن‌دار','weighted-blankets','blankets',       1),
+        ('ماسک خواب',  'sleep-masks',     'sleep-accessories',1)
+       ) AS v(name, slug, parent_slug, sort_order)
+  JOIN categories c ON c.slug = v.parent_slug
+ON CONFLICT (slug) DO NOTHING;
+
 INSERT INTO topics (name, slug, sort_order) VALUES
     ('علوم خواب',            'sleep-science',       1),
     ('بی‌خوابی',              'insomnia',            2),

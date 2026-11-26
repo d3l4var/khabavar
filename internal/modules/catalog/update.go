@@ -97,11 +97,15 @@ func (s *Service) UpdateProduct(ctx context.Context, id string, patch ProductPat
 		(p.SleepRelevance == "" || p.SpecSource == "" || p.SpecLastReviewedAt == nil) {
 		return nil, ErrPublishGateMissing
 	}
-	if err := s.updates.UpdateProduct(ctx, *p, patch.CategoryIDs != nil); err != nil {
-		return nil, fmt.Errorf("update product: %w", err)
-	}
-	if patch.CategoryIDs != nil {
+	// Apply the category set BEFORE the write: the store deletes and re-inserts from
+	// p.CategoryIDs, so assigning it afterwards would wipe the links and still report
+	// success (the response echoed the new set while the table stayed empty).
+	replaceCategories := patch.CategoryIDs != nil
+	if replaceCategories {
 		p.CategoryIDs = patch.CategoryIDs
+	}
+	if err := s.updates.UpdateProduct(ctx, *p, replaceCategories); err != nil {
+		return nil, fmt.Errorf("update product: %w", err)
 	}
 	return p, nil
 }

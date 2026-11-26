@@ -153,3 +153,22 @@ func mustTime(t *testing.T) time.Time {
 	t.Helper()
 	return time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
 }
+
+// TestUpdateProduct_PersistsCategoryReplacement guards a silent write failure: the
+// store replaces the category links from the product it receives, so the service must
+// apply the patch before calling it. Regression: the links were deleted and the
+// response echoed the new set while the table stayed empty.
+func TestUpdateProduct_PersistsCategoryReplacement(t *testing.T) {
+	svc, store, _ := newUpdateService(t)
+	catA, catB := "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+	store.prods["p1"] = &memProduct{Product: Product{ID: "p1", Title: "t", Slug: "s", Status: ProductDraft}, categoryIDs: []string{catA}}
+
+	patch := ProductPatch{CategoryIDs: []string{catB}}
+	if _, err := svc.UpdateProduct(context.Background(), "p1", patch); err != nil {
+		t.Fatalf("UpdateProduct: %v", err)
+	}
+	got := store.prods["p1"].categoryIDs
+	if len(got) != 1 || got[0] != catB {
+		t.Fatalf("persisted categories = %v, want [%s]", got, catB)
+	}
+}

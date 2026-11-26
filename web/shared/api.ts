@@ -82,8 +82,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // ── catalogue ──
+export type CategoryNode = {
+  id: string
+  name: string
+  slug: string
+  parent_id?: string
+  sort_order?: number
+  status?: string
+  children?: CategoryNode[]
+}
+
 export async function listCategories() {
-  return request<{ data: unknown[] }>('/categories')
+  return request<{ data: CategoryNode[] }>('/categories')
 }
 
 export async function listProductsByCategory(categoryId: string, page = 1, pageSize = 20) {
@@ -315,6 +325,7 @@ export async function adminPatchProduct(id: string, patch: Record<string, unknow
 
 export type AdminVariant = { id: string; product_id: string; sku: string; status: string }
 export type AdminProductDetail = AdminProductRow & {
+  category_ids?: string[]
   short_description?: string
   description?: string
   spec_last_reviewed_at?: string
