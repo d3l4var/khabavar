@@ -16,14 +16,20 @@ import (
 
 	"github.com/khabavar/khabavar/internal/modules/catalog"
 	"github.com/khabavar/khabavar/internal/modules/commerce"
+	"github.com/khabavar/khabavar/internal/modules/content"
+	"github.com/khabavar/khabavar/internal/modules/fulfillment"
 	"github.com/khabavar/khabavar/internal/modules/identity"
+	"github.com/khabavar/khabavar/internal/modules/inventory"
+	"github.com/khabavar/khabavar/internal/modules/media"
 	"github.com/khabavar/khabavar/internal/modules/pricing"
+	"github.com/khabavar/khabavar/internal/modules/suppliers"
 	"github.com/khabavar/khabavar/internal/modules/worker"
 	"github.com/khabavar/khabavar/internal/platform/config"
 	"github.com/khabavar/khabavar/internal/platform/db"
 	"github.com/khabavar/khabavar/internal/platform/health"
 	khlog "github.com/khabavar/khabavar/internal/platform/log"
 	"github.com/khabavar/khabavar/internal/platform/ratelimit"
+	"github.com/khabavar/khabavar/internal/platform/security"
 )
 
 func main() {
@@ -96,21 +102,92 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	hh.Mount(mux)
 
 	catSvc := catalog.NewService(catalog.NewDBStore(pool.Pool))
+	catSvc.SetSearchStore(catalog.NewDBStore(pool.Pool))
 	mux.HandleFunc("GET /api/v1/categories", catalog.CategoryTreeHandler(catSvc))
 	mux.HandleFunc("GET /api/v1/categories/{id}/products", catalog.ListProductsByCategoryHandler(catSvc))
 	mux.HandleFunc("GET /api/v1/products/{id}", catalog.ProductDetailHandler(catSvc))
+	mux.HandleFunc("GET /api/v1/products/search", catalog.SearchProductsHandler(catSvc))
 
 	priceSvc := pricing.NewService(pricing.NewDBStore(pool.Pool))
 	mux.HandleFunc("GET /api/v1/variants/{id}/price", pricing.StorefrontPriceHandler(priceSvc))
 
 	// Commerce (P4): order lifecycle + payment + outbox events (R-06 §۱۰)
 	comSvc := commerce.NewService(commerce.NewDBStore(pool.Pool), commerce.NewDBEventEnqueuer(pool.Pool))
+	comSvc.SetRefundStore(commerce.NewDBStore(pool.Pool))
 	mux.Handle("POST /api/v1/orders", commerce.CreateOrderHandler(comSvc))
 	mux.Handle("GET /api/v1/orders/{id}", commerce.GetOrderHandler(comSvc))
 	mux.Handle("GET /api/v1/orders/by-number/{number}", commerce.GetOrderByNumberHandler(comSvc))
 	mux.Handle("POST /api/v1/orders/{id}/payment-intents", commerce.CreatePaymentIntentHandler(comSvc))
 	mux.Handle("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(comSvc))
 	mux.Handle("POST /api/v1/orders/{id}/cancel", commerce.CancelOrderHandler(comSvc))
+	mux.Handle("POST /api/v1/admin/orders/{id}/refunds", commerce.CreateRefundHandler(comSvc))
+	mux.Handle("GET /api/v1/admin/orders/{id}/refunds", commerce.ListRefundsHandler(comSvc))
+	mux.Handle("GET /api/v1/admin/orders/{id}/reconcile", commerce.ReconcileTransactionHandler(comSvc))
+
+	// Suppliers (P5c): admin writes + storefront multi-source reads (R-05 §۲/۳)
+	supSvc := suppliers.NewService(suppliers.NewDBStore(pool.Pool))
+	mux.HandleFunc("POST /api/v1/admin/suppliers", suppliers.CreateSupplierHandler(supSvc))
+	mux.HandleFunc("PATCH /api/v1/admin/suppliers/{id}/status", suppliers.UpdateSupplierStatusHandler(supSvc))
+	mux.HandleFunc("GET /api/v1/variants/{id}/suppliers", suppliers.ListSupplierVariantsHandler(supSvc))
+	mux.HandleFunc("GET /api/v1/admin/supplier-variants/{id}/price-history", suppliers.ListPriceHistoryHandler(supSvc))
+	mux.HandleFunc("POST /api/v1/admin/suppliers/{id}/evaluations", suppliers.CreateEvaluationHandler(supSvc))
+	mux.HandleFunc("GET /api/v1/admin/suppliers/{id}/evaluations", suppliers.ListEvaluationsHandler(supSvc))
+
+	// Inventory (P5d): admin writes + storefront stock reads (R-07 §inventory)
+	invSvc := inventory.NewService(inventory.NewDBStore(pool.Pool))
+	mux.HandleFunc("POST /api/v1/admin/warehouses", inventory.CreateWarehouseHandler(invSvc))
+	mux.HandleFunc("GET /api/v1/warehouses/{wid}/variants/{vid}/stock", inventory.GetStockBalanceHandler(invSvc))
+	mux.HandleFunc("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/receive", inventory.ReceiveStockHandler(invSvc))
+	mux.HandleFunc("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/adjust", inventory.AdjustStockHandler(invSvc))
+	mux.HandleFunc("POST /api/v1/admin/inventory/reserve", inventory.ReserveForOrderHandler(invSvc))
+	mux.HandleFunc("DELETE /api/v1/admin/inventory/reservations/{id}", inventory.ReleaseReservationHandler(invSvc))
+	mux.HandleFunc("POST /api/v1/admin/inventory/reservations/{id}/convert", inventory.ConvertReservationHandler(invSvc))
+	mux.HandleFunc("GET /api/v1/admin/warehouses/{wid}/variants/{vid}/movements", inventory.ListMovementsHandler(invSvc))
+
+	// Fulfillment (P5e): admin writes + storefront fulfillment status reads (R-07 §fulfillment)
+	fulSvc := fulfillment.NewService(fulfillment.NewDBStore(pool.Pool))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders", fulfillment.CreateFulfillmentOrderHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/confirm", fulfillment.ConfirmFulfillmentHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/processing", fulfillment.StartProcessingHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/ready", fulfillment.MarkReadyHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/shipped", fulfillment.MarkShippedHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/delivered", fulfillment.MarkDeliveredHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/cancel", fulfillment.CancelFulfillmentHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/reject", fulfillment.RejectFulfillmentHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/shipments", fulfillment.CreateShipmentHandler(fulSvc))
+	mux.HandleFunc("POST /api/v1/admin/shipments/{id}/transition", fulfillment.TransitionShipmentHandler(fulSvc))
+	mux.HandleFunc("GET /api/v1/shipments/{id}/events", fulfillment.ListShipmentEventsHandler(fulSvc))
+	mux.HandleFunc("GET /api/v1/orders/{id}/fulfillment", fulfillment.ListFulfillmentOrdersByOrderHandler(fulSvc))
+	mux.HandleFunc("GET /api/v1/fulfillment-orders/{id}/shipments", fulfillment.ListShipmentsByFulfillmentHandler(fulSvc))
+
+	// Media (P5f): upload (admin) + asset metadata/content (R-07 §media)
+	mediaStore := media.NewDBStore(pool.Pool)
+	mediaStorage := media.NewLocalStorage(cfg.StorageLocalRoot)
+	mediaSvc := media.NewService(mediaStore, mediaStorage)
+	mux.HandleFunc("POST /api/v1/admin/media", media.UploadHandler(mediaSvc))
+	mux.HandleFunc("GET /api/v1/media/{id}", media.GetAssetHandler(mediaSvc))
+	mux.HandleFunc("GET /api/v1/media/{id}/content", media.GetContentHandler(mediaSvc))
+	mux.HandleFunc("DELETE /api/v1/admin/media/{id}", media.DeleteHandler(mediaSvc))
+
+	// Content/Magazine (P4): storefront reads + admin editorial workflow (R-07 §content)
+	contentSvc := content.NewService(content.NewDBStore(pool.Pool))
+	mux.HandleFunc("GET /api/v1/topics", content.ListTopicsHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/topics", content.CreateTopicHandler(contentSvc))
+	mux.HandleFunc("GET /api/v1/articles", content.ListPublishedArticlesHandler(contentSvc))
+	mux.HandleFunc("GET /api/v1/articles/{slug}", content.GetArticleBySlugHandler(contentSvc))
+	mux.HandleFunc("GET /api/v1/articles/{id}/sources", content.ListArticleSourcesHandler(contentSvc))
+	mux.HandleFunc("GET /api/v1/articles/{id}/products", content.ListRelationsForArticleHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles", content.CreateArticleHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/submit", content.SubmitForReviewHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/approve", content.ApproveArticleHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/schedule", content.ScheduleArticleHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/publish", content.PublishArticleHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/unpublish", content.UnpublishArticleHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/archive", content.ArchiveArticleHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/reject", content.RejectToDraftHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(contentSvc))
+	mux.HandleFunc("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(contentSvc))
 
 	hh.SetReady(true)
 	serve(ctx, cfg.HTTPAddr, mux, logger)
@@ -157,7 +234,14 @@ func mockDispatch(logger *slog.Logger) worker.Handler {
 }
 
 func serve(ctx context.Context, addr string, mux *http.ServeMux, logger *slog.Logger) {
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	// Wrap the mux with security headers + CORS (R-19 P9). SecurityHeaders adds
+	// HSTS, X-Content-Type-Options, CSP, Cache-Control. CORS allows the four
+	// khabavar subdomains to make authenticated cross-origin requests.
+	handler := security.Chain(mux,
+		security.CORS(security.DefaultCORSConfig()),
+		security.SecurityHeaders,
+	)
+	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		logger.Info("http listen", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
