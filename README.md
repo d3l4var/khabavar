@@ -36,7 +36,7 @@ ecosystem نیز پیاده‌سازی و در unit `api` mount شده‌اند.
 
 ```bash
 go mod tidy
-make migrate-up          # ۱۱ مهاجرت روی PG 16 + seed
+make migrate-up          # ۱۳ مهاجرت روی PG 16 + seed
 make seed                # ۱۰ نقش، ۲۴ مجوز، ۴ کلاینت OIDC
 make run-api             # KH_ROLE=api ./bin/khabavar
 make run-identity        # KH_ROLE=identity
@@ -51,7 +51,7 @@ make run-worker          # KH_ROLE=worker
 cmd/khabavar/        یک باینری، KH_ROLE=identity|api|worker (ADR-DB-002)
 internal/platform/   config · db · log · health · ratelimit · idempotency · testpg
 internal/modules/    ۱۳ ماژول دامنه با مرز مصوب (SAD §۴.۱)
-migrations/          ۱۲ مهاجرت up + ۱۲ down stub (forward-only) + embed.go
+migrations/          ۱۳ مهاجرت up + ۱۳ down stub (forward-only) + embed.go
 seed/                001_seed_baseline.sql — نقش‌ها، مجوزها، OIDC، موضوعات مجله
 web/                 main · shop · magazine · admin (React+TS+Vite)
 deploy/systemd/      سه unit (تک‌بیناری)
