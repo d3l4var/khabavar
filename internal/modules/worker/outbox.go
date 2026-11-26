@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -268,23 +270,60 @@ func (m *MemOutbox) RetryCount(id string) int {
 
 // ── DBOutbox ──────────────────────────────────────────────────────────────────
 
+// DefaultClaimLease is how long a claimed event stays invisible to other workers
+// before it is considered abandoned and becomes claimable again. It must exceed the
+// slowest handler: a handler that outlives the lease can be dispatched twice.
+const DefaultClaimLease = 60 * time.Second
+
 type DBOutbox struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	lease    time.Duration
+	workerID string
 }
 
-func NewDBOutbox(pool *pgxpool.Pool) *DBOutbox { return &DBOutbox{pool: pool} }
+func NewDBOutbox(pool *pgxpool.Pool) *DBOutbox {
+	return &DBOutbox{
+		pool:     pool,
+		lease:    DefaultClaimLease,
+		workerID: "worker-" + uuid.NewString()[:8],
+	}
+}
+
+// SetLease overrides the claim lease (tests use a short lease to exercise expiry).
+func (s *DBOutbox) SetLease(d time.Duration) {
+	if d > 0 {
+		s.lease = d
+	}
+}
+
+// claimSQL claims a batch atomically. FOR UPDATE SKIP LOCKED alone is not enough:
+// in autocommit the row locks vanish when the statement ends, so two replicas claim
+// the same rows and dispatch them twice. The UPDATE records the claim (claimed_at /
+// claimed_by) inside the same statement, and the WHERE clause skips rows whose lease
+// is still live. A crashed worker's rows become claimable again once the lease
+// expires, so no event is lost.
+const claimSQL = `
+WITH picked AS (
+    SELECT id
+      FROM domain_events
+     WHERE published_at IS NULL
+       AND (claimed_at IS NULL OR claimed_at < now() - ($2::double precision * interval '1 second'))
+     ORDER BY occurred_at
+     LIMIT $1
+     FOR UPDATE SKIP LOCKED
+)
+UPDATE domain_events d
+   SET claimed_at = now(), claimed_by = $3
+  FROM picked
+ WHERE d.id = picked.id
+RETURNING d.id, d.aggregate_type, d.aggregate_id, d.event_type, d.payload,
+          d.occurred_at, d.retry_count`
 
 func (s *DBOutbox) Claim(ctx context.Context, limit int) ([]Event, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.pool.Query(ctx, `
-		SELECT id, aggregate_type, aggregate_id, event_type, payload, occurred_at, retry_count
-		  FROM domain_events
-		 WHERE published_at IS NULL
-		 ORDER BY occurred_at
-		 LIMIT $1
-		 FOR UPDATE SKIP LOCKED`, limit)
+	rows, err := s.pool.Query(ctx, claimSQL, limit, s.lease.Seconds(), s.workerID)
 	if err != nil {
 		return nil, err
 	}
@@ -303,13 +342,23 @@ func (s *DBOutbox) Claim(ctx context.Context, limit int) ([]Event, error) {
 	return out, rows.Err()
 }
 
+// MarkPublished clears the claim and stamps published_at, so the row is never
+// claimed again.
 func (s *DBOutbox) MarkPublished(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `UPDATE domain_events SET published_at = now() WHERE id = $1`, id)
+	_, err := s.pool.Exec(ctx,
+		`UPDATE domain_events
+		    SET published_at = now(), claimed_at = NULL, claimed_by = NULL
+		  WHERE id = $1`, id)
 	return err
 }
 
+// MarkFailed bumps retry_count and releases the lease so the retry is eligible
+// immediately instead of waiting for the lease to expire.
 func (s *DBOutbox) MarkFailed(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `UPDATE domain_events SET retry_count = retry_count + 1 WHERE id = $1`, id)
+	_, err := s.pool.Exec(ctx,
+		`UPDATE domain_events
+		    SET retry_count = retry_count + 1, claimed_at = NULL, claimed_by = NULL
+		  WHERE id = $1`, id)
 	return err
 }
 

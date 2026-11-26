@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -14,13 +15,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/khabavar/khabavar/internal/modules/audit"
+	"github.com/khabavar/khabavar/internal/modules/authorization"
 	"github.com/khabavar/khabavar/internal/modules/catalog"
 	"github.com/khabavar/khabavar/internal/modules/commerce"
 	"github.com/khabavar/khabavar/internal/modules/content"
+	"github.com/khabavar/khabavar/internal/modules/ecosystem"
 	"github.com/khabavar/khabavar/internal/modules/fulfillment"
 	"github.com/khabavar/khabavar/internal/modules/identity"
 	"github.com/khabavar/khabavar/internal/modules/inventory"
 	"github.com/khabavar/khabavar/internal/modules/media"
+	"github.com/khabavar/khabavar/internal/modules/notifications"
 	"github.com/khabavar/khabavar/internal/modules/pricing"
 	"github.com/khabavar/khabavar/internal/modules/suppliers"
 	"github.com/khabavar/khabavar/internal/modules/worker"
@@ -93,101 +98,122 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 	serve(ctx, cfg.HTTPAddr, mux, logger)
 }
 
-// runAPI mounts the storefront read endpoints. Catalog (P5a) and pricing storefront
-// reads (P5b) are wired now; commerce endpoints (P4) are wired in P6. Admin endpoints
-// (catalog writes, pricing economics) land behind authorization.Require in the P5b-admin pass.
+// runAPI mounts the storefront read endpoints and the staff (admin) endpoints.
+// Storefront reads are public; every /api/v1/admin/* route goes through apiMux.admin,
+// which authenticates the Bearer token and checks the seeded permission code for that
+// route (IAM §۱). A denial is written to the audit log (IAM §۷).
 func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *db.Pool) {
+	if cfg.TokenSigningKey == "" {
+		logger.Error("KH_TOKEN_SIGNING_KEY is required (Bearer token verification)")
+		os.Exit(1)
+	}
 	mux := http.NewServeMux()
 	hh := health.New(pool)
 	hh.Mount(mux)
 
+	// RBAC wiring: token → admin identity → seeded permission matrix (IAM §۱/§۴).
+	resolver := identity.DBSubjectResolver(pool.Pool, cfg.TokenSigningKey)
+	resolve := func(ctx context.Context, bearer string) (string, string, bool) {
+		s, ok := resolver(ctx, bearer)
+		return s.Kind, s.ID, ok
+	}
+	checker := authorization.NewDBChecker(pool.Pool)
+	auditor := audit.NewRecorder(pool.Pool)
+	api := newAPIMux(mux, newAdminGuard(resolve, checker, auditor))
+
 	catSvc := catalog.NewService(catalog.NewDBStore(pool.Pool))
 	catSvc.SetSearchStore(catalog.NewDBStore(pool.Pool))
-	mux.HandleFunc("GET /api/v1/categories", catalog.CategoryTreeHandler(catSvc))
-	mux.HandleFunc("GET /api/v1/categories/{id}/products", catalog.ListProductsByCategoryHandler(catSvc))
-	mux.HandleFunc("GET /api/v1/products/{id}", catalog.ProductDetailHandler(catSvc))
-	mux.HandleFunc("GET /api/v1/products/search", catalog.SearchProductsHandler(catSvc))
+	api.public("GET /api/v1/categories", catalog.CategoryTreeHandler(catSvc))
+	api.public("GET /api/v1/categories/{id}/products", catalog.ListProductsByCategoryHandler(catSvc))
+	api.public("GET /api/v1/products/{id}", catalog.ProductDetailHandler(catSvc))
+	api.public("GET /api/v1/products/search", catalog.SearchProductsHandler(catSvc))
 
 	priceSvc := pricing.NewService(pricing.NewDBStore(pool.Pool))
-	mux.HandleFunc("GET /api/v1/variants/{id}/price", pricing.StorefrontPriceHandler(priceSvc))
+	api.public("GET /api/v1/variants/{id}/price", pricing.StorefrontPriceHandler(priceSvc))
 
 	// Commerce (P4): order lifecycle + payment + outbox events (R-06 §۱۰)
 	comSvc := commerce.NewService(commerce.NewDBStore(pool.Pool), commerce.NewDBEventEnqueuer(pool.Pool))
 	comSvc.SetRefundStore(commerce.NewDBStore(pool.Pool))
-	mux.Handle("POST /api/v1/orders", commerce.CreateOrderHandler(comSvc))
-	mux.Handle("GET /api/v1/orders/{id}", commerce.GetOrderHandler(comSvc))
-	mux.Handle("GET /api/v1/orders/by-number/{number}", commerce.GetOrderByNumberHandler(comSvc))
-	mux.Handle("POST /api/v1/orders/{id}/payment-intents", commerce.CreatePaymentIntentHandler(comSvc))
-	mux.Handle("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(comSvc))
-	mux.Handle("POST /api/v1/orders/{id}/cancel", commerce.CancelOrderHandler(comSvc))
-	mux.Handle("POST /api/v1/admin/orders/{id}/refunds", commerce.CreateRefundHandler(comSvc))
-	mux.Handle("GET /api/v1/admin/orders/{id}/refunds", commerce.ListRefundsHandler(comSvc))
-	mux.Handle("GET /api/v1/admin/orders/{id}/reconcile", commerce.ReconcileTransactionHandler(comSvc))
+	api.public("POST /api/v1/orders", commerce.CreateOrderHandler(comSvc))
+	api.public("GET /api/v1/orders/{id}", commerce.GetOrderHandler(comSvc))
+	api.public("GET /api/v1/orders/by-number/{number}", commerce.GetOrderByNumberHandler(comSvc))
+	api.public("POST /api/v1/orders/{id}/payment-intents", commerce.CreatePaymentIntentHandler(comSvc))
+	api.public("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(comSvc))
+	api.public("POST /api/v1/orders/{id}/cancel", commerce.CancelOrderHandler(comSvc))
+	api.admin("POST /api/v1/admin/orders/{id}/refunds", commerce.CreateRefundHandler(comSvc))
+	api.admin("GET /api/v1/admin/orders/{id}/refunds", commerce.ListRefundsHandler(comSvc))
+	api.admin("GET /api/v1/admin/orders/{id}/reconcile", commerce.ReconcileTransactionHandler(comSvc))
 
 	// Suppliers (P5c): admin writes + storefront multi-source reads (R-05 §۲/۳)
 	supSvc := suppliers.NewService(suppliers.NewDBStore(pool.Pool))
-	mux.HandleFunc("POST /api/v1/admin/suppliers", suppliers.CreateSupplierHandler(supSvc))
-	mux.HandleFunc("PATCH /api/v1/admin/suppliers/{id}/status", suppliers.UpdateSupplierStatusHandler(supSvc))
-	mux.HandleFunc("GET /api/v1/variants/{id}/suppliers", suppliers.ListSupplierVariantsHandler(supSvc))
-	mux.HandleFunc("GET /api/v1/admin/supplier-variants/{id}/price-history", suppliers.ListPriceHistoryHandler(supSvc))
-	mux.HandleFunc("POST /api/v1/admin/suppliers/{id}/evaluations", suppliers.CreateEvaluationHandler(supSvc))
-	mux.HandleFunc("GET /api/v1/admin/suppliers/{id}/evaluations", suppliers.ListEvaluationsHandler(supSvc))
+	api.admin("POST /api/v1/admin/suppliers", suppliers.CreateSupplierHandler(supSvc))
+	api.admin("PATCH /api/v1/admin/suppliers/{id}/status", suppliers.UpdateSupplierStatusHandler(supSvc))
+	api.public("GET /api/v1/variants/{id}/suppliers", suppliers.ListSupplierVariantsHandler(supSvc))
+	api.admin("GET /api/v1/admin/supplier-variants/{id}/price-history", suppliers.ListPriceHistoryHandler(supSvc))
+	api.admin("POST /api/v1/admin/suppliers/{id}/evaluations", suppliers.CreateEvaluationHandler(supSvc))
+	api.admin("GET /api/v1/admin/suppliers/{id}/evaluations", suppliers.ListEvaluationsHandler(supSvc))
 
 	// Inventory (P5d): admin writes + storefront stock reads (R-07 §inventory)
 	invSvc := inventory.NewService(inventory.NewDBStore(pool.Pool))
-	mux.HandleFunc("POST /api/v1/admin/warehouses", inventory.CreateWarehouseHandler(invSvc))
-	mux.HandleFunc("GET /api/v1/warehouses/{wid}/variants/{vid}/stock", inventory.GetStockBalanceHandler(invSvc))
-	mux.HandleFunc("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/receive", inventory.ReceiveStockHandler(invSvc))
-	mux.HandleFunc("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/adjust", inventory.AdjustStockHandler(invSvc))
-	mux.HandleFunc("POST /api/v1/admin/inventory/reserve", inventory.ReserveForOrderHandler(invSvc))
-	mux.HandleFunc("DELETE /api/v1/admin/inventory/reservations/{id}", inventory.ReleaseReservationHandler(invSvc))
-	mux.HandleFunc("POST /api/v1/admin/inventory/reservations/{id}/convert", inventory.ConvertReservationHandler(invSvc))
-	mux.HandleFunc("GET /api/v1/admin/warehouses/{wid}/variants/{vid}/movements", inventory.ListMovementsHandler(invSvc))
+	api.admin("POST /api/v1/admin/warehouses", inventory.CreateWarehouseHandler(invSvc))
+	api.public("GET /api/v1/warehouses/{wid}/variants/{vid}/stock", inventory.GetStockBalanceHandler(invSvc))
+	api.admin("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/receive", inventory.ReceiveStockHandler(invSvc))
+	api.admin("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/adjust", inventory.AdjustStockHandler(invSvc))
+	api.admin("POST /api/v1/admin/inventory/reserve", inventory.ReserveForOrderHandler(invSvc))
+	api.admin("DELETE /api/v1/admin/inventory/reservations/{id}", inventory.ReleaseReservationHandler(invSvc))
+	api.admin("POST /api/v1/admin/inventory/reservations/{id}/convert", inventory.ConvertReservationHandler(invSvc))
+	api.admin("GET /api/v1/admin/warehouses/{wid}/variants/{vid}/movements", inventory.ListMovementsHandler(invSvc))
 
 	// Fulfillment (P5e): admin writes + storefront fulfillment status reads (R-07 §fulfillment)
 	fulSvc := fulfillment.NewService(fulfillment.NewDBStore(pool.Pool))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders", fulfillment.CreateFulfillmentOrderHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/confirm", fulfillment.ConfirmFulfillmentHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/processing", fulfillment.StartProcessingHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/ready", fulfillment.MarkReadyHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/shipped", fulfillment.MarkShippedHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/delivered", fulfillment.MarkDeliveredHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/cancel", fulfillment.CancelFulfillmentHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/reject", fulfillment.RejectFulfillmentHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/fulfillment-orders/{id}/shipments", fulfillment.CreateShipmentHandler(fulSvc))
-	mux.HandleFunc("POST /api/v1/admin/shipments/{id}/transition", fulfillment.TransitionShipmentHandler(fulSvc))
-	mux.HandleFunc("GET /api/v1/shipments/{id}/events", fulfillment.ListShipmentEventsHandler(fulSvc))
-	mux.HandleFunc("GET /api/v1/orders/{id}/fulfillment", fulfillment.ListFulfillmentOrdersByOrderHandler(fulSvc))
-	mux.HandleFunc("GET /api/v1/fulfillment-orders/{id}/shipments", fulfillment.ListShipmentsByFulfillmentHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders", fulfillment.CreateFulfillmentOrderHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/confirm", fulfillment.ConfirmFulfillmentHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/processing", fulfillment.StartProcessingHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/ready", fulfillment.MarkReadyHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/shipped", fulfillment.MarkShippedHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/delivered", fulfillment.MarkDeliveredHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/cancel", fulfillment.CancelFulfillmentHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/reject", fulfillment.RejectFulfillmentHandler(fulSvc))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/shipments", fulfillment.CreateShipmentHandler(fulSvc))
+	api.admin("POST /api/v1/admin/shipments/{id}/transition", fulfillment.TransitionShipmentHandler(fulSvc))
+	api.public("GET /api/v1/shipments/{id}/events", fulfillment.ListShipmentEventsHandler(fulSvc))
+	api.public("GET /api/v1/orders/{id}/fulfillment", fulfillment.ListFulfillmentOrdersByOrderHandler(fulSvc))
+	api.public("GET /api/v1/fulfillment-orders/{id}/shipments", fulfillment.ListShipmentsByFulfillmentHandler(fulSvc))
 
 	// Media (P5f): upload (admin) + asset metadata/content (R-07 §media)
 	mediaStore := media.NewDBStore(pool.Pool)
 	mediaStorage := media.NewLocalStorage(cfg.StorageLocalRoot)
 	mediaSvc := media.NewService(mediaStore, mediaStorage)
-	mux.HandleFunc("POST /api/v1/admin/media", media.UploadHandler(mediaSvc))
-	mux.HandleFunc("GET /api/v1/media/{id}", media.GetAssetHandler(mediaSvc))
-	mux.HandleFunc("GET /api/v1/media/{id}/content", media.GetContentHandler(mediaSvc))
-	mux.HandleFunc("DELETE /api/v1/admin/media/{id}", media.DeleteHandler(mediaSvc))
+	api.admin("POST /api/v1/admin/media", media.UploadHandler(mediaSvc))
+	api.public("GET /api/v1/media/{id}", media.GetAssetHandler(mediaSvc))
+	api.public("GET /api/v1/media/{id}/content", media.GetContentHandler(mediaSvc))
+	api.admin("DELETE /api/v1/admin/media/{id}", media.DeleteHandler(mediaSvc))
 
 	// Content/Magazine (P4): storefront reads + admin editorial workflow (R-07 §content)
 	contentSvc := content.NewService(content.NewDBStore(pool.Pool))
-	mux.HandleFunc("GET /api/v1/topics", content.ListTopicsHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/topics", content.CreateTopicHandler(contentSvc))
-	mux.HandleFunc("GET /api/v1/articles", content.ListPublishedArticlesHandler(contentSvc))
-	mux.HandleFunc("GET /api/v1/articles/{slug}", content.GetArticleBySlugHandler(contentSvc))
-	mux.HandleFunc("GET /api/v1/articles/{id}/sources", content.ListArticleSourcesHandler(contentSvc))
-	mux.HandleFunc("GET /api/v1/articles/{id}/products", content.ListRelationsForArticleHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles", content.CreateArticleHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/submit", content.SubmitForReviewHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/approve", content.ApproveArticleHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/schedule", content.ScheduleArticleHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/publish", content.PublishArticleHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/unpublish", content.UnpublishArticleHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/archive", content.ArchiveArticleHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/reject", content.RejectToDraftHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(contentSvc))
-	mux.HandleFunc("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(contentSvc))
+	contentSvc.SetSearchStore(content.NewDBStore(pool.Pool))
+	api.public("GET /api/v1/topics", content.ListTopicsHandler(contentSvc))
+	api.admin("POST /api/v1/admin/topics", content.CreateTopicHandler(contentSvc))
+	api.public("GET /api/v1/articles", content.ListPublishedArticlesHandler(contentSvc))
+	api.public("GET /api/v1/articles/{slug}", content.GetArticleBySlugHandler(contentSvc))
+	api.public("GET /api/v1/articles/{id}/sources", content.ListArticleSourcesHandler(contentSvc))
+	api.public("GET /api/v1/articles/{id}/products", content.ListRelationsForArticleHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles", content.CreateArticleHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/submit", content.SubmitForReviewHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/approve", content.ApproveArticleHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/schedule", content.ScheduleArticleHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/publish", content.PublishArticleHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/unpublish", content.UnpublishArticleHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/archive", content.ArchiveArticleHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/reject", content.RejectToDraftHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(contentSvc))
+	api.admin("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(contentSvc))
+
+	// Ecosystem (P7): unified search across products and articles (R-19 P7)
+	eco := ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc})
+	api.public("GET /api/v1/search", ecosystem.SearchHandler(eco))
+	api.public("GET /api/v1/navigation", ecosystem.NavigationHandler())
 
 	hh.SetReady(true)
 	serve(ctx, cfg.HTTPAddr, mux, logger)
@@ -207,12 +233,18 @@ func runWorker(ctx context.Context, cfg config.Config, logger *slog.Logger, pool
 }
 
 // runOutboxDispatcher drains domain_events and dispatches to per-event-type handlers.
-// v1 ships a mock notifications handler that logs the event; P5+ wires the real
-// notifications module (SmsAdapter/EmailAdapter) here.
+// Customer-facing events go through the notifications module (ADR-ARCH-011): the mock
+// SMS adapter is wired until a real provider is chosen, so the delivery path is the
+// production one and only the adapter is swapped by configuration.
 func runOutboxDispatcher(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *db.Pool) {
 	store := worker.NewDBOutbox(pool.Pool)
 	d := worker.NewDispatcher(store, logger, cfg.WorkerBatchSize, 5)
-	handler := mockDispatch(logger)
+
+	sms := &notifications.MockSmsAdapter{Logger: logger}
+	email := &notifications.MockEmailAdapter{Logger: logger}
+	notifier := notifications.NewDispatcher(sms, email)
+	handler := notifyHandler(notifier, logger)
+
 	// Known commerce/fulfillment event types (R-06 §۱۰); fallback covers anything else.
 	d.Register("OrderCreated", handler)
 	d.Register("OrderPaid", handler)
@@ -220,16 +252,29 @@ func runOutboxDispatcher(ctx context.Context, cfg config.Config, logger *slog.Lo
 	d.Register("OrderConfirmed", handler)
 	d.Register("PaymentCaptured", handler)
 	d.Register("ShipmentDispatched", handler)
+	d.Register("OrderShipped", handler)
+	d.Register("RefundIssued", handler)
 	d.SetFallback(handler)
 	d.Run(ctx, time.Duration(cfg.WorkerInterval)*time.Second)
 }
 
-// mockDispatch is the v1 notifications handler (ADR-ARCH-011). It logs the event type
-// and aggregate id; the real adapter sends the SMS/email in P5.
-func mockDispatch(logger *slog.Logger) worker.Handler {
-	return func(_ context.Context, e worker.Event) error {
-		logger.Info("worker: mock dispatch", "event_type", e.EventType, "aggregate_id", e.AggregateID)
-		return nil
+// notifyHandler adapts the notifications dispatcher to the worker's Handler shape.
+// A delivery failure returns the error so the outbox retries (then dead-letters).
+func notifyHandler(n *notifications.Dispatcher, logger *slog.Logger) worker.Handler {
+	return func(ctx context.Context, e worker.Event) error {
+		var payload map[string]any
+		if len(e.Payload) > 0 {
+			if err := json.Unmarshal(e.Payload, &payload); err != nil {
+				// A malformed payload must not wedge the queue: log and acknowledge.
+				logger.Warn("worker: unparseable event payload", "event_type", e.EventType, "err", err)
+				return nil
+			}
+		}
+		return n.Dispatch(ctx, notifications.Event{
+			EventType:   e.EventType,
+			AggregateID: e.AggregateID,
+			Payload:     payload,
+		})
 	}
 }
 

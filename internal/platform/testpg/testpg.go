@@ -8,18 +8,22 @@
 //	defer cleanup()
 //	migrations.ApplyAll(ctx, pool, nil)
 //
-// The harness drops the public schema of the target database on cleanup so each
-// test starts from a clean slate. NEVER point KH_TEST_PG_DSN at a production
-// database.
+// Isolation: every test gets its own schema (test_<random>) and the pool's
+// search_path points at it, so packages can run in parallel against one database
+// without dropping each other's tables. Cleanup drops only that schema.
+//
+// NEVER point KH_TEST_PG_DSN at a production database.
 package testpg
 
 import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -35,9 +39,8 @@ func SkipIfNoDSN(t *testing.T) {
 	}
 }
 
-// Setup opens a pool against KH_TEST_PG_DSN and returns it along with a cleanup
-// function that drops the public schema and closes the pool. The schema drop is
-// what gives each test a fresh slate.
+// Setup opens a pool isolated to a fresh schema and returns it with a cleanup
+// function that drops that schema and closes the pool.
 func Setup(t *testing.T) (*pgxpool.Pool, func()) {
 	t.Helper()
 	SkipIfNoDSN(t)
@@ -46,11 +49,20 @@ func Setup(t *testing.T) (*pgxpool.Pool, func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	schema := "test_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
+
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		t.Fatalf("parse dsn: %v", err)
 	}
 	cfg.MaxConns = 5
+	if cfg.ConnConfig.RuntimeParams == nil {
+		cfg.ConnConfig.RuntimeParams = map[string]string{}
+	}
+	// search_path may name a schema that does not exist yet: Postgres skips it
+	// until it is created, so CREATE SCHEMA below lands in the right place.
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("open pool: %v", err)
@@ -59,12 +71,16 @@ func Setup(t *testing.T) (*pgxpool.Pool, func()) {
 		pool.Close()
 		t.Fatalf("ping db: %v", err)
 	}
+	if _, err := pool.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+schema); err != nil {
+		pool.Close()
+		t.Fatalf("create schema %s: %v", schema, err)
+	}
 
 	cleanup := func() {
 		dCtx, dCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer dCancel()
-		if _, err := pool.Exec(dCtx, `DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;`); err != nil {
-			t.Logf("cleanup: drop schema: %v", err)
+		if _, err := pool.Exec(dCtx, "DROP SCHEMA IF EXISTS "+schema+" CASCADE"); err != nil {
+			t.Logf("cleanup: drop schema %s: %v", schema, err)
 		}
 		pool.Close()
 	}
@@ -84,13 +100,15 @@ func SeedOIDCClient(ctx context.Context, pool *pgxpool.Pool, clientID, serviceCo
 	return nil
 }
 
-// SeedCustomer upserts a customer by phone and returns its UUID.
+// SeedCustomer upserts a customer by phone and returns its UUID. The unique index on
+// phone is partial (WHERE phone IS NOT NULL, §۱۵), so the conflict target must repeat
+// that predicate or Postgres cannot infer the index.
 func SeedCustomer(ctx context.Context, pool *pgxpool.Pool, phone string) (string, error) {
 	var id string
 	err := pool.QueryRow(ctx,
 		`INSERT INTO customers (phone, phone_verified_at)
 		 VALUES ($1, now())
-		 ON CONFLICT (phone) DO UPDATE SET updated_at = now()
+		 ON CONFLICT (phone) WHERE phone IS NOT NULL DO UPDATE SET updated_at = now()
 		 RETURNING id`, phone).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("seed customer: %w", err)

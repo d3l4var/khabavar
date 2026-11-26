@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/khabavar/khabavar/internal/platform/testpg"
@@ -263,7 +264,7 @@ func TestPG_SubjectResolver_ResolvesValidSession(t *testing.T) {
 
 	// Issue a session bound to the customer.
 	if err := store.CreateSession(ctx,
-		"sess-"+custID, custID, "", "shop", tokenHash, "127.0.0.1", "test", time.Now().Add(time.Hour)); err != nil {
+		uuid.NewString(), custID, "", "shop", tokenHash, "127.0.0.1", "test", time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
 
@@ -296,7 +297,7 @@ func TestPG_SubjectResolver_RejectsExpiredSession(t *testing.T) {
 	rawToken := "raw-expired"
 	serverKey := "test-server-key"
 	if err := store.CreateSession(ctx,
-		"sess-exp", custID, "", "shop", HashOTP(rawToken, serverKey), "127.0.0.1", "test", time.Now().Add(-time.Minute)); err != nil {
+		uuid.NewString(), custID, "", "shop", HashOTP(rawToken, serverKey), "127.0.0.1", "test", time.Now().Add(-time.Minute)); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
 	resolve := DBSubjectResolver(pool, serverKey)

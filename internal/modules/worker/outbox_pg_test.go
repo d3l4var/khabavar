@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/khabavar/khabavar/internal/platform/testpg"
@@ -30,6 +31,11 @@ func setupPG(t *testing.T) (*pgxpool.Pool, *DBOutbox) {
 
 func seedEvent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, eventType, aggID string, payload any) string {
 	t.Helper()
+	// domain_events.aggregate_id is a UUID column; call sites may pass a readable
+	// label ("agg") so normalise it to a real UUID here.
+	if _, err := uuid.Parse(aggID); err != nil {
+		aggID = uuid.NewString()
+	}
 	var raw []byte
 	if payload != nil {
 		b, err := json.Marshal(payload)
@@ -73,15 +79,30 @@ func TestPG_DBOutbox_ClaimReturnsUnpublishedOnly(t *testing.T) {
 		t.Fatalf("missing ids: got %v want %s,%s", got, idA, idB)
 	}
 
+	// A second claim must return nothing: both rows carry a live lease. This is the
+	// property that stops two worker replicas from dispatching the same event twice.
+	if again, err := store.Claim(ctx, 10); err != nil {
+		t.Fatalf("claim 2: %v", err)
+	} else if len(again) != 0 {
+		t.Fatalf("claim 2 = %+v, want none (lease still live)", again)
+	}
+
 	if err := store.MarkPublished(ctx, idA); err != nil {
 		t.Fatalf("mark published: %v", err)
 	}
-	events2, err := store.Claim(ctx, 10)
-	if err != nil {
-		t.Fatalf("claim 2: %v", err)
+
+	// Simulate a worker that died mid-dispatch: its lease expires and the event
+	// becomes claimable again, so nothing is lost.
+	if _, err := pool.Exec(ctx,
+		`UPDATE domain_events SET claimed_at = now() - interval '10 minutes' WHERE id = $1`, idB); err != nil {
+		t.Fatalf("expire lease: %v", err)
 	}
-	if len(events2) != 1 || events2[0].ID != idB {
-		t.Fatalf("claim 2 = %+v, want only %s", events2, idB)
+	events3, err := store.Claim(ctx, 10)
+	if err != nil {
+		t.Fatalf("claim 3: %v", err)
+	}
+	if len(events3) != 1 || events3[0].ID != idB {
+		t.Fatalf("claim 3 = %+v, want only %s", events3, idB)
 	}
 }
 

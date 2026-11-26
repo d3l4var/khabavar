@@ -174,8 +174,9 @@ type Store interface {
 
 // Service is the content module boundary (SAD §۴.۲).
 type Service struct {
-	store Store
-	now   func() time.Time
+	store  Store
+	search ArticleSearchStore // optional; nil → bounded in-memory scan (tests only)
+	now    func() time.Time
 }
 
 // NewService wires the store. now is injected for deterministic tests.
