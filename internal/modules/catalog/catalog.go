@@ -246,6 +246,21 @@ func (s *Service) GetProductDetail(ctx context.Context, id string) (*ProductDeta
 	return &ProductDetail{Product: *p, Variants: variants}, nil
 }
 
+// GetStorefrontProduct returns a product with its variants for the public storefront.
+// Only PUBLISHED products are visible: a DRAFT, PAUSED or DISCONTINUED product must
+// answer 404, otherwise anyone holding a UUID could read an unpublished listing
+// (R-04 §۵, QC-05). The panel uses GetProductDetail instead.
+func (s *Service) GetStorefrontProduct(ctx context.Context, id string) (*ProductDetail, error) {
+	d, err := s.GetProductDetail(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if d.Product.Status != ProductPublished {
+		return nil, ErrProductNotFound
+	}
+	return d, nil
+}
+
 // ListPublishedByCategory returns PUBLISHED products attached to a category, for the
 // storefront. page is 1-based.
 func (s *Service) ListPublishedByCategory(ctx context.Context, categoryID string, page, pageSize int) ([]Product, int, error) {

@@ -31,7 +31,7 @@ func ProductDetailHandler(svc *Service) http.HandlerFunc {
 			writeCatalogErr(w, ErrProductNotFound)
 			return
 		}
-		detail, err := svc.GetProductDetail(r.Context(), id)
+		detail, err := svc.GetStorefrontProduct(r.Context(), id)
 		if err != nil {
 			writeCatalogErr(w, err)
 			return

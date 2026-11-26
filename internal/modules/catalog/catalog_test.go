@@ -395,3 +395,38 @@ func TestGetProductDetail_NotFound(t *testing.T) {
 		t.Fatalf("expected ErrProductNotFound, got %v", err)
 	}
 }
+
+// TestStorefrontDetailHidesUnpublished is the regression test for a real leak: the
+// public detail endpoint returned DRAFT products to anyone holding the UUID, because
+// GetProductDetail has no status filter (the panel needs exactly that).
+func TestStorefrontDetailHidesUnpublished(t *testing.T) {
+	store := newMemStore()
+	svc := NewService(store)
+	svc.SetUpdateStore(&memUpdateStore{store: store})
+	ctx := context.Background()
+	id, err := svc.CreateProduct(ctx, Product{Title: "draft", Slug: "draft-1"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := svc.GetStorefrontProduct(ctx, id); !errors.Is(err, ErrProductNotFound) {
+		t.Fatalf("storefront must hide a DRAFT product, got %v", err)
+	}
+	if _, err := svc.GetProductDetail(ctx, id); err != nil {
+		t.Fatalf("the panel must still read a DRAFT product: %v", err)
+	}
+
+	reviewed := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	rel, src := "SLEEP_AID", "سازنده"
+	if _, err := svc.UpdateProduct(ctx, id, ProductPatch{
+		SleepRelevance: &rel, SpecSource: &src, SpecLastReviewedAt: &reviewed,
+	}); err != nil {
+		t.Fatalf("patch: %v", err)
+	}
+	if err := svc.PublishProduct(ctx, id); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if _, err := svc.GetStorefrontProduct(ctx, id); err != nil {
+		t.Fatalf("a PUBLISHED product must be readable: %v", err)
+	}
+}
