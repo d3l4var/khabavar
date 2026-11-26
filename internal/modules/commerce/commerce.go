@@ -169,7 +169,7 @@ type OrderDetail struct {
 	Items []OrderItem `json:"items"`
 }
 
-// PaymentIntent mirrors payment_intents.
+// PaymentIntent mirrors payment_intents (DB v2 §10.5).
 type PaymentIntent struct {
 	ID        string
 	OrderID   string
@@ -178,6 +178,39 @@ type PaymentIntent struct {
 	Status    string
 	ExpiresAt *time.Time
 	CreatedAt time.Time
+}
+
+// PaymentAttempt mirrors payment_attempts (DB v2 §10.5): one provider interaction.
+// A refund must reference the SUCCEEDED attempt it reverses, so every captured payment
+// has to produce one — otherwise refunds cannot be issued.
+type PaymentAttempt struct {
+	ID                string
+	PaymentIntentID   string
+	Provider          string
+	ProviderReference string
+	Amount            int64
+	Status            string
+	FailureCode       string
+	IdempotencyKey    string
+	CreatedAt         time.Time
+	CompletedAt       *time.Time
+}
+
+// PaymentAttemptStore records provider attempts. DBStore implements it; the Service
+// takes it as an optional dependency so unit tests with a minimal Store keep working.
+type PaymentAttemptStore interface {
+	CreateAttempt(ctx context.Context, a PaymentAttempt) (string, error)
+}
+
+// SetAttemptStore wires the payment-attempt recorder.
+func (s *Service) SetAttemptStore(as PaymentAttemptStore) { s.attempts = as }
+
+// SetPaymentProvider sets the provider name stamped on payment attempts (the
+// mock-first adapter name comes from KH_PAYMENT_ADAPTER, ADR-ARCH-011).
+func (s *Service) SetPaymentProvider(name string) {
+	if name != "" {
+		s.provider = name
+	}
 }
 
 // ── Store: persistence boundary ───────────────────────────────────────────────
@@ -216,17 +249,19 @@ type EventEnqueuer interface {
 
 // Service is the commerce module boundary (SAD §۴.۲).
 type Service struct {
-	store   Store
-	queue   EventEnqueuer
-	refunds RefundStore   // optional; wired via SetRefundStore (nil → refund methods error)
-	auditor AuditRecorder // optional; wired via SetAuditor (nil → no audit writes)
-	now     func() time.Time
+	store    Store
+	queue    EventEnqueuer
+	refunds  RefundStore         // optional; wired via SetRefundStore (nil → refund methods error)
+	attempts PaymentAttemptStore // optional; wired via SetAttemptStore (nil → no attempt rows)
+	auditor  AuditRecorder       // optional; wired via SetAuditor (nil → no audit writes)
+	provider string              // payment provider stamped on attempts (default mock)
+	now      func() time.Time
 }
 
 // NewService wires the store and the optional outbox event enqueuer. queue may be nil
 // (events are silently dropped — useful for unit tests that don't assert events).
 func NewService(store Store, queue EventEnqueuer) *Service {
-	return &Service{store: store, queue: queue, now: time.Now}
+	return &Service{store: store, queue: queue, provider: "mock", now: time.Now}
 }
 
 // SetNow injects a clock (tests only).
@@ -459,6 +494,26 @@ func (s *Service) ConfirmPaymentForOrder(ctx context.Context, orderID string) er
 	}
 	if err := s.store.UpdateOrderPaid(ctx, orderID, o.GrandTotal, OrderPaid); err != nil {
 		return fmt.Errorf("update order paid: %w", err)
+	}
+
+	// Record the provider attempt (DB v2 §10.5). A refund must reference the
+	// SUCCEEDED attempt it reverses (refunds.payment_attempt_id NOT NULL), so a
+	// captured payment without an attempt row makes the order unrefundable. The
+	// idempotency key is derived from the intent, so a replayed webhook cannot
+	// create a second attempt (payment_attempts.idempotency_key is UNIQUE).
+	if s.attempts != nil {
+		now := s.now()
+		if _, err := s.attempts.CreateAttempt(ctx, PaymentAttempt{
+			PaymentIntentID: pi.ID,
+			Provider:        s.provider,
+			Amount:          pi.Amount,
+			Status:          AttemptSucceeded,
+			IdempotencyKey:  "confirm:" + pi.ID,
+			CreatedAt:       now,
+			CompletedAt:     &now,
+		}); err != nil {
+			return fmt.Errorf("record payment attempt: %w", err)
+		}
 	}
 
 	s.enqueue(ctx, "OrderPaid", "order", orderID, map[string]any{

@@ -6,6 +6,7 @@ package commerce
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -208,4 +209,72 @@ func seedAdmin(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
 		t.Fatalf("seed admin: %v", err)
 	}
 	return id
+}
+
+// TestPG_ConfirmPaymentRecordsAttemptAndRefundWorks is the regression test for the
+// gap that made every real refund fail: ConfirmPaymentForOrder marked the intent and
+// the order paid but never wrote a payment_attempts row, so
+// refunds.payment_attempt_id (NOT NULL) had nothing to reference.
+func TestPG_ConfirmPaymentRecordsAttemptAndRefundWorks(t *testing.T) {
+	pool, cleanup := testpg.Setup(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+	if err := migrations.ApplyAll(ctx, pool, nil); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+
+	var orderID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO orders (order_number, guest_phone, status, subtotal, grand_total,
+		                     shipping_address_snapshot)
+		 VALUES ('KHA-ORD-2026-000003','09120000011','PENDING_PAYMENT',42000,42000,'{}'::jsonb)
+		 RETURNING id`).Scan(&orderID); err != nil {
+		t.Fatalf("seed order: %v", err)
+	}
+
+	store := NewDBStore(pool)
+	svc := NewService(store, nil)
+	svc.SetRefundStore(store)
+	svc.SetAttemptStore(store)
+	svc.SetPaymentProvider("mock")
+
+	intentID, err := svc.CreatePaymentIntent(ctx, orderID)
+	if err != nil {
+		t.Fatalf("CreatePaymentIntent: %v", err)
+	}
+	if err := svc.ConfirmPaymentForOrder(ctx, orderID); err != nil {
+		t.Fatalf("ConfirmPaymentForOrder: %v", err)
+	}
+
+	var attempts int
+	var attemptStatus string
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*), coalesce(max(status),'')
+		   FROM payment_attempts WHERE payment_intent_id = $1`, intentID).
+		Scan(&attempts, &attemptStatus); err != nil {
+		t.Fatalf("read attempts: %v", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("payment_attempts rows = %d, want 1", attempts)
+	}
+	if attemptStatus != AttemptSucceeded {
+		t.Fatalf("attempt status = %s, want %s", attemptStatus, AttemptSucceeded)
+	}
+
+	// A replayed webhook must not create a second attempt (idempotent).
+	if err := svc.ConfirmPaymentForOrder(ctx, orderID); err != nil && !errors.Is(err, ErrAlreadyPaid) {
+		t.Fatalf("replayed confirm: %v", err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM payment_attempts WHERE payment_intent_id = $1`, intentID).Scan(&attempts); err != nil {
+		t.Fatalf("read attempts: %v", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("replayed webhook created %d attempts, want 1", attempts)
+	}
+
+	// The order is now refundable through the normal path.
+	if _, err := svc.CreateRefund(ctx, orderID, 42000, "بازگشت کامل"); err != nil {
+		t.Fatalf("CreateRefund after real payment: %v", err)
+	}
 }

@@ -353,16 +353,41 @@ func (s *DBStore) UpdateOrderRefunded(ctx context.Context, id string, refundedTo
 
 // SumSucceededAttempts returns the total amount of succeeded payment attempts
 // for an order. Used by ReconcileTransaction: PaidTotal should = this − refunds.
+// CreateAttempt records a provider attempt. The idempotency key is unique, so a
+// replayed webhook updates nothing and returns the existing row's id.
+func (s *DBStore) CreateAttempt(ctx context.Context, a PaymentAttempt) (string, error) {
+	var id string
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO payment_attempts (payment_intent_id, provider, provider_reference, amount,
+		                               status, failure_code, idempotency_key, completed_at)
+		 VALUES ($1,$2,NULLIF($3,''),$4,$5,NULLIF($6,''),NULLIF($7,''),$8)
+		 ON CONFLICT (idempotency_key) DO UPDATE SET provider_reference = EXCLUDED.provider_reference
+		 RETURNING id`,
+		a.PaymentIntentID, a.Provider, a.ProviderReference, a.Amount,
+		a.Status, a.FailureCode, a.IdempotencyKey, a.CompletedAt).Scan(&id)
+	return id, err
+}
+
+// SumSucceededAttempts totals the captured money for an order. It sums the SUCCEEDED
+// payment attempts (the money actually taken) and falls back to SUCCEEDED intents for
+// any order paid before attempts were recorded.
 func (s *DBStore) SumSucceededAttempts(ctx context.Context, orderID string) (int64, error) {
-	// Payment intents that SUCCEEDED carry the captured amount.
 	var sum int64
 	err := s.pool.QueryRow(ctx,
-		`SELECT COALESCE(SUM(amount), 0) FROM payment_intents
-		  WHERE order_id = $1 AND status = 'SUCCEEDED'`, orderID).Scan(&sum)
+		`SELECT COALESCE(SUM(pa.amount), 0)
+		   FROM payment_attempts pa
+		   JOIN payment_intents pi ON pi.id = pa.payment_intent_id
+		  WHERE pi.order_id = $1 AND pa.status = 'SUCCEEDED'`, orderID).Scan(&sum)
 	if err != nil {
 		return 0, err
 	}
-	return sum, nil
+	if sum > 0 {
+		return sum, nil
+	}
+	err = s.pool.QueryRow(ctx,
+		`SELECT COALESCE(SUM(amount), 0) FROM payment_intents
+		  WHERE order_id = $1 AND status = 'SUCCEEDED'`, orderID).Scan(&sum)
+	return sum, err
 }
 
 // Compile-time assertion that DBStore satisfies RefundStore.
