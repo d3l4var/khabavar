@@ -104,6 +104,9 @@ type Variant struct {
 type ProductDetail struct {
 	Product
 	Variants []Variant `json:"variants"`
+	// PublishGateSatisfied mirrors the MA-1/MA-6 gate so the panel reads one boolean
+	// from the API instead of re-deriving the rule in the client.
+	PublishGateSatisfied bool `json:"publish_gate_satisfied"`
 }
 
 // Store is the persistence boundary for catalog. The DB implementation uses pgx; unit
@@ -230,6 +233,12 @@ func (s *Service) CreateProduct(ctx context.Context, p Product) (string, error) 
 	return s.store.CreateProduct(ctx, p)
 }
 
+// publishGateSatisfied reports whether the MA-1/MA-6 fields are all present: the same
+// rule PublishProduct enforces, exposed so the panel does not duplicate it.
+func publishGateSatisfied(p *Product) bool {
+	return p.SleepRelevance != "" && p.SpecSource != "" && p.SpecLastReviewedAt != nil
+}
+
 // GetProductDetail returns a product with its variants, or ErrProductNotFound.
 func (s *Service) GetProductDetail(ctx context.Context, id string) (*ProductDetail, error) {
 	p, err := s.store.GetProduct(ctx, id)
@@ -243,7 +252,11 @@ func (s *Service) GetProductDetail(ctx context.Context, id string) (*ProductDeta
 	if err != nil {
 		return nil, fmt.Errorf("list variants: %w", err)
 	}
-	return &ProductDetail{Product: *p, Variants: variants}, nil
+	return &ProductDetail{
+		Product:              *p,
+		Variants:             variants,
+		PublishGateSatisfied: publishGateSatisfied(p),
+	}, nil
 }
 
 // GetStorefrontProduct returns a product with its variants for the public storefront.

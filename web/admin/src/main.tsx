@@ -27,6 +27,7 @@ import {
   type AdminProductRow,
 } from '../../shared/api'
 import '../../shared/tokens.css'
+import { ProductDetailScreen } from './ProductDetail'
 
 const NAV = [
   { label: 'سفارش‌ها', href: '#/orders' },
@@ -218,7 +219,9 @@ function ProductsScreen() {
           {(products.data.data ?? []).map((p: AdminProductRow) => (
             <Card key={p.id}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--kh-space-3)', flexWrap: 'wrap' }}>
-                <strong>{p.title}</strong>
+                <a href={`#/product/${encodeURIComponent(p.id)}`} style={{ color: 'var(--kh-text)' }}>
+                  <strong>{p.title}</strong>
+                </a>
                 <Badge tone={p.status === 'PUBLISHED' ? 'success' : p.status === 'PAUSED' ? 'warning' : 'neutral'}>{p.status}</Badge>
                 <Badge tone={p.publish_gate_satisfied ? 'success' : 'error'}>
                   {p.publish_gate_satisfied ? 'دروازهٔ انتشار کامل' : 'دروازهٔ انتشار ناقص'}
@@ -393,7 +396,10 @@ function RolesScreen() {
 function App() {
   const hash = useHashRoute()
   const [authed, setAuthed] = useState(() => Boolean(adminToken()))
-  const route = useMemo(() => hash.replace(/^#\/?/, '').split('/')[0] || 'orders', [hash])
+  const route = useMemo(() => {
+    const segs = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
+    return { name: segs[0] || 'orders', param: segs[1] ? decodeURIComponent(segs[1]) : '' }
+  }, [hash])
 
   if (!authed) {
     return (
@@ -408,9 +414,12 @@ function App() {
   }
 
   let screen: JSX.Element
-  switch (route) {
+  switch (route.name) {
     case 'products':
       screen = <ProductsScreen />
+      break
+    case 'product':
+      screen = <ProductDetailScreen id={route.param} />
       break
     case 'stock':
       screen = <StockScreen />

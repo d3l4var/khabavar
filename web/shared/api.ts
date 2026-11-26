@@ -313,6 +313,73 @@ export async function adminPatchProduct(id: string, patch: Record<string, unknow
   })
 }
 
+export type AdminVariant = { id: string; product_id: string; sku: string; status: string }
+export type AdminProductDetail = AdminProductRow & {
+  short_description?: string
+  description?: string
+  spec_last_reviewed_at?: string
+  variants?: AdminVariant[]
+}
+
+export async function adminGetProduct(id: string) {
+  return adminRequest<AdminProductDetail>(`/admin/products/${encodeURIComponent(id)}`)
+}
+
+export async function adminCreateProduct(input: {
+  title: string
+  slug: string
+  short_description?: string
+  description?: string
+}) {
+  return adminRequest<{ id: string }>('/admin/products', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function adminCreateVariant(input: { product_id: string; sku: string; status?: string }) {
+  return adminRequest<{ id: string }>('/admin/variants', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export type CostRecordInput = {
+  supply_type: string
+  purchase_cost: number
+  inbound_freight?: number
+  inspection_cost?: number
+  packaging_cost?: number
+  fulfillment_cost?: number
+}
+
+export async function adminCreateCostRecord(variantId: string, input: CostRecordInput) {
+  return adminRequest<{ id: string }>(`/admin/variants/${encodeURIComponent(variantId)}/cost-records`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export type PriceRecordInput = { selling_price: number; currency?: string }
+
+export async function adminCreatePriceRecord(variantId: string, input: PriceRecordInput) {
+  return adminRequest<{ id: string; warning?: string }>(`/admin/variants/${encodeURIComponent(variantId)}/price-records`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+// price_records has no status column: approval is expressed by approved_by (R-05 §۱۹).
+export type AdminPriceRecord = {
+  id: string
+  selling_price: number
+  currency: string
+  approved_by?: string
+  valid_from?: string
+}
+
+export async function adminListPriceRecords(variantId: string) {
+  return adminRequest<{ data: AdminPriceRecord[] }>(`/admin/variants/${encodeURIComponent(variantId)}/price-records`)
+}
+
+export async function adminApprovePriceRecord(id: string) {
+  return adminRequest<{ status: string }>(`/admin/price-records/${encodeURIComponent(id)}/approve`, { method: 'POST' })
+}
+
 export async function adminListStock(q = '', page = 1, pageSize = 20) {
   return adminRequest<{ items: StockRow[]; page: { total: number } }>(
     `/admin/stock?q=${encodeURIComponent(q)}&page=${page}&page_size=${pageSize}`,
