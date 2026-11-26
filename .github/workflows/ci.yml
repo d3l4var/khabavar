@@ -111,11 +111,15 @@ jobs:
           perms=$(psql "$PG_URL" -tAc "select count(*) from permissions")
           [ "$roles" = "10" ] || { echo "roles=$roles want 10"; exit 1; }
           [ "$perms" = "24" ] || { echo "permissions=$perms want 24"; exit 1; }
-          # refund is FINANCE-exclusive (IAM §۴)
+          # refund is FINANCE-exclusive (IAM §۴). SUPER_ADMIN holds all 24 codes by
+          # convention, so it is the only other permitted holder.
           n=$(psql "$PG_URL" -tAc "select count(*) from role_permissions rp
                  join roles r on r.id=rp.role_id join permissions p on p.id=rp.permission_id
-                where p.code='order.refund.approve' and r.code<>'FINANCE'")
-          [ "$n" = "0" ] || { echo "order.refund.approve granted to $n non-FINANCE roles"; exit 1; }
+                where p.code='order.refund.approve' and r.code not in ('FINANCE','SUPER_ADMIN')")
+          [ "$n" = "0" ] || { echo "order.refund.approve granted to $n role(s) other than FINANCE/SUPER_ADMIN"; exit 1; }
+          sa=$(psql "$PG_URL" -tAc "select count(*) from role_permissions rp
+                 join roles r on r.id=rp.role_id where r.code='SUPER_ADMIN'")
+          [ "$sa" = "24" ] || { echo "SUPER_ADMIN holds $sa permissions, want 24"; exit 1; }
 
   # ── gate 4: unit ────────────────────────────────────────────────────────────
   unit:
@@ -162,10 +166,10 @@ jobs:
           cache: true
       # Each test gets its own schema (platform/testpg); ApplyAll takes an advisory
       # lock, so packages may run in parallel against this one database.
-      - name: PG-backed tests
+      - name: PG-backed tests (modules + the seed RBAC matrix gate)
         env:
           KH_TEST_PG_DSN: ${{ env.PG_URL }}
-        run: go test -count=1 ./internal/...
+        run: go test -count=1 ./...
 
   # ── gate 6: security ────────────────────────────────────────────────────────
   security:

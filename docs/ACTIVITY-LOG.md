@@ -331,14 +331,66 @@ audit_logs                             catalog.product.updated | catalog.product
 تست‌های جدید (`update_test.go`، ۶ مورد): بن‌بست انتشار، slug خالی، شکستن دروازهٔ محصول
 منتشرشده، شناسهٔ ناموجود، جایگزینی صریح دسته‌بندی‌ها، و نبودِ update store.
 
+### ۴.۱۲ پنل تأمین: موجودی، حرکت، رزرو — کامیت `feat(inventory-admin)`
+
+سه روت قراردادی `admin-supply` اضافه شد:
+
+| روت | مجوز | توضیح |
+|-----|------|-------|
+| `GET /admin/stock` | `inventory.manage` | فیلتر `warehouse_id` و `q` (SKU/عنوان)، `available = on_hand − reserved` |
+| `POST /admin/stock/movements` | `inventory.adjust` | اصلاح موجودی فقط با ثبت حرکت (DB §8.3) |
+| `GET /admin/reservations` | `inventory.manage` | فیلتر `status` و `expires_before`، همراه `order_number` |
+
+**تصمیم ایمنی (مستند):** روت حرکت فقط انواع اثرگذار بر `on_hand` را می‌پذیرد
+(`RECEIPT`, `RETURN`, `ADJUSTMENT`, `DAMAGE`, `TRANSFER`). انواع `RESERVATION`،
+`RELEASE` و `SALE` روی `reserved_quantity` اثر می‌گذارند و متعلق به جریان سفارش‌اند؛
+اجازه دادنشان از پنل، ناوردای `available = on_hand − reserved` را خراب می‌کرد (DB §8.2).
+این سه نوع با ۴۰۰ و پیام روشن رد می‌شوند.
+
+**دو باگ که همین E2E پیدا کرد:**
+
+1. کوئری موجودی از `w.code` استفاده می‌کرد؛ ستون واقعی `warehouse_code` است → هر
+   `GET /admin/stock` با ۵۰۰ می‌افتاد.
+2. موجودی منفی ۵۰۰ برمی‌گرداند، چون `ErrNegativeOnHand` در نگاشت خطا نبود؛ حالا ۴۰۹
+   با کد `insufficient_stock` است.
+
+همچنین صفحهٔ خالی حالا `items: []` می‌دهد نه `null` (قرارداد آرایه اعلام کرده).
+
+**شاهد:**
+
+```
+POST /admin/stock/movements RECEIPT +10 (SUPER_ADMIN)   201
+POST /admin/stock/movements DAMAGE  -3                  201
+POST /admin/stock/movements ADJUSTMENT -999             409  insufficient_stock
+POST /admin/stock/movements RESERVATION +1              400  movement type not allowed
+POST /admin/stock/movements با STORE_MANAGER            403  (inventory.adjust ندارد)
+GET  /admin/stock?q=SKU-MP                              200  on_hand=7 available=7
+GET  /admin/reservations                                200  items=[] page.total=0
+GET  /admin/reservations?expires_before=not-a-date       400
+stock_movements                                         2 ردیف (رد شدن‌ها چیزی ننوشت)
+```
+
+### ۴.۱۳ بازبینی روند توسعه — دو ایراد در ابزار خودمان
+
+پیش از ادامه، کل مسیر از ابتدا بازبینی شد (build/vet/gofmt، ۲۳۶ تست، کلاستر PG تازه،
+اعمال ۱۲ مهاجرت + seed، ماتریس RBAC). دو ایراد در **ابزار تأیید** پیدا شد، نه در محصول:
+
+1. **assertion دروازهٔ `db-migrate` غلط بود.** نوشته بودم `order.refund.approve` نباید به
+   هیچ نقشی جز FINANCE داده شود — اما SUPER_ADMIN طبق IAM §۴ هر ۲۴ مجوز را دارد. یعنی
+   دروازه روی یک seed **درست** قرمز می‌شد. اصلاح شد (`NOT IN ('FINANCE','SUPER_ADMIN')`)
+   و یک assert دوم اضافه شد که SUPER_ADMIN دقیقاً ۲۴ مجوز داشته باشد.
+2. **ماتریس RBAC هیچ تستی نداشت** — فقط با psql دستی چک شده بود. حالا `seed/embed.go` +
+   `seed/seed_test.go` با ۵ تست: شمارش‌ها (۱۰ نقش/۲۴ مجوز/۴ کلاینت/۱۱ موضوع)،
+   SUPER_ADMIN = ۲۴، انحصار بازپرداخت، هشت نقش با must/must-not، و جداسازی scope در OIDC.
+   کار `integration` در CI هم از `./internal/...` به `./...` تغییر کرد تا این گیت اجرا شود.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
-1. **روت‌های ادمین باقی‌مانده** — کاتالوگ و قیمت‌گذاری در §۴.۱۰ بسته شد. باقی:
-   `/admin/stock`، `/admin/stock/movements`، `/admin/reservations` (نوشتن موجودی از پنل؛
-   سرویس inventory از قبل وجود دارد و فقط لایهٔ HTTP و مجوز `inventory.manage` لازم است)،
-   (ویرایش محصول در §۴.۱۱ بسته شد).
+1. **روت‌های ادمین** — کاتالوگ، قیمت‌گذاری (§۴.۱۰/§۴.۱۱) و پنل تأمین (§۴.۱۲) بسته شدند.
+   سطح HTTP قرارداد اکنون کامل است؛ اختلاف باقی‌مانده فقط در **مسیرها** است
+   (`/api/v1/products/{id}` در برابر `/catalog/products/{slug}`) که تصمیم مالک می‌خواهد.
 2. **فرانت‌اند** — `web/{main,shop,magazine,admin}` هر کدام ۱۰ خط scaffold است. P2
    (Design System) و سپس صفحات UJ. تا آن زمان دروازهٔ a11y فقط هشدار می‌دهد.
 3. **پوشش تست** — آستانهٔ R-CI §۳: ≥۹۰٪ منطق مالی/موجودی، ≥۷۵٪ سایر. وضعیت فعلی:

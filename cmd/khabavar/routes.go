@@ -67,6 +67,11 @@ var adminPermissions = map[string]string{
 	"POST /api/v1/admin/media":        "catalog.product.edit",
 	"DELETE /api/v1/admin/media/{id}": "catalog.product.edit",
 
+	// ── supply panel (R-07 admin-supply) ──
+	"GET /api/v1/admin/stock":            "inventory.manage",
+	"POST /api/v1/admin/stock/movements": "inventory.adjust",
+	"GET /api/v1/admin/reservations":     "inventory.manage",
+
 	// ── catalogue writes (QC-05, R-04) ──
 	"POST /api/v1/admin/products":              "catalog.product.edit",
 	"GET /api/v1/admin/products/{id}":          "catalog.product.view",
@@ -187,6 +192,7 @@ type services struct {
 	media       *media.Service
 	content     *content.Service
 	ecosystem   *ecosystem.Service
+	invAdmin    *inventory.AdminStore
 	iamAdmin    *identity.AdminStore
 	auditList   *audit.ListStore
 	orderList   *commerce.OrderListStore
@@ -276,6 +282,11 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(s.content))
+
+	// ── supply panel (R-07 admin-supply) ──
+	api.admin("GET /api/v1/admin/stock", inventory.ListStockHandler(s.invAdmin))
+	api.admin("POST /api/v1/admin/stock/movements", inventory.RecordMovementHandler(s.inventory))
+	api.admin("GET /api/v1/admin/reservations", inventory.ListReservationsHandler(s.invAdmin))
 
 	// ── catalogue writes (QC-05) ──
 	api.admin("POST /api/v1/admin/products", catalog.CreateProductHandler(s.catalog))
