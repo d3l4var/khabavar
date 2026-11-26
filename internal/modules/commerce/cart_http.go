@@ -3,7 +3,11 @@ package commerce
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"strconv"
+
+	"github.com/khabavar/khabavar/internal/modules/authorization"
 )
 
 // guestTokenHeader identifies a guest cart (contract: X-Guest-Cart-Token).
@@ -119,5 +123,48 @@ func CheckoutHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusCreated, res)
+	}
+}
+
+// MergeCartHandler serves POST /api/v1/cart/merge (customer auth): it folds the guest
+// cart named in the body into the signed-in customer's cart (MA-8).
+func MergeCartHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			GuestCartToken string `json:"guest_cart_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json", "code": "invalid_body"})
+			return
+		}
+		view, err := svc.MergeGuestCart(r.Context(), authorization.CustomerID(r.Context()), req.GuestCartToken)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, view)
+	}
+}
+
+// MyOrdersHandler serves GET /api/v1/me/orders (customer auth).
+func MyOrdersHandler(list *OrderListStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		page, size := 1, 20
+		if v := r.URL.Query().Get("page"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				page = n
+			}
+		}
+		if v := r.URL.Query().Get("page_size"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+				size = n
+			}
+		}
+		orders, total, err := list.ListByCustomer(r.Context(), authorization.CustomerID(r.Context()), page, size)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "internal error", "code": "internal_error"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": orders, "total": total, "page": page, "page_size": size})
 	}
 }

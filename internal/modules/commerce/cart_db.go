@@ -22,6 +22,7 @@ type CartStore interface {
 	DeleteCartItem(ctx context.Context, cartID, itemID string) error
 	MergeCarts(ctx context.Context, guestCartID, customerCartID string) error
 	CartView(ctx context.Context, cartID string) (*CartView, error)
+	FindCartBySession(ctx context.Context, sessionToken string) (*Cart, error)
 }
 
 // CartLine is one priced line of the cart as the storefront sees it.

@@ -76,3 +76,31 @@ func validateCartQuantity(q int) error {
 	}
 	return nil
 }
+
+// MergeGuestCart folds a guest cart into the signed-in customer's cart (MA-8) and
+// returns the merged cart. A guest token with no cart is a no-op, not an error: the
+// client may retry the merge after the cart expired.
+func (s *Service) MergeGuestCart(ctx context.Context, customerID, guestToken string) (*CartView, error) {
+	if customerID == "" {
+		return nil, errors.New("commerce: a customer session is required to merge a cart")
+	}
+	if s.carts == nil {
+		return nil, errors.New("commerce: cart store not configured")
+	}
+	customerCart, err := s.carts.GetOrCreateCart(ctx, customerID, "")
+	if err != nil {
+		return nil, err
+	}
+	if guestToken != "" {
+		guest, err := s.carts.FindCartBySession(ctx, guestToken)
+		if err != nil {
+			return nil, err
+		}
+		if guest != nil && guest.ID != customerCart.ID {
+			if err := s.carts.MergeCarts(ctx, guest.ID, customerCart.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return s.carts.CartView(ctx, customerCart.ID)
+}

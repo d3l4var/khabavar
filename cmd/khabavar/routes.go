@@ -242,6 +242,8 @@ func mountRoutes(api *apiMux, s services) {
 	// Customer surface (/me). A staff token is rejected here: the customer API must not
 	// be a back door into staff identity.
 	api.customer("GET /api/v1/me", identity.MeHandler(s.customer))
+	api.customer("GET /api/v1/me/orders", commerce.MyOrdersHandler(s.orderList))
+	api.customer("POST /api/v1/cart/merge", commerce.MergeCartHandler(s.commerce))
 	api.customer("GET /api/v1/me/addresses", identity.ListAddressesHandler(s.customer))
 	api.customer("POST /api/v1/me/addresses", identity.CreateAddressHandler(s.customer))
 	api.customer("PATCH /api/v1/me/addresses/{id}", identity.UpdateAddressHandler(s.customer))

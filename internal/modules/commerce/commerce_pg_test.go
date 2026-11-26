@@ -608,3 +608,71 @@ func TestHashRequestIgnoresFormatting(t *testing.T) {
 		t.Fatalf("canonical hash differs: %s vs %s", a, b)
 	}
 }
+
+// TestPG_MergeGuestCartAndCustomerOrders covers the two customer-facing reads/writes:
+// merging a guest cart into the signed-in one, and listing a customer's own orders.
+func TestPG_MergeGuestCartAndCustomerOrders(t *testing.T) {
+	pool, svc, store := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-MERGE-1")
+	customerID := seedCustomerRow(t, ctx, pool)
+
+	// Guest cart with one line.
+	guest, err := store.GetOrCreateCart(ctx, "", "merge-guest-1")
+	if err != nil {
+		t.Fatalf("guest cart: %v", err)
+	}
+	if err := store.AddCartItem(ctx, guest.ID, variantID, 2); err != nil {
+		t.Fatalf("AddCartItem: %v", err)
+	}
+
+	// FindCartBySession must not create anything for an unknown token.
+	if c, err := store.FindCartBySession(ctx, "no-such-token"); err != nil || c != nil {
+		t.Fatalf("FindCartBySession(unknown) = %v, %v; want nil, nil", c, err)
+	}
+
+	svc.SetCartStore(store)
+	merged, err := svc.MergeGuestCart(ctx, customerID, "merge-guest-1")
+	if err != nil {
+		t.Fatalf("MergeGuestCart: %v", err)
+	}
+	if len(merged.Items) != 1 || merged.Items[0].Quantity != 2 {
+		t.Fatalf("merged view = %+v, want the guest line", merged.Items)
+	}
+	// The guest cart is retired, so a second merge adds nothing.
+	again, err := svc.MergeGuestCart(ctx, customerID, "merge-guest-1")
+	if err != nil {
+		t.Fatalf("MergeGuestCart (again): %v", err)
+	}
+	if len(again.Items) != 1 || again.Items[0].Quantity != 2 {
+		t.Fatalf("second merge duplicated the line: %+v", again.Items)
+	}
+
+	// A customer order must appear in their own list and not in another's.
+	if _, err := svc.CreateOrder(ctx, OrderInput{
+		CustomerID: customerID,
+		Currency:   "IRR",
+		Items: []OrderItemInput{{
+			ProductID: productID, VariantID: variantID, SKUSnapshot: "SKU-MERGE-1",
+			TitleSnapshot: "x", Quantity: 1, UnitPrice: 1000, SupplyType: "OWNED_INVENTORY",
+		}},
+		ShippingAddr: json.RawMessage(`{"city":"تهران"}`),
+	}); err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	list := NewOrderListStore(pool)
+	orders, total, err := list.ListByCustomer(ctx, customerID, 1, 10)
+	if err != nil {
+		t.Fatalf("ListByCustomer: %v", err)
+	}
+	if total != 1 || len(orders) != 1 {
+		t.Fatalf("orders = %d total = %d, want 1", len(orders), total)
+	}
+	other, totalOther, err := list.ListByCustomer(ctx, seedCustomerRow(t, ctx, pool), 1, 10)
+	if err != nil {
+		t.Fatalf("ListByCustomer (other): %v", err)
+	}
+	if len(other) != 0 || totalOther != 0 {
+		t.Fatalf("another customer sees %d orders, want 0", len(other))
+	}
+}
