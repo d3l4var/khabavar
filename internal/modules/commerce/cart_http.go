@@ -16,7 +16,7 @@ const guestTokenHeader = "X-Guest-Cart-Token"
 // CartHandler serves GET /api/v1/cart.
 func CartHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		view, err := svc.Cart(r.Context(), "", r.Header.Get(guestTokenHeader))
+		view, err := svc.Cart(r.Context(), authorization.CustomerID(r.Context()), r.Header.Get(guestTokenHeader))
 		if err != nil {
 			writeError(w, err)
 			return
@@ -36,7 +36,7 @@ func AddCartItemHandler(svc *Service) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json", "code": "invalid_body"})
 			return
 		}
-		view, err := svc.AddToCart(r.Context(), "", r.Header.Get(guestTokenHeader), req.VariantID, req.Quantity)
+		view, err := svc.AddToCart(r.Context(), authorization.CustomerID(r.Context()), r.Header.Get(guestTokenHeader), req.VariantID, req.Quantity)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -55,7 +55,7 @@ func UpdateCartItemHandler(svc *Service) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json", "code": "invalid_body"})
 			return
 		}
-		view, err := svc.UpdateCartItem(r.Context(), "", r.Header.Get(guestTokenHeader), r.PathValue("id"), req.Quantity)
+		view, err := svc.UpdateCartItem(r.Context(), authorization.CustomerID(r.Context()), r.Header.Get(guestTokenHeader), r.PathValue("id"), req.Quantity)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -67,7 +67,7 @@ func UpdateCartItemHandler(svc *Service) http.HandlerFunc {
 // DeleteCartItemHandler serves DELETE /api/v1/cart/items/{id}.
 func DeleteCartItemHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		view, err := svc.RemoveCartItem(r.Context(), "", r.Header.Get(guestTokenHeader), r.PathValue("id"))
+		view, err := svc.RemoveCartItem(r.Context(), authorization.CustomerID(r.Context()), r.Header.Get(guestTokenHeader), r.PathValue("id"))
 		if err != nil {
 			writeError(w, err)
 			return
