@@ -1,8 +1,17 @@
 {
   "name": "khabavar-web",
   "private": true,
-  "workspaces": ["shared", "main", "shop", "magazine", "admin"],
+  "workspaces": [
+    "shared",
+    "main",
+    "shop",
+    "magazine",
+    "admin"
+  ],
   "scripts": {
     "build": "npm run build --workspace main"
+  },
+  "devDependencies": {
+    "axe-core": "^4.14.1"
   }
 }

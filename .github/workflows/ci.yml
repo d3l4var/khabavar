@@ -79,6 +79,32 @@ jobs:
       - name: list store methods without a PG test
         run: python3 scripts/audit-pg-coverage.py --fail-under 95
 
+  a11y:
+    name: a11y
+    runs-on: ubuntu-latest
+    # axe-core in a real browser (Lightpanda over CDP) against every built app.
+    # Verified locally; the runner install below is not yet proven in CI, so the job is
+    # advisory until it has run green once — then flip continue-on-error to false.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: install lightpanda
+        run: |
+          curl -fsSL https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-x86_64-linux -o /usr/local/bin/lightpanda
+          chmod +x /usr/local/bin/lightpanda
+      - name: build the apps
+        run: |
+          cd web && npm ci --no-audit --no-fund
+          for app in main shop admin magazine; do (cd "$app" && npm run build); done
+      - name: axe (WCAG 2 A/AA)
+        run: |
+          for app in main shop admin magazine; do
+            node scripts/a11y-audit.mjs "web/$app/dist" / || exit 1
+          done
+
   # ── gate 2: openapi-validate ────────────────────────────────────────────────
   openapi-validate:
     name: openapi-validate
