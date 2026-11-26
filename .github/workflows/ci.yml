@@ -243,26 +243,7 @@ jobs:
         run: |
           cd web && npm audit --audit-level=high --omit=dev || true
 
-  # ── gate 7: a11y ────────────────────────────────────────────────────────────
-  a11y:
-    name: a11y
-    needs: [lint]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: axe WCAG AA (skips until the web apps ship components)
-        run: |
-          set -euo pipefail
-          if ls web/*/src/**/*.tsx >/dev/null 2>&1; then
-            echo "component tree present — run axe (R-CI §۳: WCAG 2.1 AA, 360px no h-scroll)"
-            # Placeholder until Storybook lands in P2; fails loudly if removed silently.
-            echo "::warning::axe gate not implemented yet (P2 design system pending)"
-          else
-            echo "no components yet — nothing to audit"
-          fi
-
-  # ── build (after four logical gates) ────────────────────────────────────────
-  build:
+  # ── gate 7: a11y ────────────────────────────────────────────────────────────  build:
     name: build
     needs: [unit, integration, security, a11y]
     runs-on: ubuntu-latest

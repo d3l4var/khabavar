@@ -851,6 +851,43 @@ POST /oauth/token (code+PKCE)     → {"access_token":"df328d27…","token_type"
 
 **شاهد:** `python3 scripts/audit-pg-coverage.py --fail-under 95` → `GATE_PASS`
 
+### ۴.۲۹ دروازهٔ a11y با axe در مرورگر واقعی — کامیت `test(a11y)`
+
+`@axe-core/cli` در این محیط قابل نصب نیست: درایور chromedriver را از میزبان Google
+می‌گیرد که **از این موقعیت جغرافیایی مسدود است** («not available in your location»)، و
+Chrome هم نصب نیست. اما Lightpanda CDP را می‌فهمد و axe-core در آن اجرا می‌شود.
+
+`scripts/a11y-audit.mjs` — بدون هیچ وابستگی (WebSocket داخلی Node 26):
+اپ بیلدشده را سرو می‌کند، axe را با تگ `<script>` تزریق می‌کند (payload ۶۵۰KB از کانال
+`Runtime.evaluate` رد نمی‌شود)، مجموعهٔ WCAG 2 A/AA را اجرا و در صورت تخلف با کد ۱ خارج
+می‌شود.
+
+**شاهد در هر دو جهت:**
+
+```
+main, shop, admin, magazine  → PASS (۱۵ قاعده) · «a11y: clean»
+صفحهٔ عمداً معیوب            → FAIL: critical button-name، critical image-alt
+```
+
+**محدودیت ثبت‌شده:** مرحلهٔ نصب Lightpanda در GitHub runner هنوز تأیید نشده، پس job در CI
+`continue-on-error: true` است تا یک بار سبز شود و بعد blocking شود.
+
+### ۴.۳۰ تلاش برای OIDC در پنل و نتیجه‌ای که باید ثبت شود — بدون کامیت
+
+پنل را به جریان PKCE وصل کردم (`adminLoginViaOIDC`: نشست → `authorize` → کد →
+`/oauth/token`). **کار نکرد و دلیلش یک واقعیت معماری است، نه باگ:**
+
+- `fetch(..., {redirect:'manual'})` هدر `Location` را در اختیار صفحه نمی‌گذارد (پاسخ
+  opaque است) — پس کد از پاسخ خوانده نمی‌شود.
+- راه استاندارد، ناوبری کامل صفحه به `/oauth/authorize` است؛ ولی آن درخواست نمی‌تواند
+  هدر `Authorization` بفرستد.
+
+یعنی **`/oauth/authorize` برای کلاینت مرورگری به نشست کوکی نیاز دارد** (یا باید
+`continuation` را بدون Bearer بپذیرد). این یک تصمیم طراحی است و باید با مالک گرفته شود؛
+تا آن زمان پنل روی ورود مستقیم کارمند (ایمیل + گذرواژه) می‌ماند که تست‌شده است.
+
+کد آزمایشی برگردانده شد (بدون dead code) و ورود پنل دوباره تأیید شد: «سفارش‌ها» با ۴ سفارش.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
