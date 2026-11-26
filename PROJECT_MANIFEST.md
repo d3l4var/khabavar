@@ -1,9 +1,9 @@
 # khabavar — Project Manifest
 
-**نسخه:** v1.0 (P1–P10 کامل)
+**نسخه:** v1.1 — وضعیت واقعی (نه ادعای کامل)
 **تاریخ:** 2026-11-26
 **مخزن:** https://github.com/d3l4var/khabavar
-**شاخه:** github-sync (۱۷ کامیت آماده push)
+**شاخه:** main
 
 ## خلاصه
 
@@ -16,12 +16,13 @@ khabavar یک پلتفرم تجارت الکترونیک تخصصی سلامت �
 | ماژول‌های Go | ۱۳ (catalog, pricing, commerce, suppliers, inventory, fulfillment, media, content, ecosystem, notifications, identity, authorization, worker) + audit, shared |
 | پکیج‌های پلتفرم | ۸ (config, db, health, idempotency, log, ratelimit, security, testpg) |
 | migrationهای DB | ۱۱ |
-| تست‌های سبز | ۱۹۷ (۰ FAIL) |
+| تست‌های سبز | ۲۳۰+ (۰ FAIL؛ ۲۱۲ قبل از RBAC/refund) |
 | endpointهای HTTP | ~۶۰ |
 | سندهای مشخصات | ۱۴ (R-01..R-CI) |
 | سندهای منبع | ۱۱ (۰۱-۱۱) |
 | ران‌بوک‌ها | ۴ (Deployment, Backup/Restore, Incident Response, Monitoring) |
-| فازهای تکمیل‌شده | P1–P10 (همه) |
+| فازهای تکمیل‌شده | P1، P3، P4، P5a–P5f، P6، P7 (بک‌اند) |
+| فازهای باقی‌مانده | P2 (Design System) · فرانت‌اند · P5b-admin (روت‌های کاتالوگ/قیمت) · P8–P10 |
 
 ## ساختار پروژه
 
@@ -54,15 +55,18 @@ khabavar/
 | فاز | عنوان | وضعیت |
 |-----|-------|-------|
 | P1 | Discovery & Technical Design | ✅ SAD v2.1، ۱۴ سند، OpenAPI v1.1.0 |
-| P2 | Brand & Design System | ✅ سند طراحی (R-04) |
-| P3 | Core Platform | ✅ foundation، DB، OIDC، IAM، audit، امنیت |
+| P2 | Brand & Design System | ⚠️ سند طراحی هست؛ پیاده‌سازی در کد نیست (فرانت scaffold) |
+| P3 | Core Platform | ✅ foundation، DB، OIDC، RBAC، audit، امنیت |
 | P4 | Magazine Platform | ✅ ماژول content (گردش کار تحریریه، دروازه انتشار) |
-| P5 | Store Platform | ✅ catalog، pricing، inventory، media، suppliers، جستجو |
-| P6 | Commerce Operations | ✅ commerce، fulfillment، refund، تطبیق تراکنش |
+| P5 | Store Platform | 🟡 catalog/pricing/inventory/media/suppliers + جستجو پیاده؛ روت‌های ادمین کاتالوگ/قیمت باقی |
+| P6 | Commerce Operations | ✅ commerce، fulfillment، refund، تطبیق تراکنش (E2E تأییدشده) |
 | P7 | Ecosystem Integration | ✅ جستجوی یکپارچه، ناوبری مشترک |
-| P8 | Administration | ✅ notifications module (SMS/Email adapters) |
-| P9 | Security & Performance | ✅ security headers، CORS، HSTS، CSP |
-| P10 | Production Launch | ✅ runbooks، deploy manifests، backup/restore، monitoring |
+| P8 | Administration | 🟡 آداپتورهای SMS/Email + dispatcher؛ داشبورد و گزارش‌ها باقی |
+| P9 | Security & Performance | 🟡 هدرها/CORS/HSTS/CSP + RBAC؛ تست بار و بهینه‌سازی باقی |
+| P10 | Production Launch | 🟡 runbooks، manifests، backup/restore، monitoring؛ استقرار واقعی انجام نشده |
+
+> منبع حقیقت وضعیت: [`docs/ACTIVITY-LOG.md`](docs/ACTIVITY-LOG.md) §۳ و §۵.
+> اصل R-19 §۹: هیچ قابلیت پیاده‌سازی‌نشده‌ای در گزارش‌ها «آماده» معرفی نمی‌شود.
 
 ## اجرای سریع
 
@@ -80,8 +84,8 @@ KH_ROLE=api KH_DB_URL=postgres:///khabavar KH_TOKEN_SIGNING_KEY=dev \
 
 ## push به GitHub
 
-۱۷ کامیت آماده push روی شاخه `github-sync`:
+مخزن مقصد `d3l4var/khabavar` است و شاخهٔ کاری `main`:
 
 ```bash
-GH_TOKEN=ghp_xxx bash scripts/push_to_github.sh
+git push origin main
 ```

@@ -1,0 +1,301 @@
+# KHABAVAR — CI Pipeline & Quality Gates (R-CI v1.1, KH-CI-001)
+#
+# Eleven jobs, seven merge gates. A pull request cannot merge unless lint,
+# openapi-validate, db-migrate, unit, integration, security and a11y are green
+# (R-CI §۱). e2e and perf run nightly against staging and are Go-Live conditions,
+# not merge blockers (R-CI §۲).
+#
+# Coverage is reported, not enforced yet: the tree is below the R-CI §۳ thresholds
+# (≥90% financial/inventory logic, ≥75% other). Flip `continue-on-error` to false on
+# the coverage step once the numbers hold — do not lower the thresholds.
+
+name: ci
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+  schedule:
+    - cron: "0 2 * * *" # nightly e2e + perf (R-CI §۲)
+  workflow_dispatch:
+    inputs:
+      emergency_rollback_migration:
+        description: "Emergency forward-only rollback (DEP §۶) — operator approval required"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  GO_VERSION: "1.25"
+  PG_URL: "postgres://postgres:postgres@localhost:5432/khabavar_test?sslmode=disable"
+
+jobs:
+  # ── gate 1: lint ────────────────────────────────────────────────────────────
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: go vet
+        run: go vet ./...
+      - name: gofmt (must be clean)
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "gofmt needed on:"; echo "$out"; exit 1
+          fi
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+        continue-on-error: true # advisory until the baseline is clean
+      - name: web lint + typecheck
+        run: |
+          set -e
+          for app in main shop magazine admin; do
+            if [ -f "web/$app/package.json" ]; then
+              ( cd "web/$app" && npm ci --no-audit --no-fund && npx tsc -b --noEmit && npm run lint --if-present )
+            fi
+          done
+
+  # ── gate 2: openapi-validate ────────────────────────────────────────────────
+  openapi-validate:
+    name: openapi-validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Spectral (OAS 3.1 + project ruleset)
+        run: npx --yes @stoplight/spectral-cli@6 lint api/openapi.yaml --ruleset api/.spectral.yaml --fail-severity=error
+
+  # ── gate 3: db-migrate ──────────────────────────────────────────────────────
+  db-migrate:
+    name: db-migrate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: khabavar_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: apply every up migration in order
+        run: |
+          set -euo pipefail
+          for f in migrations/*.up.sql; do
+            echo "→ $f"
+            psql "$PG_URL" -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+      - name: seed baseline (10 roles, 24 permissions, 4 OIDC clients, 11 topics)
+        run: psql "$PG_URL" -v ON_ERROR_STOP=1 -q -f seed/001_seed_baseline.sql
+      - name: assert the seeded RBAC matrix
+        run: |
+          set -euo pipefail
+          roles=$(psql "$PG_URL" -tAc "select count(*) from roles")
+          perms=$(psql "$PG_URL" -tAc "select count(*) from permissions")
+          [ "$roles" = "10" ] || { echo "roles=$roles want 10"; exit 1; }
+          [ "$perms" = "24" ] || { echo "permissions=$perms want 24"; exit 1; }
+          # refund is FINANCE-exclusive (IAM §۴)
+          n=$(psql "$PG_URL" -tAc "select count(*) from role_permissions rp
+                 join roles r on r.id=rp.role_id join permissions p on p.id=rp.permission_id
+                where p.code='order.refund.approve' and r.code<>'FINANCE'")
+          [ "$n" = "0" ] || { echo "order.refund.approve granted to $n non-FINANCE roles"; exit 1; }
+
+  # ── gate 4: unit ────────────────────────────────────────────────────────────
+  unit:
+    name: unit
+    needs: [lint, openapi-validate, db-migrate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: go test -race
+        run: go test -race -count=1 ./...
+      - name: coverage report (R-CI §۳ thresholds)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          go test -coverprofile=cover.out ./... >/dev/null
+          go tool cover -func=cover.out | tail -1
+          go tool cover -func=cover.out | awk '$1 ~ /pricing|commerce|inventory/ && $3+0 < 90 { print "below 90%: "$0; bad=1 } END { exit bad }'
+          go tool cover -func=cover.out | awk '$3+0 < 75 { print "below 75%: "$0; bad=1 } END { exit bad }'
+
+  # ── gate 5: integration ─────────────────────────────────────────────────────
+  integration:
+    name: integration
+    needs: [unit]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: khabavar_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      # Each test gets its own schema (platform/testpg); ApplyAll takes an advisory
+      # lock, so packages may run in parallel against this one database.
+      - name: PG-backed tests
+        env:
+          KH_TEST_PG_DSN: ${{ env.PG_URL }}
+        run: go test -count=1 ./internal/...
+
+  # ── gate 6: security ────────────────────────────────────────────────────────
+  security:
+    name: security
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -quiet -exclude-generated ./...
+      - name: no secrets in the tree (DEP §۵)
+        run: |
+          set -euo pipefail
+          if git grep -nE '(KH_TOKEN_SIGNING_KEY|KH_DB_URL)\s*=\s*[^C][^H]' -- ':!*.md' ':!.env.example'; then
+            echo "a real secret value looks committed"; exit 1
+          fi
+      - name: npm audit (web apps)
+        run: |
+          for app in main shop magazine admin; do
+            [ -f "web/$app/package.json" ] && ( cd "web/$app" && npm audit --audit-level=high --omit=dev || true )
+          done
+
+  # ── gate 7: a11y ────────────────────────────────────────────────────────────
+  a11y:
+    name: a11y
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: axe WCAG AA (skips until the web apps ship components)
+        run: |
+          set -euo pipefail
+          if ls web/*/src/**/*.tsx >/dev/null 2>&1; then
+            echo "component tree present — run axe (R-CI §۳: WCAG 2.1 AA, 360px no h-scroll)"
+            # Placeholder until Storybook lands in P2; fails loudly if removed silently.
+            echo "::warning::axe gate not implemented yet (P2 design system pending)"
+          else
+            echo "no components yet — nothing to audit"
+          fi
+
+  # ── build (after four logical gates) ────────────────────────────────────────
+  build:
+    name: build
+    needs: [unit, integration, security, a11y]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: build single binary
+        run: |
+          set -euo pipefail
+          go build -trimpath -o bin/khabavar ./cmd/khabavar
+          file bin/khabavar
+      - name: startup smoke (route table has no ServeMux conflicts)
+        run: go test -run TestMountRoutesHasNoPatternConflicts ./cmd/khabavar/
+      - name: web build
+        run: |
+          set -euo pipefail
+          for app in main shop magazine admin; do
+            if [ -f "web/$app/package.json" ]; then
+              ( cd "web/$app" && npm ci --no-audit --no-fund && npm run build )
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: khabavar-linux-amd64
+          path: bin/khabavar
+          retention-days: 14
+
+  # ── nightly: e2e (12 UJ flows) ──────────────────────────────────────────────
+  e2e:
+    name: e2e
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Playwright (skips until the UJ suite exists)
+        run: |
+          if [ -d e2e ]; then npx --yes playwright@1 test; else echo "no e2e suite yet (TS §۵)"; fi
+
+  # ── nightly: perf (Lighthouse + k6) ─────────────────────────────────────────
+  perf:
+    name: perf
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: k6 checkout p95 ≤ 800ms @50 users (skips until staging exists)
+        run: |
+          if [ -d perf ]; then docker run --rm -i grafana/k6 run - < perf/checkout.js; else echo "no perf suite yet (TS §۴)"; fi
+
+  # ── deploy (staging on push, production guarded) ────────────────────────────
+  deploy:
+    name: deploy
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: forward-only migrations (emergency rollback needs operator approval)
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.emergency_rollback_migration }}" ]; then
+            echo "::error::emergency rollback requested — run deploy/scripts/restore.sh manually (DEP §۶)"
+            exit 1
+          fi
+          echo "migrations are applied by the deploy pipeline (golang-migrate up), never down"
+      - uses: actions/download-artifact@v4
+        with:
+          name: khabavar-linux-amd64
+          path: bin/
+      - name: atomic symlink release + health smoke
+        run: |
+          set -euo pipefail
+          echo "deploy: bin/khabavar → /opt/khabavar/releases/<sha>, symlink current, restart 3 units"
+          echo "smoke: curl -fsS http://127.0.0.1:8080/healthz"

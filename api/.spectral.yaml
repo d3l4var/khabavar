@@ -1,0 +1,17 @@
+# KHABAVAR — Spectral ruleset for the API contract (R-CI gate 2).
+# The contract is OAS 3.1 (R-07 v1.1.0). Rules that the approved contract does not
+# satisfy are off; everything else is an error so CI fails on a broken contract.
+extends: ["spectral:oas"]
+rules:
+  # Contract-wide conventions (R-07 "قواعد عمومی قرارداد")
+  # The approved v1.1.0 contract carries no operationIds. Turning this on is a
+  # contract revision (v1.2.0) that needs owner approval — see docs/ACTIVITY-LOG.md.
+  operation-operationId: off
+  operation-tags: error
+  operation-description: warn
+  oas3-api-servers: error
+  info-contact: off
+  info-description: error
+  # Idempotency-Key is mandatory on financial POSTs (ADR-ARCH-008) — enforced by the
+  # contract's own parameters, not by a generic rule.
+  no-$ref-siblings: off

@@ -3,7 +3,8 @@
 **اکوسیستم تجارت و محتوای تخصصی خواب** · ایران · fa-IR · RTL
 وب‌سایت اصلی + فروشگاه + مجله + هویت مرکزی + پنل مدیریت
 
-> سند مادر: `KH-MGMT-001` · فاز: **P1 تکمیل، P3 Core سبز، P4 Commerce سبز، P5a catalog + P5b pricing سبز** · تاریخ: ۲۰۲۶-۱۱-۲۶
+> سند مادر: `KH-MGMT-001` · تاریخ: ۲۰۲۶-۱۱-۲۶
+> وضعیت: **بک‌اند P3–P7 سبز و قابل اجرا** · فرانت‌اند: scaffold · فهرست دقیق شکاف‌ها: [`docs/ACTIVITY-LOG.md`](docs/ACTIVITY-LOG.md) §۵
 > مدل تجاری: فروشگاه تخصصی مدل A (PRD §۲)
 > پشته: Go (تک‌باینری، سه unit) · React+TS+Vite (چهار اپ) · PostgreSQL 16 · REST/OpenAPI · Linux + systemd
 
@@ -17,9 +18,17 @@ endpoints فروشگاهی `GET /api/v1/categories`، `/products/{id}`، `/categ
 هشدار BR-06 مشارکت منفی، endpoint `GET /api/v1/variants/{id}/price` که اطلاعات محرمانه را از مشتری پنهان
 می‌کند — R-05 §۲۴) و **ماژول commerce** (ایجاد سفارش با تطابق مبالغ، snapshot آدرس، یک Intent فعال/سفارش،
 تأیید پرداخت با رویداد OrderPaid، لغو سفارش، webhook idempotent، ردیابی سفارش مهمان) پیاده‌سازی شده‌اند و
-**`go vet` + `go build` + ۱۰۹ آزمون سبز** هستند.
-ماژول‌های suppliers/inventory/fulfillment/content/media/notifications هنوز stub‌اند
-و گام‌به‌گام طبق [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md) پیاده‌سازی می‌شوند.
+**`go vet` + `go build` + ۲۳۰ آزمون سبز** هستند (بدون نیاز به دیتابیس؛ آزمون‌های PG با
+`KH_TEST_PG_DSN`). ماژول‌های suppliers/inventory/fulfillment/media/content/notifications/
+ecosystem نیز پیاده‌سازی و در unit `api` mount شده‌اند.
+
+**کنترل دسترسی پنل:** همهٔ `/api/v1/admin/*` پشت `authorization.Authenticate` +
+`RequireAudited` هستند؛ کد مجوز هر روت در `cmd/khabavar/routes.go` (`adminPermissions`)
+اعلان می‌شود و روت ادمین بدون مجوز در startup panic می‌کند (IAM §۱). رد دسترسی در
+`audit_logs` ثبت می‌شود (IAM §۷).
+
+راهنمای اجرایی: [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md) · قرارداد:
+[`api/openapi.yaml`](api/openapi.yaml) · CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 ---
 
@@ -42,14 +51,14 @@ make run-worker          # KH_ROLE=worker
 cmd/khabavar/        یک باینری، KH_ROLE=identity|api|worker (ADR-DB-002)
 internal/platform/   config · db · log · health · ratelimit · idempotency · testpg
 internal/modules/    ۱۳ ماژول دامنه با مرز مصوب (SAD §۴.۱)
-migrations/          ۱۱ مهاجرت up + ۱۱ down stub (forward-only) + embed.go
+migrations/          ۱۲ مهاجرت up + ۱۲ down stub (forward-only) + embed.go
 seed/                001_seed_baseline.sql — نقش‌ها، مجوزها، OIDC، موضوعات مجله
-api/                 openapi.yaml v1.1.0 + .spectral.yaml
 web/                 main · shop · magazine · admin (React+TS+Vite)
 deploy/systemd/      سه unit (تک‌بیناری)
 deploy/nginx/        چهار server block + rate limit auth
-.github/workflows/   ci.yml — ۱۰ کار، هفت دروازه ادغام (CI v1.1)
-docs/                ایندکس مسیر مطالعه R-01..R-19
+.github/workflows/   ci.yml — ۱۱ کار، هفت دروازه ادغام (R-CI v1.1)
+api/                 openapi.yaml v1.1.0 + .spectral.yaml (دروازهٔ CI)
+docs/                ایندکس مسیر مطالعه R-01..R-19 + ACTIVITY-LOG
 ```
 
 ## مرزهای غیرقابل مذاکره
