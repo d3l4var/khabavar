@@ -74,13 +74,15 @@ type Warehouse struct {
 }
 
 // StockBalance mirrors stock_balances. Sellable = OnHand - Reserved (computed).
+// StockBalance carries snake_case JSON tags: the rest of the API is snake_case, and a
+// PascalCase key leaking from a struct without tags is a client-visible inconsistency.
 type StockBalance struct {
-	ID               string
-	WarehouseID      string
-	VariantID        string
-	OnHandQuantity   int
-	ReservedQuantity int
-	UpdatedAt        time.Time
+	ID               string    `json:"id"`
+	WarehouseID      string    `json:"warehouse_id"`
+	VariantID        string    `json:"variant_id"`
+	OnHandQuantity   int       `json:"on_hand_quantity"`
+	ReservedQuantity int       `json:"reserved_quantity"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // Sellable returns the sellable quantity (on_hand - reserved). It can be negative

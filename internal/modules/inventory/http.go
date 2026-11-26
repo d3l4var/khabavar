@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/khabavar/khabavar/internal/modules/shared"
 )
 
 // CreateWarehouseHandler serves POST /api/v1/admin/warehouses.
@@ -70,13 +72,19 @@ func ReceiveStockHandler(svc *Service) http.HandlerFunc {
 			Quantity      int    `json:"quantity"`
 			ReferenceType string `json:"reference_type"`
 			ReferenceID   string `json:"reference_id"`
-			CreatedBy     string `json:"created_by"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeInvErr(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		if err := svc.ReceiveStock(r.Context(), wid, vid, req.Quantity, req.ReferenceType, req.ReferenceID, req.CreatedBy); err != nil {
+		// The actor comes from the authenticated context, never from the body: a stock
+		// movement must be attributable to the real caller (IAM §۷).
+		actor := shared.ActorID(r.Context())
+		if actor == "" {
+			writeInvErr(w, http.StatusUnauthorized, "an authenticated actor is required")
+			return
+		}
+		if err := svc.ReceiveStock(r.Context(), wid, vid, req.Quantity, req.ReferenceType, req.ReferenceID, actor); err != nil {
 			writeInvSvcErr(w, err)
 			return
 		}
@@ -93,14 +101,18 @@ func AdjustStockHandler(svc *Service) http.HandlerFunc {
 			Delta         int    `json:"delta"`
 			ReferenceType string `json:"reference_type"`
 			ReferenceID   string `json:"reference_id"`
-			CreatedBy     string `json:"created_by"`
 			Notes         string `json:"notes"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeInvErr(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		if err := svc.AdjustStock(r.Context(), wid, vid, req.Delta, req.ReferenceType, req.ReferenceID, req.CreatedBy, req.Notes); err != nil {
+		actor := shared.ActorID(r.Context())
+		if actor == "" {
+			writeInvErr(w, http.StatusUnauthorized, "an authenticated actor is required")
+			return
+		}
+		if err := svc.AdjustStock(r.Context(), wid, vid, req.Delta, req.ReferenceType, req.ReferenceID, actor, req.Notes); err != nil {
 			writeInvSvcErr(w, err)
 			return
 		}
