@@ -26,3 +26,17 @@ func (s *DBStore) FindIntentByProviderReference(ctx context.Context, reference s
 	}
 	return intentID, orderID, nil
 }
+
+// OrderIDForIntent resolves a payment intent to its order. An unknown intent returns
+// ("", nil) so the caller can answer a domain error rather than a 500.
+func (s *DBStore) OrderIDForIntent(ctx context.Context, intentID string) (string, error) {
+	var orderID string
+	err := s.pool.QueryRow(ctx, `SELECT order_id FROM payment_intents WHERE id = $1`, intentID).Scan(&orderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return orderID, nil
+}

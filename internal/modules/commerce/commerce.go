@@ -251,6 +251,7 @@ type Store interface {
 	GetOrderByNumber(ctx context.Context, number string) (*Order, error)
 	ListOrderItems(ctx context.Context, orderID string) ([]OrderItem, error)
 	UpdateOrderStatus(ctx context.Context, id, status string) error
+	OrderIDForIntent(ctx context.Context, intentID string) (string, error)
 	UpdateOrderPaid(ctx context.Context, id string, paidTotal int64, status string) error
 
 	// Payment intent
@@ -491,16 +492,20 @@ func (s *Service) CreatePaymentIntent(ctx context.Context, orderID string) (stri
 // ConfirmPayment marks a payment intent SUCCEEDED and the order PAID. Enforces
 // ADR-COM-001: the order must be PENDING_PAYMENT; the intent must transition to
 // SUCCEEDED. On success it enqueues an "OrderPaid" event for fulfillment/inventory.
+// ConfirmPayment confirms an intent by its own id. It resolves the intent to its order and
+// delegates to ConfirmPaymentForOrder, so there is one confirmation path, not two.
 func (s *Service) ConfirmPayment(ctx context.Context, intentID string) error {
-	// The Store needs to find the intent by ID. We don't have a GetPaymentIntent by ID
-	// in the interface (kept minimal), so the caller passes the intent obtained from
-	// GetActivePaymentIntent. For the DB impl this is a single UPDATE … RETURNING.
-	// Here we accept the intentID and let the store handle the lookup.
-	//
-	// To keep the interface minimal, we require the caller to have the orderID too.
-	// This is a deliberate trade-off: ConfirmPayment is called by the payment webhook
-	// handler which already knows the order.
-	return fmt.Errorf("commerce: ConfirmPayment requires orderID — use ConfirmPaymentForOrder")
+	if intentID == "" {
+		return ErrPaymentIntentNotFound
+	}
+	orderID, err := s.store.OrderIDForIntent(ctx, intentID)
+	if err != nil {
+		return err
+	}
+	if orderID == "" {
+		return ErrPaymentIntentNotFound
+	}
+	return s.ConfirmPaymentForOrder(ctx, orderID)
 }
 
 // ConfirmPaymentForOrder marks the active payment intent for orderID as SUCCEEDED and

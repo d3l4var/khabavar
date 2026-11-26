@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -278,19 +277,3 @@ func CancelOrderHandler(svc *Service) http.Handler {
 }
 
 // ── ListOrdersByCustomer (query) ──────────────────────────────────────────────
-
-// ListOrdersByCustomerHandler handles GET /api/v1/customers/{id}/orders?page=&page_size=.
-// This is a thin wrapper — the Service does not yet implement pagination (P4), so
-// the handler reads page/page_size and passes them to a Store method via the Service.
-// For P3 we return a 501 to signal the endpoint exists but is not wired.
-func ListOrdersByCustomerHandler(svc *Service) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		page, _ := strconv.Atoi(q.Get("page"))
-		if page < 1 {
-			page = 1
-		}
-		_ = page
-		writeError(w, errors.New("commerce: list orders by customer not yet implemented (P4)"))
-	})
-}

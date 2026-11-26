@@ -114,6 +114,21 @@ func (m *memStore) ListOrderItems(_ context.Context, orderID string) ([]OrderIte
 	return cp, nil
 }
 
+// OrderIDForIntent mirrors the DB store: unknown intent -> "", nil. The mem store keys
+// intents by order id, so the lookup scans.
+func (m *memStore) OrderIDForIntent(_ context.Context, intentID string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for orderID, list := range m.intents {
+		for _, pi := range list {
+			if pi.ID == intentID {
+				return orderID, nil
+			}
+		}
+	}
+	return "", nil
+}
+
 func (m *memStore) UpdateOrderStatus(_ context.Context, id, status string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

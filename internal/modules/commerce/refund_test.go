@@ -261,6 +261,9 @@ func (s *stubOrderStore) ListOrderItems(context.Context, string) ([]OrderItem, e
 	panic("not used")
 }
 func (s *stubOrderStore) UpdateOrderStatus(context.Context, string, string) error { panic("not used") }
+func (s *stubOrderStore) OrderIDForIntent(context.Context, string) (string, error) {
+	panic("not used")
+}
 func (s *stubOrderStore) UpdateOrderPaid(context.Context, string, int64, string) error {
 	panic("not used")
 }
