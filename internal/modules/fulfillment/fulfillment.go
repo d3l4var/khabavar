@@ -462,3 +462,31 @@ func (s *Service) ListFulfillmentOrdersByOrder(ctx context.Context, orderID stri
 	}
 	return s.store.ListFulfillmentOrdersByOrder(ctx, orderID)
 }
+
+// AddShipmentEvent appends a carrier/manual event to a shipment timeline without
+// changing its status. A status change must go through TransitionShipment, which keeps
+// the state machine honest; this is for tracking updates only.
+func (s *Service) AddShipmentEvent(ctx context.Context, shipmentID, eventCode, description, source string, occurredAt time.Time) (string, error) {
+	if shipmentID == "" {
+		return "", ErrShipmentNotFound
+	}
+	if eventCode == "" {
+		return "", ErrInvalidEventSource // reuse: an event without a code is malformed
+	}
+	if source == "" {
+		source = EventSourceManual
+	}
+	if !validEventSource(source) {
+		return "", ErrInvalidEventSource
+	}
+	if occurredAt.IsZero() {
+		occurredAt = s.now()
+	}
+	return s.store.RecordShipmentEvent(ctx, ShipmentEvent{
+		ShipmentID:  shipmentID,
+		EventCode:   eventCode,
+		Description: description,
+		OccurredAt:  occurredAt,
+		Source:      source,
+	})
+}

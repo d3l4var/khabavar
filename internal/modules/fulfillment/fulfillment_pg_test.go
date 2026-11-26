@@ -447,3 +447,55 @@ func TestPG_ListShipmentItemsByShipment(t *testing.T) {
 		t.Fatalf("shipment items = %+v, want the one line", si)
 	}
 }
+
+// TestPG_AddShipmentEvent: a tracking update must append to the timeline without
+// touching the shipment status, and a bad source must be refused before any write.
+func TestPG_AddShipmentEvent(t *testing.T) {
+	pool, svc, store := setupFulfillment(t)
+	ctx := context.Background()
+	orderID, _ := seedOrderItemGraph(t, ctx, pool, "KHA-ORD-2026-000701", "SKU-FUL-13")
+	whID := seedWarehouse(t, ctx, pool, "WH-FUL-13")
+
+	foID, err := svc.CreateFulfillmentOrder(ctx, FulfillmentOrder{
+		OrderID: orderID, SourceType: SourceOwnedInventory, WarehouseID: whID,
+	})
+	if err != nil {
+		t.Fatalf("CreateFulfillmentOrder: %v", err)
+	}
+	shID, err := store.CreateShipment(ctx, Shipment{
+		FulfillmentOrderID: foID, Carrier: "POST", ServiceType: "EXPRESS",
+		TrackingNumber: "TRK-EV", ShippingCost: 1000, Status: ShipmentLabelCreated,
+	})
+	if err != nil {
+		t.Fatalf("CreateShipment: %v", err)
+	}
+
+	if _, err := svc.AddShipmentEvent(ctx, shID, "ARRIVED_HUB", "رسید به مرکز توزیع", EventSourceCarrier, time.Time{}); err != nil {
+		t.Fatalf("AddShipmentEvent: %v", err)
+	}
+	events, err := store.ListShipmentEvents(ctx, shID)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("events = %v, %v", events, err)
+	}
+	if events[0].EventCode != "ARRIVED_HUB" || events[0].Source != EventSourceCarrier {
+		t.Fatalf("event = %+v", events[0])
+	}
+
+	// An event must not change the shipment status.
+	shipments, err := store.ListShipmentsByFulfillment(ctx, foID)
+	if err != nil || len(shipments) != 1 {
+		t.Fatalf("shipments = %v, %v", shipments, err)
+	}
+	if shipments[0].Status != ShipmentLabelCreated {
+		t.Fatalf("status = %q, want %q (an event must not transition)", shipments[0].Status, ShipmentLabelCreated)
+	}
+
+	// A source outside the CHECK constraint is refused before any insert.
+	if _, err := svc.AddShipmentEvent(ctx, shID, "X", "", "BOGUS", time.Time{}); !errors.Is(err, ErrInvalidEventSource) {
+		t.Fatalf("bad source = %v, want ErrInvalidEventSource", err)
+	}
+	events, _ = store.ListShipmentEvents(ctx, shID)
+	if len(events) != 1 {
+		t.Fatalf("a refused event must not be stored: %d events", len(events))
+	}
+}

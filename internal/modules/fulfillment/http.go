@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 )
 
 // CreateFulfillmentOrderHandler serves POST /api/v1/admin/fulfillment-orders.
@@ -201,4 +202,36 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// RecordShipmentEventHandler serves POST /api/v1/admin/shipments/{id}/events — a tracking
+// update that does not change the shipment status.
+func RecordShipmentEventHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			EventCode   string `json:"event_code"`
+			Description string `json:"description"`
+			Source      string `json:"source"`
+			OccurredAt  string `json:"occurred_at"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeFulErr(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		var at time.Time
+		if req.OccurredAt != "" {
+			parsed, err := time.Parse(time.RFC3339, req.OccurredAt)
+			if err != nil {
+				writeFulErr(w, http.StatusBadRequest, "occurred_at must be RFC3339")
+				return
+			}
+			at = parsed
+		}
+		id, err := svc.AddShipmentEvent(r.Context(), r.PathValue("id"), req.EventCode, req.Description, req.Source, at)
+		if err != nil {
+			writeFulSvcErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"id": id})
+	}
 }

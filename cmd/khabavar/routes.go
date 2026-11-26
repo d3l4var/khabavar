@@ -63,6 +63,8 @@ var adminPermissions = map[string]string{
 	"POST /api/v1/admin/fulfillment-orders/{id}/reject":     "order.manage",
 	"POST /api/v1/admin/fulfillment-orders/{id}/shipments":  "order.manage",
 	"POST /api/v1/admin/shipments/{id}/transition":          "order.manage",
+	"POST /api/v1/admin/fulfillments/{id}/shipments":        "order.manage",
+	"POST /api/v1/admin/shipments/{id}/events":              "order.manage",
 
 	// ── media (catalog owners) ──
 	"POST /api/v1/admin/media":        "catalog.product.edit",
@@ -303,6 +305,8 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/reject", fulfillment.RejectFulfillmentHandler(s.fulfillment))
 	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/shipments", fulfillment.CreateShipmentHandler(s.fulfillment))
 	api.admin("POST /api/v1/admin/shipments/{id}/transition", fulfillment.TransitionShipmentHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillments/{id}/shipments", fulfillment.CreateShipmentHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/shipments/{id}/events", fulfillment.RecordShipmentEventHandler(s.fulfillment))
 	api.public("GET /api/v1/shipments/{id}/events", fulfillment.ListShipmentEventsHandler(s.fulfillment))
 	api.public("GET /api/v1/orders/{id}/fulfillment", fulfillment.ListFulfillmentOrdersByOrderHandler(s.fulfillment))
 	api.public("GET /api/v1/fulfillment-orders/{id}/shipments", fulfillment.ListShipmentsByFulfillmentHandler(s.fulfillment))
