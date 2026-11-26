@@ -1,8 +1,12 @@
-// Package content — ماژول «content».
+// Package content implements the content/magazine module (SAD §۷.۲, DB v2 §۱۲,
+// R-04 §۴, ADR-CONTENT-001): topics (category tree), articles with editorial
+// workflow, article sources (the publish gate), product-article relations
+// (§12.3 with a required relation_reason per MA-5), and language-variant
+// translations (parent_article_id chain, SAD §۷.۲).
 //
 // مسئولیت: مقالات، دسته‌ها، منابع، ترجمه، بازبینی تحریریه، رابطه مقاله-محصول
-// موجودیت‌ها: articles, topics, article_sources, editorial_reviews, product_article_relations
-// وابستگی مجاز (SAD §۴.۲): catalog (فقط id), identity
+// موجودیت‌ها: articles, topics, article_sources, article_topics, product_article_relations
+// وابستگی مجاز (SAD §۴.۲): catalog (فقط id), identity (فقط id)
 //
 // قواعد وابستگی (الزامی، SAD §۴.۲):
 //  ۱. هیچ ماژولی جدول ماژول دیگر را مستقیم UPDATE/INSERT نمی‌کند.
@@ -10,15 +14,5 @@
 //  ۳. وابستگی دایره‌ای ممنوع.
 //  ۴. هر عملیات حساس: Idempotency Key + Audit (ADR-ARCH-008/010).
 //
-// نقطه شروع پیاده‌سازی: IMPLEMENTATION_GUIDE.md فاز مربوطه.
+// نوع‌ها، Store و Service در content.go و content_db.go تعریف شده‌اند.
 package content
-
-// Service مرز ماژول است؛ فراخوانی‌کننده فقط از طریق این رابط با ماژول صحبت می‌کند.
-type Service interface {
-	// TODO: متدهای دامنه طبق OpenAPI و SAD §۷
-}
-
-// New سازنده پیش‌فرض؛ وابستگی‌ها تزریق می‌شوند (هرگز import مستقیم از ماژول غیرمجاز).
-func New( /* deps */ ) Service {
-	panic("not implemented — see IMPLEMENTATION_GUIDE.md")
-}
