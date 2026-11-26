@@ -1,16 +1,28 @@
--- scripts/dev/002_dev_admin.sql — DEV ONLY, do not apply in production.
+-- scripts/dev/002_dev_admin.sql — DEV ONLY, never apply in production.
 --
--- Gives the seeded SUPER_ADMIN a password so the panel login can be exercised
--- locally. Production staff accounts are provisioned out-of-band and their password
--- is never committed: this file lives outside seed/ on purpose, so the embedded
--- baseline (seed/001_seed_baseline.sql) never carries a credential.
+-- The baseline seed deliberately creates no staff accounts: a production install
+-- provisions them out-of-band and their credentials are never committed. That means a
+-- fresh database has zero admin_users, so the panel cannot be signed into at all —
+-- this file fills that gap for local work, and lives outside seed/ so the embedded
+-- baseline never carries a credential.
 --
---   email:    root@khabavar.ir      (seeded SUPER_ADMIN)
---   password: Khabavar!Dev2026      (bcrypt cost 12)
+--   root@khabavar.ir  / Khabavar!Dev2026   SUPER_ADMIN
+--   ops@khabavar.ir   / Khabavar!Dev2026   STORE_MANAGER
+--   fin@khabavar.ir   / Khabavar!Dev2026   FINANCE
 --
 -- Apply:  psql "$KH_DB_URL" -f scripts/dev/002_dev_admin.sql
 
-UPDATE admin_users
-   SET password_hash = '$2a$12$fDqnlEkMtucY5ULkAF0TyeEpyRLV5XRjIWjby6J.HMguceBTBZWba',
-       updated_at    = now()
- WHERE email = 'root@khabavar.ir';
+INSERT INTO admin_users (email, full_name, password_hash, status) VALUES
+    ('root@khabavar.ir', 'مدیر ارشد (توسعه)', '$2a$12$fDqnlEkMtucY5ULkAF0TyeEpyRLV5XRjIWjby6J.HMguceBTBZWba', 'ACTIVE'),
+    ('ops@khabavar.ir',  'مدیر فروشگاه (توسعه)', '$2a$12$fDqnlEkMtucY5ULkAF0TyeEpyRLV5XRjIWjby6J.HMguceBTBZWba', 'ACTIVE'),
+    ('fin@khabavar.ir',  'مدیر مالی (توسعه)', '$2a$12$fDqnlEkMtucY5ULkAF0TyeEpyRLV5XRjIWjby6J.HMguceBTBZWba', 'ACTIVE')
+ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, status = 'ACTIVE';
+
+INSERT INTO admin_user_roles (admin_user_id, role_id)
+SELECT au.id, r.id
+  FROM (VALUES ('root@khabavar.ir','SUPER_ADMIN'),
+               ('ops@khabavar.ir','STORE_MANAGER'),
+               ('fin@khabavar.ir','FINANCE')) AS v(email, role_code)
+  JOIN admin_users au ON au.email = v.email
+  JOIN roles r ON r.code = v.role_code
+ON CONFLICT DO NOTHING;

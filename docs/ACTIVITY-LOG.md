@@ -732,6 +732,40 @@ store به `p.CategoryIDs` نسبت می‌داد، ولی store همان `p` ر
 errs: []
 ```
 
+### ۴.۲۵ بازبینی روند + دو یافتهٔ تازه — کامیت `fix(silent-writes)`
+
+**بازبینی (همه با خروجی واقعی):**
+
+```
+HEAD == origin/main == 90781af · tree پاک · ۵۱ کامیت
+go build / go vet / gofmt -l  → پاک
+go test ./...                → ۱۶ بسته ok (با و بدون PG)
+build هر چهار اپ            → main, shop, admin, magazine
+بازتولید از صفر (کلاستر تازه، پورت 55434):
+  ۱۴ مهاجرت بدون خطا · seed بدون خطا · ۵۳ جدول
+  roles=10 perms=24 oauth_clients=4 topics=11 categories=10
+```
+
+**یافتهٔ ۱ — نصب تازه هیچ کاربر کارمندی ندارد.** baseline seed عمداً حساب کارمند
+نمی‌سازد (گذرواژه نباید در مخزن باشد)، ولی نتیجه این بود که `admin_users` روی دیتابیس
+تازه **صفر** است و پنل اصلاً قابل ورود نیست؛ `scripts/dev/002_dev_admin.sql` هم فقط
+`UPDATE` می‌کرد روی ردیفی که وجود نداشت (بی‌اثر). حالا همان فایل سه حساب توسعه را
+`INSERT` می‌کند (root/ops/fin با نقش‌های SUPER_ADMIN/STORE_MANAGER/FINANCE) و idempotent
+است. شاهد روی دیتابیس تازه: ورود root و ops → **200**.
+
+**یافتهٔ ۲ — همان کلاس «نوشتن خاموش» در دو مسیر دیگر.** سه `UPDATE` بدون بررسی
+`RowsAffected` روی ردیف ناموجود «موفق» گزارش می‌شدند:
+
+- `UpdateOrderStatus` و `UpdateOrderPaid` (پول!) → حالا `ErrOrderNotFound`
+- `UpdateProductStatus` (انتشار/توقف) → حالا `ErrProductNotFound`
+
+تست‌های PG: `TestPG_StatusUpdatesRejectUnknownOrder` و
+`TestPG_StatusUpdateRejectsUnknownProduct` — هر دو PASS.
+
+**بازرسی الگو:** تنها یک مسیر با پارامتر `replace… bool` وجود داشت (همان باگ دسته‌بندی،
+رفع‌شده). ۱۰ `UPDATE` دیگر بدون بررسی باقی مانده که همه داخل تراکنش با
+`SELECT … FOR UPDATE` قبلی هستند (انبار، OAuth) — ریسک پایین، در فهرست کارها ثبت شد.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

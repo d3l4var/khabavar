@@ -280,3 +280,18 @@ func TestPG_OrderNumberIsMintedByTheServer(t *testing.T) {
 		t.Fatalf("both orders got %q — the sequence must advance", o.OrderNumber)
 	}
 }
+
+// TestPG_StatusUpdatesRejectUnknownOrder: a zero-row update must be an error, not a
+// silent success — otherwise a caller believes a payment or cancellation happened.
+func TestPG_StatusUpdatesRejectUnknownOrder(t *testing.T) {
+	_, _, store := setupCommerce(t)
+	ctx := context.Background()
+	missing := "00000000-0000-0000-0000-000000000000"
+
+	if err := store.UpdateOrderStatus(ctx, missing, OrderCancelled); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("UpdateOrderStatus on a missing order: %v, want ErrOrderNotFound", err)
+	}
+	if err := store.UpdateOrderPaid(ctx, missing, 1000, OrderPaid); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("UpdateOrderPaid on a missing order: %v, want ErrOrderNotFound", err)
+	}
+}

@@ -183,11 +183,19 @@ func (s *DBStore) ListProductsByCategory(ctx context.Context, categoryID, status
 	return out, total, nil
 }
 
+// UpdateProductStatus changes a product's status. A zero-row update means the product
+// does not exist, which must not be reported as success.
 func (s *DBStore) UpdateProductStatus(ctx context.Context, id, status string, publishedAt *time.Time) error {
-	_, err := s.pool.Exec(ctx,
+	ct, err := s.pool.Exec(ctx,
 		`UPDATE products SET status = $2, published_at = COALESCE($3, published_at) WHERE id = $1`,
 		id, status, nullableTime(publishedAt))
-	return err
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrProductNotFound
+	}
+	return nil
 }
 
 func (s *DBStore) CreateVariant(ctx context.Context, v Variant) (string, error) {

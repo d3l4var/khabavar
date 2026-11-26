@@ -6,6 +6,7 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -145,5 +146,16 @@ func TestPG_CatalogPublishGateIsEnforcedByTheDatabase(t *testing.T) {
 	}
 	if _, err := pool.Exec(ctx, `UPDATE products SET status='PUBLISHED' WHERE id=$1`, id); err == nil {
 		t.Fatal("chk_products_publish_gates must reject a PUBLISHED product without gate fields")
+	}
+}
+
+// TestPG_StatusUpdateRejectsUnknownProduct guards the same silent-write class: a
+// publish/pause of a product that does not exist must fail, not report success.
+func TestPG_StatusUpdateRejectsUnknownProduct(t *testing.T) {
+	store := NewDBStore(setupPG(t))
+	ctx := context.Background()
+	missing := "00000000-0000-0000-0000-000000000000"
+	if err := store.UpdateProductStatus(ctx, missing, ProductPublished, nil); !errors.Is(err, ErrProductNotFound) {
+		t.Fatalf("UpdateProductStatus on a missing product: %v, want ErrProductNotFound", err)
 	}
 }
