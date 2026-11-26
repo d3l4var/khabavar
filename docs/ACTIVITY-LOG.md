@@ -1625,6 +1625,30 @@ intent ناشناخته و رشتهٔ خالی → `ErrPaymentIntentNotFound` (�
 
 ---
 
+### ۴.۶۳ خطای مرجوعی که ۵۰۰ می‌داد — کامیت `fix(return-error-map)`
+
+تست handler مرجوعی نشان داد **درخواست بد کلاینت ۵۰۰ می‌گیرد**: `ErrReturnReasonRequired`
+و بقیهٔ sentinelهای مرجوعی در `statusForError` نگاشت نشده بودند، پس به شاخهٔ `default`
+(۵۰۰) می‌افتادند.
+
+این فقط «کد اشتباه» نیست: خطای کلاینت در سیگنال خطای سرور می‌نشیند و هشدارهای 5xx را
+بی‌معنا می‌کند.
+
+**نگاشت اضافه شد:** `ErrReturnReasonRequired`/`ErrReturnQuantityInvalid` → **۴۰۰**،
+`ErrReturnNotAllowed`/`ErrReturnAlreadyOpen` → **۴۰۹**.
+
+**تست‌های تازه:**
+- `TestPG_CreateReturnRequestHandler` — بدون دلیل ۴۰۰، مشتری غریبه ۴۰۴، ساخت ۲۰۱،
+  درخواست دوم ۴۰۹.
+- `TestPG_CheckoutErrorBranches` — بدون آدرس ۴۰۰، سبد خالی ۴۰۹، قلم بدون قیمت تأییدشده
+  **۴۲۲** با فهرست اقلام.
+- `TestCheckoutErrorMessages` — `ErrCheckoutUnavailable.Error()` و `MarshalPayload`
+  (شامل حالت خطا برای مقدار غیرقابل marshal).
+
+**پوشش commerce: ۷۶.۳٪ → ۷۸.۹٪.**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

@@ -29,9 +29,14 @@ func statusForError(err error) int {
 		errors.Is(err, ErrContactRequired),
 		errors.Is(err, ErrOrderNumberRequired),
 		errors.Is(err, ErrRefundAmountInvalid),
-		errors.Is(err, ErrRefundReasonReq):
+		errors.Is(err, ErrRefundReasonReq),
+		// Return-request validation: a bad request from the client must not surface as a
+		// 500, which would pollute the server-error signal.
+		errors.Is(err, ErrReturnReasonRequired),
+		errors.Is(err, ErrReturnQuantityInvalid):
 		return http.StatusBadRequest
-	case errors.Is(err, ErrRefundExceedsPaid), errors.Is(err, ErrOrderNotRefundable):
+	case errors.Is(err, ErrRefundExceedsPaid), errors.Is(err, ErrOrderNotRefundable),
+		errors.Is(err, ErrReturnNotAllowed), errors.Is(err, ErrReturnAlreadyOpen):
 		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError
