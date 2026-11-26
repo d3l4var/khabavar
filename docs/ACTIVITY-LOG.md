@@ -888,6 +888,37 @@ main, shop, admin, magazine  → PASS (۱۵ قاعده) · «a11y: clean»
 
 کد آزمایشی برگردانده شد (بدون dead code) و ورود پنل دوباره تأیید شد: «سفارش‌ها» با ۴ سفارش.
 
+### ۴.۳۱ نشست کوکی برای authorize + گارد CSRF — کامیت `feat(oidc-cookie)`
+
+تصمیم مالک: `/oauth/authorize` با کوکی HttpOnly. پیاده شد:
+
+- `SetSessionCookie` — HttpOnly، `SameSite=Lax`، `Secure` وقتی TLS، و **`Path=/oauth`** تا
+  کوکی هرگز به `/api/v1/admin/*` نرود (کوکی لو رفته روی API کارمند قابل replay نیست).
+- `bearerFromCookie` فقط برای **GET** مقدار برمی‌گرداند؛ هر متد دیگر (POST) نادیده گرفته
+  می‌شود.
+- گارد CSRF: authorize با کوکی **فقط** وقتی پذیرفته می‌شود که `code_challenge` و `state`
+  هر دو حاضر باشند — کد بدون verifier بی‌ارزش است و `state` پاسخ را به درخواست خود کلاینت
+  می‌بندد.
+- ورود کارمند (`/api/v1/auth/admin/login`) همان نشست را در کوکی هم می‌گذارد.
+
+**باگ حین کار:** `writeOIDCErr` برای `ErrOIDCInvalidRequest` به شاخهٔ `default` می‌افتاد و
+**۵۰۰** می‌داد؛ هر درخواست بدشکل authorize (نبود `code_challenge`، `response_type` غلط)
+۵۰۰ می‌گرفت نه ۴۰۰. اصلاح شد.
+
+**شاهد (curl، با/بدون کوکی):**
+
+```
+cookie + PKCE + state → 302 (کد صادر شد)
+cookie، بدون state    → 400   ← گارد CSRF
+cookie، بدون PKCE     → 400
+بدون کوکی            → 302 به صفحهٔ ورود
+```
+
+**باقی‌مانده:** اتصال پنل به این جریان (ناوبری کامل صفحه → `/auth/callback` → تبادل کد).
+یک بار پیاده شد ولی در هارنس تست به حلقهٔ ریدایرکت خورد و برگردانده شد؛ پنل فعلاً روی
+ورود مستقیم کارمند است. `scripts/dev/003_dev_oidc_redirect.sql` برای وایت‌لیست کردن
+`http://127.0.0.1:5180/auth/callback` در محیط توسعه اضافه شد.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

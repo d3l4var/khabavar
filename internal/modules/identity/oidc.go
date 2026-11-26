@@ -480,7 +480,18 @@ func AuthorizeHandler(svc *OIDCService) http.HandlerFunc {
 			CodeChallengeMethod: r.URL.Query().Get("code_challenge_method"),
 			ContinuationToken:   r.URL.Query().Get("continuation_token"),
 		}
+		// Header first (API clients), then the HttpOnly cookie (browser navigation).
 		bearer := bearerFromHeader(r)
+		if bearer == "" {
+			bearer = bearerFromCookie(r)
+			// A cookie-authenticated authorize must be a PKCE request with state: the
+			// code is useless without the verifier, and state binds the response to the
+			// client's own request (CSRF guard for a SameSite=Lax GET).
+			if bearer != "" && (req.CodeChallenge == "" || req.State == "") {
+				writeOIDCErr(w, ErrOIDCInvalidRequest)
+				return
+			}
+		}
 		res, err := svc.Authorize(r.Context(), req, bearer)
 		if err != nil {
 			writeOIDCErr(w, err)
@@ -522,6 +533,10 @@ func TokenHandler(svc *OIDCService) http.HandlerFunc {
 func writeOIDCErr(w http.ResponseWriter, err error) {
 	code, desc := http.StatusBadRequest, "invalid_request"
 	switch {
+	// A malformed authorize request (missing code_challenge, wrong response_type, a
+	// cookie-authenticated call without state) is the client's fault: 400, not 500.
+	case errors.Is(err, ErrOIDCInvalidRequest):
+		code, desc = http.StatusBadRequest, "invalid_request"
 	case errors.Is(err, ErrOIDCInvalidClient), errors.Is(err, ErrOIDCInvalidRedirect):
 		code, desc = http.StatusBadRequest, "invalid_client"
 	case errors.Is(err, ErrOIDCUnsupportedGrant):

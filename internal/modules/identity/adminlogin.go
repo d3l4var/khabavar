@@ -93,6 +93,9 @@ func AdminLoginHandler(svc *Service, store AdminLoginStore) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "login failed")
 			return
 		}
+		// The same session goes into an HttpOnly /oauth cookie so the browser can run the
+		// authorize redirect without putting a token in a URL or in script reach.
+		SetSessionCookie(w, r, token, svc.accessTTL)
 		writeJSON(w, http.StatusOK, map[string]any{"access_token": token, "service": "admin"})
 	}
 }
