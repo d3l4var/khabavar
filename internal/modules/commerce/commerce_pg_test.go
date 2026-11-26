@@ -539,3 +539,72 @@ func seedCustomerRow(t *testing.T, ctx context.Context, pool *pgxpool.Pool) stri
 	}
 	return id
 }
+
+// TestPG_IdempotencyClaim covers ADR-ARCH-008 at the store level: the first claim owns
+// the key, a second claim sees it, a completed key replays, and a different body is
+// detectable from the stored hash.
+func TestPG_IdempotencyClaim(t *testing.T) {
+	_, _, store := setupCommerce(t)
+	ctx := context.Background()
+	key := "idem-" + uuid.NewString()
+	scope := "POST /api/v1/checkout"
+	hash := HashRequest([]byte(`{"a":1}`))
+
+	owned, _, err := store.Claim(ctx, key, scope, hash, time.Hour)
+	if err != nil || !owned {
+		t.Fatalf("first claim: owned=%v err=%v", owned, err)
+	}
+
+	// Same key again: not owned, no response yet (in flight).
+	owned, stored, err := store.Claim(ctx, key, scope, hash, time.Hour)
+	if err != nil {
+		t.Fatalf("second claim: %v", err)
+	}
+	if owned {
+		t.Fatal("the second claim must not own the key")
+	}
+	if stored == nil || stored.StatusCode != 0 {
+		t.Fatalf("stored = %+v, want an in-flight marker", stored)
+	}
+
+	// Complete it, then a retry must replay the stored body.
+	if err := store.Complete(ctx, key, 201, []byte(`{"order":"KHA-ORD-1"}`)); err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	_, stored, err = store.Claim(ctx, key, scope, hash, time.Hour)
+	if err != nil {
+		t.Fatalf("third claim: %v", err)
+	}
+	// The body is stored as JSONB, so compare it semantically: Postgres normalises
+	// whitespace and key order on the way in.
+	var replayed map[string]string
+	if err := json.Unmarshal(stored.Body, &replayed); err != nil {
+		t.Fatalf("replay body is not JSON: %v (%s)", err, stored.Body)
+	}
+	if stored.StatusCode != 201 || replayed["order"] != "KHA-ORD-1" {
+		t.Fatalf("replay = %d %s", stored.StatusCode, stored.Body)
+	}
+
+	// The stored hash lets the caller spot a different body under the same key.
+	if stored.RequestHash != hash {
+		t.Fatalf("hash = %q, want %q", stored.RequestHash, hash)
+	}
+	if HashRequest([]byte(`{"a":2}`)) == hash {
+		t.Fatal("different bodies must hash differently")
+	}
+
+	// Completing an unknown key must fail rather than silently succeed.
+	if err := store.Complete(ctx, "idem-does-not-exist", 200, nil); err == nil {
+		t.Fatal("Complete on a missing key must error")
+	}
+}
+
+// TestHashRequestIgnoresFormatting: key order and whitespace must not look like a
+// different request, or a harmless retry would be rejected as a conflict.
+func TestHashRequestIgnoresFormatting(t *testing.T) {
+	a := HashRequest([]byte(`{"a":1,"b":2}`))
+	b := HashRequest([]byte("{\n  \"b\": 2,\n  \"a\": 1\n}"))
+	if a != b {
+		t.Fatalf("canonical hash differs: %s vs %s", a, b)
+	}
+}

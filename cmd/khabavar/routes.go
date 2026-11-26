@@ -196,6 +196,7 @@ type services struct {
 	content     *content.Service
 	ecosystem   *ecosystem.Service
 	catList     *catalog.AdminListStore
+	idem        commerce.IdempotencyStore
 	invAdmin    *inventory.AdminStore
 	iamAdmin    *identity.AdminStore
 	auditList   *audit.ListStore
@@ -229,7 +230,9 @@ func mountRoutes(api *apiMux, s services) {
 	// ── commerce (P4) ──
 	// Server-side cart (DB §14.1). Guests are identified by X-Guest-Cart-Token.
 	api.public("GET /api/v1/cart", commerce.CartHandler(s.commerce))
-	api.public("POST /api/v1/checkout", commerce.CheckoutHandler(s.commerce))
+	// Checkout is money-touching, so a retry must not create a second order
+	// (ADR-ARCH-008). The wrapper enforces the Idempotency-Key header.
+	api.public("POST /api/v1/checkout", commerce.Idempotent(s.idem, "POST /api/v1/checkout", commerce.CheckoutHandler(s.commerce)))
 	api.public("POST /api/v1/cart/items", commerce.AddCartItemHandler(s.commerce))
 	api.public("PATCH /api/v1/cart/items/{id}", commerce.UpdateCartItemHandler(s.commerce))
 	api.public("DELETE /api/v1/cart/items/{id}", commerce.DeleteCartItemHandler(s.commerce))
