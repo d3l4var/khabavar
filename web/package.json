@@ -9,9 +9,14 @@
     "admin"
   ],
   "scripts": {
-    "build": "npm run build --workspace main"
+    "build": "npm run build --workspace main",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build -o storybook-static",
+    "a11y": "node ../scripts/a11y-audit.mjs"
   },
   "devDependencies": {
-    "axe-core": "^4.14.1"
+    "@storybook/react-vite": "^10.6.9",
+    "axe-core": "^4.14.1",
+    "storybook": "^10.6.9"
   }
 }
