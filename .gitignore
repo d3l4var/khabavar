@@ -1,0 +1,23 @@
+# Go
+/bin/
+/cover.out
+*.test
+*.out
+vendor/
+
+# Web
+node_modules/
+web/*/dist/
+web/*/.vite/
+
+# Env — رازها هرگز در مخزن (DEP §۵)
+.env
+*.env
+!/deploy/**/*.env.example
+!.env.example
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
