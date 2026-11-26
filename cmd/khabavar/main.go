@@ -123,6 +123,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 
 	catSvc := catalog.NewService(catalog.NewDBStore(pool.Pool))
 	catSvc.SetSearchStore(catalog.NewDBStore(pool.Pool))
+	catSvc.SetUpdateStore(catalog.NewDBStore(pool.Pool))
 	catSvc.SetAuditor(auditor)
 	contentSvc := content.NewService(content.NewDBStore(pool.Pool))
 	contentSvc.SetSearchStore(content.NewDBStore(pool.Pool))

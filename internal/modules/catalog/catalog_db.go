@@ -340,3 +340,48 @@ func nullableIntPtr(p *int) any {
 
 // Compile-time assertion that DBStore satisfies Store.
 var _ Store = (*DBStore)(nil)
+
+// UpdateProduct writes the editable columns of a product and, when replaceCategories
+// is true, replaces its category links in the same transaction (so a partial failure
+// cannot leave the product attached to half its categories).
+func (s *DBStore) UpdateProduct(ctx context.Context, p Product, replaceCategories bool) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	ct, err := tx.Exec(ctx,
+		`UPDATE products
+		    SET title = $2, slug = $3, brand_id = NULLIF($4,'')::uuid,
+		        short_description = $5, description = $6, manufacturer = $7,
+		        country_of_origin = $8, sleep_relevance = NULLIF($9,''),
+		        spec_source = NULLIF($10,''), spec_last_reviewed_at = $11,
+		        updated_at = now()
+		  WHERE id = $1`,
+		p.ID, p.Title, p.Slug, p.BrandID, p.ShortDescription, p.Description,
+		p.Manufacturer, p.CountryOfOrigin, p.SleepRelevance, p.SpecSource,
+		p.SpecLastReviewedAt)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrProductNotFound
+	}
+	if replaceCategories {
+		if _, err := tx.Exec(ctx, `DELETE FROM product_categories WHERE product_id = $1`, p.ID); err != nil {
+			return err
+		}
+		for _, cid := range p.CategoryIDs {
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO product_categories (product_id, category_id) VALUES ($1,$2)
+				 ON CONFLICT DO NOTHING`, p.ID, cid); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// Compile-time assertion that DBStore can edit products.
+var _ ProductUpdateStore = (*DBStore)(nil)

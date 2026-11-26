@@ -70,6 +70,7 @@ var adminPermissions = map[string]string{
 	// ── catalogue writes (QC-05, R-04) ──
 	"POST /api/v1/admin/products":              "catalog.product.edit",
 	"GET /api/v1/admin/products/{id}":          "catalog.product.view",
+	"PATCH /api/v1/admin/products/{id}":        "catalog.product.edit",
 	"POST /api/v1/admin/products/{id}/publish": "catalog.product.publish",
 	"POST /api/v1/admin/products/{id}/status":  "catalog.product.publish",
 	"POST /api/v1/admin/categories":            "catalog.attribute.manage",
@@ -279,6 +280,7 @@ func mountRoutes(api *apiMux, s services) {
 	// ── catalogue writes (QC-05) ──
 	api.admin("POST /api/v1/admin/products", catalog.CreateProductHandler(s.catalog))
 	api.admin("GET /api/v1/admin/products/{id}", catalog.AdminProductDetailHandler(s.catalog))
+	api.admin("PATCH /api/v1/admin/products/{id}", catalog.UpdateProductHandler(s.catalog))
 	api.admin("POST /api/v1/admin/products/{id}/publish", catalog.PublishProductHandler(s.catalog))
 	api.admin("POST /api/v1/admin/products/{id}/status", catalog.ProductStatusHandler(s.catalog))
 	api.admin("POST /api/v1/admin/categories", catalog.CreateCategoryHandler(s.catalog))

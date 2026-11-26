@@ -130,6 +130,61 @@ func ProductStatusHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
+// productPatchRequest uses pointers so "absent" and "empty" are distinguishable: a
+// PATCH must not blank a field the caller did not mention.
+type productPatchRequest struct {
+	Title              *string    `json:"title"`
+	Slug               *string    `json:"slug"`
+	BrandID            *string    `json:"brand_id"`
+	ShortDescription   *string    `json:"short_description"`
+	Description        *string    `json:"description"`
+	Manufacturer       *string    `json:"manufacturer"`
+	CountryOfOrigin    *string    `json:"country_of_origin"`
+	SleepRelevance     *string    `json:"sleep_relevance"`
+	SpecSource         *string    `json:"spec_source"`
+	SpecLastReviewedAt *time.Time `json:"spec_last_reviewed_at"`
+	CategoryIDs        *[]string  `json:"category_ids"`
+}
+
+// UpdateProductHandler serves PATCH /api/v1/admin/products/{id}. Status is not
+// editable here: publishing and pausing have their own routes and gates.
+func UpdateProductHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req productPatchRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			return
+		}
+		patch := ProductPatch{
+			Title: req.Title, Slug: req.Slug, BrandID: req.BrandID,
+			ShortDescription: req.ShortDescription, Description: req.Description,
+			Manufacturer: req.Manufacturer, CountryOfOrigin: req.CountryOfOrigin,
+			SleepRelevance: req.SleepRelevance, SpecSource: req.SpecSource,
+			SpecLastReviewedAt: req.SpecLastReviewedAt,
+		}
+		if req.CategoryIDs != nil {
+			patch.CategoryIDs = *req.CategoryIDs
+		}
+		id := r.PathValue("id")
+		updated, err := svc.UpdateProduct(r.Context(), id, patch)
+		if err != nil {
+			if errors.Is(err, ErrPublishGateMissing) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+					"error": err.Error(), "code": "publish_gate_missing",
+				})
+				return
+			}
+			writeCatalogErr(w, err)
+			return
+		}
+		svc.audit(r, "catalog.product.updated", id, nil, map[string]any{
+			"slug": updated.Slug, "status": updated.Status,
+			"sleep_relevance": updated.SleepRelevance, "spec_source": updated.SpecSource,
+		})
+		writeJSON(w, http.StatusOK, updated)
+	}
+}
+
 // CreateCategoryHandler serves POST /api/v1/admin/categories.
 func CreateCategoryHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

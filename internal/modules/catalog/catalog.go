@@ -125,8 +125,9 @@ type Store interface {
 // Service is the catalog module boundary (SAD §۴.۲).
 type Service struct {
 	store   Store
-	search  SearchStore   // optional; nil → fallback linear scan (tests only)
-	auditor AuditRecorder // optional; nil → no audit writes
+	search  SearchStore        // optional; nil → fallback linear scan (tests only)
+	updates ProductUpdateStore // optional; nil → UpdateProduct errors
+	auditor AuditRecorder      // optional; nil → no audit writes
 	now     func() time.Time
 }
 

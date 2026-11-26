@@ -295,6 +295,42 @@ GET  /admin/variants/{id}/economics     STORE_MANAGER=403               FINANCE=
 
 (۴۰۰ = مجوز داشت، بدنه ناقص؛ ۴۰۴ = مجوز داشت، رکورد نیست. این‌ها رفتار درست‌اند.)
 
+### ۴.۱۱ ویرایش محصول و بستن بن‌بست انتشار — کامیت `feat(catalog-update)`
+
+هنگام اجرای E2E کاتالوگ یک **بن‌بست واقعی** پیدا شد: محصولی که بدون فیلدهای دروازه
+ساخته می‌شد هرگز قابل انتشار نبود، چون هیچ راهی برای تکمیل `sleep_relevance` /
+`spec_source` / `spec_last_reviewed_at` بعد از ساخت وجود نداشت. سرویس `UpdateProduct`
+هم نبود.
+
+**اصلاح:** `PATCH /api/v1/admin/products/{id}` با مجوز `catalog.product.edit`.
+
+- **PATCH واقعی است، نه overwrite:** بدنه با pointer خوانده می‌شود تا «فیلد نیامده» با
+  «فیلد خالی‌شده» قاطی نشود.
+- **وضعیت از این مسیر تغییر نمی‌کند:** انتشار و توقف روت و دروازهٔ خودشان را دارند، پس
+  PATCH نمی‌تواند MA-1/MA-6 را دور بزند.
+- **محصول PUBLISHED نمی‌تواند فیلد دروازه را از دست بدهد** → ۴۲۲، وگرنه یا CHECK نقض
+  می‌شد یا محصول زنده بی‌صدا از فروشگاه می‌افتاد.
+- **دسته‌بندی‌ها فقط وقتی جایگزین می‌شوند که `category_ids` در بدنه باشد** (حتی آرایهٔ
+  خالی = پاک کردن). جایگزینی در همان تراکنش انجام می‌شود.
+- `catalog.product.updated` هم audit می‌شود.
+
+**شاهد — همان محصول گیرکرده، روی باینری واقعی:**
+
+```
+select status …                        DRAFT | sleep_relevance = -
+POST /admin/products/{id}/publish      422  publish_gate_missing
+PATCH /admin/products/{id}             200  sleep_relevance=SLEEP_RELATED، عنوان تغییر کرد
+POST /admin/products/{id}/publish      200  {"status":"PUBLISHED"}
+GET  /products/{id} (storefront)       200  محصول حالا در فروشگاه دیده می‌شود
+PATCH {"sleep_relevance":""}           422  (محصول منتشرشده دروازه را از دست نمی‌دهد)
+PATCH {"slug":""}                      400
+PATCH با توکن FINANCE                  403  (catalog.product.edit ندارد)
+audit_logs                             catalog.product.updated | catalog.product.published
+```
+
+تست‌های جدید (`update_test.go`، ۶ مورد): بن‌بست انتشار، slug خالی، شکستن دروازهٔ محصول
+منتشرشده، شناسهٔ ناموجود، جایگزینی صریح دسته‌بندی‌ها، و نبودِ update store.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
@@ -302,8 +338,7 @@ GET  /admin/variants/{id}/economics     STORE_MANAGER=403               FINANCE=
 1. **روت‌های ادمین باقی‌مانده** — کاتالوگ و قیمت‌گذاری در §۴.۱۰ بسته شد. باقی:
    `/admin/stock`، `/admin/stock/movements`، `/admin/reservations` (نوشتن موجودی از پنل؛
    سرویس inventory از قبل وجود دارد و فقط لایهٔ HTTP و مجوز `inventory.manage` لازم است)،
-   و ویرایش محصول (`PATCH /admin/products/{id}`) که در قرارداد هست ولی سرویس
-   `UpdateProduct` ندارد.
+   (ویرایش محصول در §۴.۱۱ بسته شد).
 2. **فرانت‌اند** — `web/{main,shop,magazine,admin}` هر کدام ۱۰ خط scaffold است. P2
    (Design System) و سپس صفحات UJ. تا آن زمان دروازهٔ a11y فقط هشدار می‌دهد.
 3. **پوشش تست** — آستانهٔ R-CI §۳: ≥۹۰٪ منطق مالی/موجودی، ≥۷۵٪ سایر. وضعیت فعلی:
