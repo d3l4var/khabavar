@@ -373,3 +373,16 @@ func ReviewArticleHandler(svc *Service) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{"id": id, "status": a.Status})
 	}
 }
+
+// PublishedArticlesForProductHandler serves GET /api/v1/catalog/products/{id}/articles —
+// the storefront's "related reading" for a product. Only PUBLISHED articles appear.
+func PublishedArticlesForProductHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		arts, err := svc.PublishedArticlesForProduct(r.Context(), r.PathValue("id"))
+		if err != nil {
+			writeContentSvcErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": arts})
+	}
+}

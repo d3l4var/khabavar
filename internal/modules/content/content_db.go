@@ -422,3 +422,38 @@ func (s *DBStore) UpdateArticle(ctx context.Context, a Article) error {
 	}
 	return nil
 }
+
+// ListPublishedArticlesForProduct returns the published articles linked to a product.
+// The storefront must never see a DRAFT article through a product relation, so the
+// status filter lives in SQL rather than in the caller.
+func (s *DBStore) ListPublishedArticlesForProduct(ctx context.Context, productID string) ([]Article, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT a.id, a.title, a.slug, COALESCE(a.summary,''), '', COALESCE(a.language,'fa'),
+		        COALESCE(a.source_type,''), COALESCE(a.source_url,''), COALESCE(a.parent_article_id::text,''),
+		        COALESCE(a.author_id::text,''), COALESCE(a.editor_id::text,''), a.status,
+		        a.published_at, a.created_at, a.updated_at
+		   FROM product_article_relations r
+		   JOIN articles a ON a.id = r.article_id
+		  WHERE r.product_id = $1 AND a.status = 'PUBLISHED'
+		  ORDER BY a.published_at DESC NULLS LAST`, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]Article, 0, 4)
+	for rows.Next() {
+		var a Article
+		var published pgtype.Timestamptz
+		if err := rows.Scan(&a.ID, &a.Title, &a.Slug, &a.Summary, &a.Body, &a.Language,
+			&a.SourceType, &a.SourceURL, &a.ParentArticleID, &a.AuthorID, &a.EditorID,
+			&a.Status, &published, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if published.Valid {
+			t := published.Time
+			a.PublishedAt = &t
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}

@@ -151,6 +151,7 @@ type Store interface {
 	GetArticleBySlug(ctx context.Context, slug string) (*Article, error)
 	UpdateArticleStatus(ctx context.Context, id, status string, publishedAt *time.Time, now time.Time) error
 	UpdateArticle(ctx context.Context, a Article) error
+	ListPublishedArticlesForProduct(ctx context.Context, productID string) ([]Article, error)
 	ListPublishedArticles(ctx context.Context, page, pageSize int) ([]Article, int, error)
 	ListArticlesByTopic(ctx context.Context, topicID string, page, pageSize int) ([]Article, int, error)
 	ListTranslations(ctx context.Context, parentArticleID string) ([]Article, error)
@@ -576,4 +577,12 @@ func (s *Service) UpdateArticle(ctx context.Context, id string, patch ArticlePat
 		return nil, err
 	}
 	return a, nil
+}
+
+// PublishedArticlesForProduct is the storefront view of a product's related reading.
+func (s *Service) PublishedArticlesForProduct(ctx context.Context, productID string) ([]Article, error) {
+	if productID == "" {
+		return nil, ErrArticleNotFound
+	}
+	return s.store.ListPublishedArticlesForProduct(ctx, productID)
 }

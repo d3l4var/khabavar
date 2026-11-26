@@ -128,6 +128,23 @@ func (m *memStore) GetArticleBySlug(_ context.Context, slug string) (*Article, e
 	return &cp, nil
 }
 
+// ListPublishedArticlesForProduct mirrors the DB filter: only PUBLISHED articles linked
+// to the product are visible to the storefront.
+func (m *memStore) ListPublishedArticlesForProduct(_ context.Context, productID string) ([]Article, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Article, 0)
+	for _, rel := range m.relations {
+		if rel.ProductID != productID {
+			continue
+		}
+		if a, ok := m.articles[rel.ArticleID]; ok && a.Status == StatusPublished {
+			out = append(out, *a)
+		}
+	}
+	return out, nil
+}
+
 // UpdateArticle mirrors the DB store: it rewrites the editable columns only.
 func (m *memStore) UpdateArticle(_ context.Context, a Article) error {
 	m.mu.Lock()

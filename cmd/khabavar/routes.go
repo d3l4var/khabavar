@@ -236,6 +236,7 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/catalog/categories", catalog.CategoryTreeHandler(s.catalog))
 	api.public("GET /api/v1/catalog/products", catalog.SearchProductsHandler(s.catalog))
 	api.public("GET /api/v1/catalog/products/{id}", catalog.ProductDetailHandler(s.catalog))
+	api.public("GET /api/v1/catalog/products/{id}/articles", content.PublishedArticlesForProductHandler(s.content))
 	api.public("GET /api/v1/magazine/articles", content.ListPublishedArticlesHandler(s.content))
 	api.public("GET /api/v1/magazine/articles/{slug}", content.GetArticleBySlugHandler(s.content))
 	api.public("GET /api/v1/magazine/topics", content.ListTopicsHandler(s.content))

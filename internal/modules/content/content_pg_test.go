@@ -431,3 +431,61 @@ func TestPG_UpdateArticleAndReview(t *testing.T) {
 		t.Fatalf("status = %q, want DRAFT after reject", a.Status)
 	}
 }
+
+// TestPG_PublishedArticlesForProduct: the storefront's related reading must never leak a
+// DRAFT article through a product relation.
+func TestPG_PublishedArticlesForProduct(t *testing.T) {
+	pool, svc, _ := setupContent(t)
+	ctx := context.Background()
+
+	var productID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO products (title, slug, status) VALUES ('بالش','pillow-rel-2','DRAFT') RETURNING id`).Scan(&productID); err != nil {
+		t.Fatalf("seed product: %v", err)
+	}
+
+	// One published article and one draft, both related to the product.
+	pubID, err := svc.CreateArticle(ctx, Article{
+		Title: "منتشرشده", Slug: "rel-pub", Body: "متن", Language: "fa", SourceType: "ORIGINAL",
+	})
+	if err != nil {
+		t.Fatalf("CreateArticle: %v", err)
+	}
+	if _, err := svc.AddArticleSource(ctx, ArticleSource{ArticleID: pubID, SourceType: CitationGuideline, Citation: "AASM"}); err != nil {
+		t.Fatalf("AddArticleSource: %v", err)
+	}
+	if err := svc.SubmitForReview(ctx, pubID); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if err := svc.Approve(ctx, pubID, ""); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	if err := svc.Publish(ctx, pubID); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	draftID, err := svc.CreateArticle(ctx, Article{
+		Title: "پیش‌نویس", Slug: "rel-draft", Body: "متن", Language: "fa", SourceType: "ORIGINAL",
+	})
+	if err != nil {
+		t.Fatalf("CreateArticle (draft): %v", err)
+	}
+
+	rel := ProductArticleRelation{ProductID: productID, RelationType: "EDUCATIONAL", RelationReason: "راهنما"}
+	rel.ArticleID = pubID
+	if _, err := svc.AddProductRelation(ctx, rel); err != nil {
+		t.Fatalf("AddProductRelation: %v", err)
+	}
+	rel.ArticleID = draftID
+	if _, err := svc.AddProductRelation(ctx, rel); err != nil {
+		t.Fatalf("AddProductRelation (draft): %v", err)
+	}
+
+	arts, err := svc.PublishedArticlesForProduct(ctx, productID)
+	if err != nil {
+		t.Fatalf("PublishedArticlesForProduct: %v", err)
+	}
+	if len(arts) != 1 || arts[0].ID != pubID {
+		t.Fatalf("articles = %+v, want only the published one", arts)
+	}
+}

@@ -1289,6 +1289,21 @@ retry همان اعلان → 200 (already_confirmed)
 
 **بازرسی مسیرها: ۹ → ۷.**
 
+### ۴.۴۷ مقالات مرتبط با محصول — کامیت `feat(product-articles)`
+
+`GET /catalog/products/{id}/articles`: خواندن مرتبط با محصول در صفحهٔ محصول.
+
+- `DBStore.ListPublishedArticlesForProduct` — فیلتر `status = 'PUBLISHED'` **در SQL** است،
+  نه در فراخواننده: ویترین هرگز نباید از طریق رابطهٔ محصول به یک DRAFT برسد.
+- `ListRelationsForProduct` از قبل بود؛ این جهتِ معکوس (رابطه → مقاله) را اضافه می‌کند.
+
+**شاهد (PG):** `TestPG_PublishedArticlesForProduct` — یک مقالهٔ منتشرشده و یک پیش‌نویس،
+هر دو مرتبط با همان محصول؛ خروجی فقط منتشرشده را برمی‌گرداند.
+
+**بازرسی مسیرها: ۷ → ۶** (بقیه: `PATCH /admin/suppliers`، `PATCH /admin/users`،
+`POST /admin/users`، `POST /admin/orders/{}/fulfillments`، `POST /oauth/logout`،
+`POST /orders/{}/return-requests`).
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
