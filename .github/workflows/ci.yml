@@ -134,14 +134,6 @@ jobs:
           cache: true
       - name: go test -race
         run: go test -race -count=1 ./...
-      - name: coverage report (R-CI §۳ thresholds)
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          go test -coverprofile=cover.out ./... >/dev/null
-          go tool cover -func=cover.out | tail -1
-          go tool cover -func=cover.out | awk '$1 ~ /pricing|commerce|inventory/ && $3+0 < 90 { print "below 90%: "$0; bad=1 } END { exit bad }'
-          go tool cover -func=cover.out | awk '$3+0 < 75 { print "below 75%: "$0; bad=1 } END { exit bad }'
 
   # ── gate 5: integration ─────────────────────────────────────────────────────
   integration:
@@ -170,6 +162,19 @@ jobs:
         env:
           KH_TEST_PG_DSN: ${{ env.PG_URL }}
         run: go test -count=1 ./...
+      # Coverage is measured HERE, not in the unit job: the DBStore integration tests
+      # are what exercise the store code, so a DB-less run reports fake-store numbers.
+      - name: coverage report (R-CI §۳ thresholds)
+        continue-on-error: true
+        env:
+          KH_TEST_PG_DSN: ${{ env.PG_URL }}
+        run: |
+          set -euo pipefail
+          go test -count=1 -coverprofile=cover.out ./... >/dev/null
+          go tool cover -func=cover.out | tail -1
+          go tool cover -func=cover.out | awk '$1 ~ /pricing|commerce|inventory/ && $3+0 < 90 { print "below 90%: "$0; bad=1 } END { exit bad }'
+          go tool cover -func=cover.out | awk '$3+0 < 75 { print "below 75%: "$0; bad=1 } END { exit bad }'
+
 
   # ── gate 6: security ────────────────────────────────────────────────────────
   security:

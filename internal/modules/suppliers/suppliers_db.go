@@ -124,9 +124,19 @@ func (s *DBStore) GetSupplierProductByPair(ctx context.Context, supplierID, prod
 	return &sp, nil
 }
 
+// CreateSupplierVariant inserts the offer and, when a purchase price is given, its
+// opening price_history row in the same transaction. Without that row
+// ListPriceHistory would be an incomplete timeline: the first price would live only on
+// supplier_variants and could never be audited (§7.3 "every price must be traced").
 func (s *DBStore) CreateSupplierVariant(ctx context.Context, sv SupplierVariant) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var id string
-	err := s.pool.QueryRow(ctx,
+	if err := tx.QueryRow(ctx,
 		`INSERT INTO supplier_variants (supplier_product_id, variant_id, supplier_sku,
 		         purchase_price, currency, available_quantity, last_stock_check_at,
 		         price_valid_until, last_price_check_at, status)
@@ -134,8 +144,19 @@ func (s *DBStore) CreateSupplierVariant(ctx context.Context, sv SupplierVariant)
 		sv.SupplierProductID, sv.VariantID, nullableStr(sv.SupplierSKU),
 		nullableI64Ptr(sv.PurchasePrice), sv.Currency, sv.AvailableQuantity,
 		nullableTime(sv.LastStockCheckAt), nullableTime(sv.PriceValidUntil),
-		nullableTime(sv.LastPriceCheckAt), sv.Status).Scan(&id)
-	return id, err
+		nullableTime(sv.LastPriceCheckAt), sv.Status).Scan(&id); err != nil {
+		return "", err
+	}
+	if sv.PurchasePrice != nil {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO supplier_variant_price_history
+			   (supplier_variant_id, purchase_price, currency, valid_from, valid_until)
+			 VALUES ($1,$2,$3,now(),NULL)`,
+			id, *sv.PurchasePrice, sv.Currency); err != nil {
+			return "", err
+		}
+	}
+	return id, tx.Commit(ctx)
 }
 
 func (s *DBStore) GetSupplierVariant(ctx context.Context, id string) (*SupplierVariant, error) {

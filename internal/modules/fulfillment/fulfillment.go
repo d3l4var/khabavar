@@ -74,6 +74,7 @@ var (
 	ErrSourceTypeMismatch       = errors.New("fulfillment: source_type and source reference mismatch (§11.1)")
 	ErrInvalidFulfillmentStatus = errors.New("fulfillment: invalid fulfillment status transition")
 	ErrInvalidShipmentStatus    = errors.New("fulfillment: invalid shipment status transition")
+	ErrInvalidEventSource       = errors.New("fulfillment: invalid shipment event source")
 	ErrAllocationExceedsOrder   = errors.New("fulfillment: item allocation exceeds order_item quantity (§11.2)")
 	ErrQuantityMustBePositive   = errors.New("fulfillment: quantity must be > 0")
 	ErrCarrierRequired          = errors.New("fulfillment: carrier required for shipment")
@@ -367,27 +368,36 @@ func (s *Service) TransitionShipmentStatus(ctx context.Context, id, to string, e
 	if !allowedShipmentTransition(sh.Status, to) {
 		return fmt.Errorf("%w: %s → %s", ErrInvalidShipmentStatus, sh.Status, to)
 	}
+	// Validate the event source BEFORE mutating anything: a bad source would otherwise
+	// change the shipment status and then fail the timeline insert (the CHECK allows
+	// MANUAL / CARRIER_API / WEBHOOK only), leaving a transition with no audit trail.
+	if source == "" {
+		source = EventSourceManual
+	}
+	if !validEventSource(source) {
+		return ErrInvalidEventSource
+	}
 	now := s.now()
 	if err := s.store.UpdateShipmentStatus(ctx, id, to, now); err != nil {
 		return err
 	}
-	// Record the audit event (§11.5).
-	if source == "" {
-		source = EventSourceManual
-	}
-	// Update shipped_at / delivered_at timestamps.
-	if to == ShipmentInTransit && sh.ShippedAt == nil {
-		// First IN_TRANSIT — record shipped_at via a second update (the Store
-		// implementation handles this in UpdateShipmentStatus for simplicity).
-	}
-	_, _ = s.store.RecordShipmentEvent(ctx, ShipmentEvent{
+	// Record the audit event (§11.5). A failure here is returned, never swallowed: a
+	// silent gap in the timeline is worse than a visible error.
+	if _, err := s.store.RecordShipmentEvent(ctx, ShipmentEvent{
 		ShipmentID:  id,
 		EventCode:   eventCode,
 		Description: description,
 		OccurredAt:  now,
 		Source:      source,
-	})
+	}); err != nil {
+		return fmt.Errorf("record shipment event: %w", err)
+	}
 	return nil
+}
+
+// validEventSource mirrors the shipment_events.source CHECK constraint.
+func validEventSource(source string) bool {
+	return source == EventSourceManual || source == EventSourceCarrier || source == EventSourceWebhook
 }
 
 // allowedShipmentTransition enforces the §11.3 state machine.
