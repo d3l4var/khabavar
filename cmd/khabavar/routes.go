@@ -11,12 +11,14 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/khabavar/khabavar/internal/modules/audit"
 	"github.com/khabavar/khabavar/internal/modules/authorization"
 	"github.com/khabavar/khabavar/internal/modules/catalog"
 	"github.com/khabavar/khabavar/internal/modules/commerce"
 	"github.com/khabavar/khabavar/internal/modules/content"
 	"github.com/khabavar/khabavar/internal/modules/ecosystem"
 	"github.com/khabavar/khabavar/internal/modules/fulfillment"
+	"github.com/khabavar/khabavar/internal/modules/identity"
 	"github.com/khabavar/khabavar/internal/modules/inventory"
 	"github.com/khabavar/khabavar/internal/modules/media"
 	"github.com/khabavar/khabavar/internal/modules/pricing"
@@ -64,6 +66,13 @@ var adminPermissions = map[string]string{
 	// ── media (catalog owners) ──
 	"POST /api/v1/admin/media":        "catalog.product.edit",
 	"DELETE /api/v1/admin/media/{id}": "catalog.product.edit",
+
+	// ── admin reads (contract: /admin/orders, /admin/audit-logs, /admin/users|roles|permissions) ──
+	"GET /api/v1/admin/orders":      "order.view",
+	"GET /api/v1/admin/audit-logs":  "audit.read",
+	"GET /api/v1/admin/users":       "identity.user.manage",
+	"GET /api/v1/admin/roles":       "identity.user.manage",
+	"GET /api/v1/admin/permissions": "identity.user.manage",
 
 	// ── content / magazine editorial workflow ──
 	"POST /api/v1/admin/topics":                  "content.article.edit",
@@ -161,6 +170,9 @@ type services struct {
 	media       *media.Service
 	content     *content.Service
 	ecosystem   *ecosystem.Service
+	iamAdmin    *identity.AdminStore
+	auditList   *audit.ListStore
+	orderList   *commerce.OrderListStore
 }
 
 // mountRoutes registers every api-unit route. Handlers are closures over the
@@ -247,6 +259,13 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(s.content))
+
+	// ── admin reads ──
+	api.admin("GET /api/v1/admin/orders", commerce.ListOrdersHandler(s.orderList))
+	api.admin("GET /api/v1/admin/audit-logs", audit.ListHandler(s.auditList))
+	api.admin("GET /api/v1/admin/users", identity.AdminUsersHandler(s.iamAdmin))
+	api.admin("GET /api/v1/admin/roles", identity.RolesHandler(s.iamAdmin))
+	api.admin("GET /api/v1/admin/permissions", identity.PermissionsHandler(s.iamAdmin))
 
 	// ── ecosystem (P7) ──
 	api.public("GET /api/v1/search", ecosystem.SearchHandler(s.ecosystem))

@@ -201,17 +201,41 @@ OIDC/outbox اصلاح شدند.
 - `IMPLEMENTATION_GUIDE.md` — راهنمای گام‌به‌گام (setup، تست، افزودن ماژول، RBAC،
   outbox، استقرار).
 
+### ۴.۹ روت‌های خواندنی پنل طبق قرارداد — کامیت `feat(admin)`
+
+پنج روت قراردادی که پیاده نشده بودند و فقط خواندن‌اند، اضافه شدند:
+
+| روت | مجوز | منبع |
+|-----|------|------|
+| `GET /api/v1/admin/orders` | `order.view` | `commerce.OrderListStore` |
+| `GET /api/v1/admin/audit-logs` | `audit.read` | `audit.ListStore` (فیلتر `action`/`actor_id`) |
+| `GET /api/v1/admin/users` | `identity.user.manage` | `identity.AdminStore` (با نقش‌ها) |
+| `GET /api/v1/admin/roles` | `identity.user.manage` | `identity.AdminStore` (با مجوزها) |
+| `GET /api/v1/admin/permissions` | `identity.user.manage` | `identity.AdminStore` |
+
+**شاهد — ماتریس مجوز روی باینری واقعی:**
+
+```
+route                          STORE_MANAGER  FINANCE  SUPER_ADMIN
+/admin/orders                        200         403       200
+/admin/audit-logs                    403         200       200
+/admin/users                         403         403       200
+/admin/roles                         403         403       200
+/admin/permissions                   403         403       200
+```
+
+`/admin/audit-logs` رکورد واقعی بازپرداخت را برگرداند
+(`order.refund.issued`، actor = شناسهٔ FINANCE، old/new values کامل).
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
-1. **روت‌های ادمین قرارداد که پیاده نشده‌اند** — از فهرست R-07:
-   `/admin/products`, `/admin/products/{id}/publish|status`,
-   `/admin/variants/{id}/cost-records`, `/admin/variants/{id}/price-records`,
-   `/admin/price-records/{id}/approve`, `/admin/audit-logs`,
-   `/admin/users`, `/admin/roles`, `/admin/permissions`, `/admin/orders`,
-   `/admin/stock`, `/admin/stock/movements`, `/admin/reservations`.
-   این‌ها همان «P5b-admin» نقشهٔ راه‌اند و پیش‌نیاز پنل مدیریت.
+1. **روت‌های نوشتنی ادمین که پیاده نشده‌اند** (خواندنی‌ها در §۴.۹ اضافه شدند):
+   `/admin/products` (ایجاد/ویرایش/انتشار/تغییر وضعیت)،
+   `/admin/variants/{id}/cost-records`، `/admin/variants/{id}/price-records`،
+   `/admin/price-records/{id}/approve`، `/admin/stock`، `/admin/stock/movements`،
+   `/admin/reservations`. این‌ها همان «P5b-admin» نقشهٔ راه‌اند و پیش‌نیاز پنل مدیریت.
 2. **فرانت‌اند** — `web/{main,shop,magazine,admin}` هر کدام ۱۰ خط scaffold است. P2
    (Design System) و سپس صفحات UJ. تا آن زمان دروازهٔ a11y فقط هشدار می‌دهد.
 3. **پوشش تست** — آستانهٔ R-CI §۳: ≥۹۰٪ منطق مالی/موجودی، ≥۷۵٪ سایر. وضعیت فعلی:

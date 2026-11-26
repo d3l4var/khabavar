@@ -144,6 +144,9 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 		media:       mediaSvc,
 		content:     contentSvc,
 		ecosystem:   ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc}),
+		iamAdmin:    identity.NewAdminStore(pool.Pool),
+		auditList:   audit.NewListStore(pool.Pool),
+		orderList:   commerce.NewOrderListStore(pool.Pool),
 	}
 	mountRoutes(api, svcs)
 
