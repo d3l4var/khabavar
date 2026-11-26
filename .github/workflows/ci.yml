@@ -106,6 +106,22 @@ jobs:
           done
 
   # ── gate 2: openapi-validate ────────────────────────────────────────────────
+  config-audit:
+    name: config-audit
+    runs-on: ubuntu-latest
+    # Two consistency gates that caught real drift:
+    #   env     — a var the binary reads but .env.example does not document (or the
+    #             reverse: dead configuration that misleads operators).
+    #   routes  — a mounted route the contract does not declare, or a declared path the
+    #             binary does not mount.
+    steps:
+      - uses: actions/checkout@v4
+      - name: env surface (.env.example vs config.Load)
+        run: python3 scripts/audit-env.py --fail-on-missing
+      - name: routes vs contract (advisory until R-07 is decided)
+        continue-on-error: true
+        run: python3 scripts/audit-routes.py
+
   openapi-validate:
     name: openapi-validate
     runs-on: ubuntu-latest

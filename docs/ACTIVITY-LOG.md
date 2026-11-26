@@ -1016,6 +1016,38 @@ orders: 4   (KHA-ORD-2026-000002 · PENDING_PAYMENT · ۹۰٬۰۰۰ تومان)
 --fail-severity=error` → **0 errors** (۲۹ warning از نوع `operation-description` که از قبل
 بودند و گیت CI روی error است، نه warning).
 
+### ۴.۳۷ بازرسی ریزبینانهٔ لایهٔ استقرار و قرارداد — دو ابزار گارد
+
+**۱) سطح env — ناسازگاری واقعی پیدا شد.** `scripts/audit-env.py` (کد `config.Load` را با
+`.env.example` مقایسه می‌کند):
+
+```
+قبل:  خوانده‌شده ۱۹ · مستند ۱۶
+  مستندنشده: KH_AUTH_CODE_TTL_SECONDS، KH_OIDC_ISSUER،
+             KH_WORKER_INTERVAL_SECONDS، KH_WORKER_BATCH_SIZE
+  مرده:      KH_CARRIER_ADAPTER   ← هیچ کدی آن را نمی‌خواند
+بعد:  ۱۹/۱۹ — «env surface is consistent»
+```
+
+`KH_CARRIER_ADAPTER` حذف شد (با توضیح در فایل) چون آداپتر حامل هنوز وجود ندارد؛ نگه‌داشتنش
+اپراتور را گمراه می‌کرد. سه متغیر worker هم مستند شدند (فقط برای `KH_ROLE=worker`).
+
+**۲) مسیرها در برابر قرارداد — شکاف بزرگ R-07 با عدد.**
+
+```
+scripts/audit-routes.py
+  mounted: 90   declared: 58
+  ۶۸ مسیر mount شده که در قرارداد نیست   (مثل GET /admin/products، /products/search)
+  ۳۶ مسیر در قرارداد که mount نشده        (مثل /catalog/products، /magazine/articles، /cart)
+```
+
+این همان «اختلاف مسیر با R-07» است که قبلاً به‌صورت کیفی ثبت شده بود؛ حالا عدد دارد و
+**قرارداد و کد دو شکل مختلف API را توصیف می‌کنند** (`/catalog/products` در برابر
+`/products`). طبق قاعدهٔ پروژه، بازنویسی خاموش قرارداد ممنوع است — تصمیم با مالک است.
+
+**CI:** job تازهٔ `config-audit` — گیت env **blocking** (`--fail-on-missing`)، گیت routes
+فعلاً advisory تا تصمیم R-07.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
