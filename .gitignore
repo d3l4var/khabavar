@@ -16,6 +16,13 @@ web/*/.vite/
 !/deploy/**/*.env.example
 !.env.example
 
+# Agent-managed skill library (not part of the project repo)
+skills/
+
+# Build artifacts
+__pycache__/
+*.pyc
+
 # Editor / OS
 .idea/
 .vscode/
