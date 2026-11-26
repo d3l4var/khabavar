@@ -95,11 +95,13 @@ var adminPermissions = map[string]string{
 	"GET /api/v1/admin/variants/{id}/economics":      "reports.financial.view",
 
 	// ── admin reads (contract: /admin/orders, /admin/audit-logs, /admin/users|roles|permissions) ──
-	"GET /api/v1/admin/orders":      "order.view",
-	"GET /api/v1/admin/audit-logs":  "audit.read",
-	"GET /api/v1/admin/users":       "identity.user.manage",
-	"GET /api/v1/admin/roles":       "identity.user.manage",
-	"GET /api/v1/admin/permissions": "identity.user.manage",
+	"GET /api/v1/admin/orders":       "order.view",
+	"GET /api/v1/admin/audit-logs":   "audit.read",
+	"GET /api/v1/admin/users":        "identity.user.manage",
+	"POST /api/v1/admin/users":       "identity.user.manage",
+	"PATCH /api/v1/admin/users/{id}": "identity.user.manage",
+	"GET /api/v1/admin/roles":        "identity.user.manage",
+	"GET /api/v1/admin/permissions":  "identity.user.manage",
 
 	// ── content / magazine editorial workflow ──
 	"POST /api/v1/admin/topics":                  "content.article.edit",
@@ -375,6 +377,8 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("GET /api/v1/admin/orders", commerce.ListOrdersHandler(s.orderList))
 	api.admin("GET /api/v1/admin/audit-logs", audit.ListHandler(s.auditList))
 	api.admin("GET /api/v1/admin/users", identity.AdminUsersHandler(s.iamAdmin))
+	api.admin("POST /api/v1/admin/users", identity.CreateAdminUserHandler(s.iamAdmin))
+	api.admin("PATCH /api/v1/admin/users/{id}", identity.UpdateAdminUserHandler(s.iamAdmin))
 	api.admin("GET /api/v1/admin/roles", identity.RolesHandler(s.iamAdmin))
 	api.admin("GET /api/v1/admin/permissions", identity.PermissionsHandler(s.iamAdmin))
 
