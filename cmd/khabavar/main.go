@@ -149,6 +149,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 		media:       mediaSvc,
 		content:     contentSvc,
 		ecosystem:   ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc}),
+		catList:     catalog.NewAdminListStore(pool.Pool),
 		invAdmin:    inventory.NewAdminStore(pool.Pool),
 		iamAdmin:    identity.NewAdminStore(pool.Pool),
 		auditList:   audit.NewListStore(pool.Pool),

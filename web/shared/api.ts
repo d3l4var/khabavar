@@ -173,6 +173,148 @@ export async function navigation() {
   return request<{ items: { label: string; href: string; type: string }[] }>('/navigation')
 }
 
+// ── admin (staff) ─────────────────────────────────────────────────────────────
+// Every admin call carries the Bearer token. The panel stores it in sessionStorage:
+// the OIDC Authorization-Code + PKCE client is a later step, and until then the
+// operator pastes a session token. The API enforces the permission per route, so a
+// token without the code gets a 403 — the UI shows that verbatim.
+
+const TOKEN_KEY = 'kh.admin.token'
+
+export function adminToken(): string {
+  return sessionStorage.getItem(TOKEN_KEY) ?? ''
+}
+
+export function setAdminToken(token: string) {
+  if (token) sessionStorage.setItem(TOKEN_KEY, token)
+  else sessionStorage.removeItem(TOKEN_KEY)
+}
+
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = adminToken()
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+  })
+  if (!res.ok) {
+    let code = 'http_error'
+    let message = res.status === 401 ? 'توکن نامعتبر یا منقضی است.' : res.status === 403 ? 'این عملیات به مجوز لازم نیاز دارد.' : `خطای ${res.status}`
+    try {
+      const body = (await res.json()) as { error?: string; code?: string }
+      if (body.code) code = body.code
+      if (body.error && res.status < 500) message = body.error
+    } catch {
+      /* non-JSON */
+    }
+    throw new ApiError(res.status, code, message)
+  }
+  return (await res.json()) as T
+}
+
+export type AdminOrder = {
+  id: string
+  order_number: string
+  status: string
+  currency: string
+  grand_total: number
+  paid_total: number
+  refunded_total: number
+  guest_phone?: string
+  created_at: string
+}
+
+export type AdminProductRow = {
+  id: string
+  title: string
+  slug: string
+  status: string
+  sleep_relevance?: string
+  spec_source?: string
+  publish_gate_satisfied: boolean
+  updated_at: string
+}
+
+export type StockRow = {
+  variant_id: string
+  sku: string
+  warehouse_code: string
+  on_hand_quantity: number
+  reserved_quantity: number
+  available_quantity: number
+  updated_at: string
+}
+
+export type AuditRow = {
+  id: string
+  actor_type: string
+  actor_id: string
+  action: string
+  entity_type: string
+  entity_id: string
+  new_values?: unknown
+  created_at: string
+}
+
+export type RoleRow = { code: string; name: string; description: string; permissions: string[] }
+
+export async function adminListOrders(status = '', page = 1, pageSize = 20) {
+  return adminRequest<{ data: AdminOrder[]; total: number }>(
+    `/admin/orders?status=${encodeURIComponent(status)}&page=${page}&page_size=${pageSize}`,
+  )
+}
+
+export async function adminListProducts(status = '', q = '', page = 1, pageSize = 20) {
+  return adminRequest<{ data: AdminProductRow[]; total: number }>(
+    `/admin/products?status=${encodeURIComponent(status)}&q=${encodeURIComponent(q)}&page=${page}&page_size=${pageSize}`,
+  )
+}
+
+export async function adminPublishProduct(id: string) {
+  return adminRequest<{ status: string }>(`/admin/products/${encodeURIComponent(id)}/publish`, { method: 'POST' })
+}
+
+export async function adminPatchProduct(id: string, patch: Record<string, unknown>) {
+  return adminRequest<AdminProductRow>(`/admin/products/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function adminListStock(q = '', page = 1, pageSize = 20) {
+  return adminRequest<{ items: StockRow[]; page: { total: number } }>(
+    `/admin/stock?q=${encodeURIComponent(q)}&page=${page}&page_size=${pageSize}`,
+  )
+}
+
+export async function adminRecordMovement(input: {
+  warehouse_id: string
+  variant_id: string
+  movement_type: string
+  quantity: number
+  note?: string
+}) {
+  return adminRequest<{ id: string }>('/admin/stock/movements', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function adminListAudit(action = '', page = 1, pageSize = 20) {
+  return adminRequest<{ data: AuditRow[]; total: number }>(
+    `/admin/audit-logs?action=${encodeURIComponent(action)}&page=${page}&page_size=${pageSize}`,
+  )
+}
+
+export async function adminListRoles() {
+  return adminRequest<{ data: RoleRow[] }>('/admin/roles')
+}
+
+export async function adminListWarehouses() {
+  return adminRequest<{ data: unknown[] }>('/admin/warehouses').catch(() => ({ data: [] }))
+}
+
 // ── money (presentation only) ──
 // Amounts travel as IRR integers; the UI shows toman (ADR-DATA-001).
 export function formatToman(rial: number): string {

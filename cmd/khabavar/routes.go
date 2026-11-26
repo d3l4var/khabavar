@@ -74,6 +74,7 @@ var adminPermissions = map[string]string{
 
 	// ── catalogue writes (QC-05, R-04) ──
 	"POST /api/v1/admin/products":              "catalog.product.edit",
+	"GET /api/v1/admin/products":               "catalog.product.view",
 	"GET /api/v1/admin/products/{id}":          "catalog.product.view",
 	"PATCH /api/v1/admin/products/{id}":        "catalog.product.edit",
 	"POST /api/v1/admin/products/{id}/publish": "catalog.product.publish",
@@ -192,6 +193,7 @@ type services struct {
 	media       *media.Service
 	content     *content.Service
 	ecosystem   *ecosystem.Service
+	catList     *catalog.AdminListStore
 	invAdmin    *inventory.AdminStore
 	iamAdmin    *identity.AdminStore
 	auditList   *audit.ListStore
@@ -290,6 +292,7 @@ func mountRoutes(api *apiMux, s services) {
 
 	// ── catalogue writes (QC-05) ──
 	api.admin("POST /api/v1/admin/products", catalog.CreateProductHandler(s.catalog))
+	api.admin("GET /api/v1/admin/products", catalog.ListProductsHandler(s.catList))
 	api.admin("GET /api/v1/admin/products/{id}", catalog.AdminProductDetailHandler(s.catalog))
 	api.admin("PATCH /api/v1/admin/products/{id}", catalog.UpdateProductHandler(s.catalog))
 	api.admin("POST /api/v1/admin/products/{id}/publish", catalog.PublishProductHandler(s.catalog))

@@ -8,10 +8,14 @@
 package catalog
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/khabavar/khabavar/internal/modules/shared"
 )
@@ -251,4 +255,83 @@ func (s *Service) audit(r *http.Request, action, entityID string, oldV, newV any
 	}
 	_ = s.auditor.Record(r.Context(), "ADMIN", shared.ActorID(r.Context()), action, "product", entityID,
 		oldV, newV, "")
+}
+
+// AdminListStore reads products for the panel, including DRAFT/PAUSED rows the
+// storefront must never see. Separate from SearchStore so the storefront query stays
+// untouched.
+type AdminListStore struct {
+	pool *pgxpool.Pool
+}
+
+// NewAdminListStore wires the reader.
+func NewAdminListStore(pool *pgxpool.Pool) *AdminListStore { return &AdminListStore{pool: pool} }
+
+// AdminProductRow is one row of the panel list.
+type AdminProductRow struct {
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	Slug           string `json:"slug"`
+	Status         string `json:"status"`
+	SleepRelevance string `json:"sleep_relevance,omitempty"`
+	SpecSource     string `json:"spec_source,omitempty"`
+	HasGate        bool   `json:"publish_gate_satisfied"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
+// List returns a page of products, optionally filtered by status and a title/slug term.
+func (s *AdminListStore) List(ctx context.Context, status, q string, page, pageSize int) ([]AdminProductRow, int, error) {
+	const where = `
+	  WHERE ($1 = '' OR status = $1)
+	    AND ($2 = '' OR title ILIKE '%' || $2 || '%' OR slug ILIKE '%' || $2 || '%')`
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM products`+where, status, q).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, title, slug, status, COALESCE(sleep_relevance,''), COALESCE(spec_source,''),
+		        (sleep_relevance IS NOT NULL AND sleep_relevance <> ''
+		         AND spec_source IS NOT NULL AND spec_source <> ''
+		         AND spec_last_reviewed_at IS NOT NULL) AS gate_ok,
+		        updated_at
+		   FROM products`+where+`
+		  ORDER BY updated_at DESC
+		  LIMIT $3 OFFSET $4`, status, q, pageSize, (page-1)*pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := make([]AdminProductRow, 0, pageSize)
+	for rows.Next() {
+		var r AdminProductRow
+		var updated pgtype.Timestamptz
+		if err := rows.Scan(&r.ID, &r.Title, &r.Slug, &r.Status, &r.SleepRelevance,
+			&r.SpecSource, &r.HasGate, &updated); err != nil {
+			return nil, 0, err
+		}
+		if updated.Valid {
+			r.UpdatedAt = updated.Time.UTC().Format(time.RFC3339)
+		}
+		out = append(out, r)
+	}
+	return out, total, rows.Err()
+}
+
+// ListProductsHandler serves GET /api/v1/admin/products (catalog.product.view).
+func ListProductsHandler(s *AdminListStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		page := parsePositiveInt(r.URL.Query().Get("page"), 1)
+		size := parsePositiveInt(r.URL.Query().Get("page_size"), 20)
+		if size > 100 {
+			size = 100
+		}
+		rows, total, err := s.List(r.Context(), r.URL.Query().Get("status"), r.URL.Query().Get("q"), page, size)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "internal error", "code": "internal_error"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": rows, "total": total, "page": page, "page_size": size,
+		})
+	}
 }
