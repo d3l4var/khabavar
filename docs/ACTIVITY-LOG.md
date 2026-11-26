@@ -1048,6 +1048,15 @@ scripts/audit-routes.py
 **CI:** job تازهٔ `config-audit` — گیت env **blocking** (`--fail-on-missing`)، گیت routes
 فعلاً advisory تا تصمیم R-07.
 
+**۳) فایل‌های env هر unit.** unitها به `/etc/khabavar/<unit>.env` اشاره می‌کردند ولی مخزن
+فقط یک `.env.example` داشت — اپراتور باید حدس می‌زد هر unit چه می‌خواهد. سه فایل
+`deploy/env/khabavar-{identity,api,worker}.env.example` اضافه شد و `audit-env.py` حالا
+بررسی می‌کند هر نامی در آن‌ها واقعاً توسط `config.Load` خوانده می‌شود.
+
+**باگ چهارم که همین کار لو داد:** worker هم `cfg.HTTPAddr` را سرو می‌کند و پیش‌فرضش
+`:8080` است — یعنی با unit `api` روی همان پورت تصادم می‌کرد و یکی از دو سرویس بالا
+نمی‌آمد. در فایل worker `KH_HTTP_ADDR=:8082` تنظیم شد.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
