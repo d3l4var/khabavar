@@ -123,6 +123,13 @@ func (s *Service) OTPStart(ctx context.Context, phone, purpose, ip string) (stri
 // OTPVerify validates the submitted code against the active challenge, consumes it
 // on success, and (for LOGIN/VERIFY_PHONE) upserts the customer by phone (F1).
 func (s *Service) OTPVerify(ctx context.Context, phone, purpose, submittedCode string) (string, error) {
+	// OTPStart defaults an empty purpose to LOGIN; verify must do the same, otherwise a
+	// client that omits purpose on the second call looks up purpose='' , finds no
+	// challenge, and is told "invalid code" — which reads as a wrong code, not a
+	// missing field.
+	if purpose == "" {
+		purpose = PurposeLogin
+	}
 	ch, err := s.store.ActiveOTPChallenge(ctx, phone, purpose)
 	if err != nil {
 		return "", fmt.Errorf("load challenge: %w", err)
@@ -257,9 +264,12 @@ func (s *DBStore) ConsumeOTPChallenge(ctx context.Context, id string) error {
 func (s *DBStore) UpsertCustomerByPhone(ctx context.Context, phone string) (string, error) {
 	var id string
 	err := s.pool.QueryRow(ctx,
+		// The unique index on phone is PARTIAL (uq_customers_phone ... WHERE phone IS
+		// NOT NULL), so the conflict target must repeat that predicate — without it
+		// Postgres cannot infer the index and every login fails with 42P10.
 		`INSERT INTO customers (phone, phone_verified_at)
 		 VALUES ($1, now())
-		 ON CONFLICT (phone) DO UPDATE
+		 ON CONFLICT (phone) WHERE phone IS NOT NULL DO UPDATE
 		   SET phone_verified_at = COALESCE(customers.phone_verified_at, now()),
 		       updated_at = now()
 		 RETURNING id`, phone).Scan(&id)

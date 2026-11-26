@@ -305,3 +305,25 @@ func TestPG_SubjectResolver_RejectsExpiredSession(t *testing.T) {
 		t.Fatal("expired session must not resolve")
 	}
 }
+
+// TestPG_UpsertCustomerByPhoneIsIdempotent: the phone index is partial, so the ON
+// CONFLICT target must carry the same predicate. Regression: without it Postgres
+// answered 42P10 and every OTP login failed at the last step.
+func TestPG_UpsertCustomerByPhoneIsIdempotent(t *testing.T) {
+	pool, _ := setupPG(t)
+	store := NewDBStore(pool)
+	ctx := context.Background()
+	phone := "+9891200099" + "77"
+
+	first, err := store.UpsertCustomerByPhone(ctx, phone)
+	if err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	second, err := store.UpsertCustomerByPhone(ctx, phone)
+	if err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+	if first != second {
+		t.Fatalf("upsert returned %q then %q, want the same customer", first, second)
+	}
+}

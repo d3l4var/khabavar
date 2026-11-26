@@ -187,3 +187,20 @@ func TestIssueSession(t *testing.T) {
 		t.Fatal("stored hash must differ from raw token (ADR-IAM-00۴)")
 	}
 }
+
+// TestOTPVerify_DefaultsPurposeToLogin: omitting purpose on verify must behave like
+// OTPStart does, not silently look for a challenge with an empty purpose.
+func TestOTPVerify_DefaultsPurposeToLogin(t *testing.T) {
+	now := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
+	svc := newSvc(newMemStore(), now)
+	ctx := context.Background()
+	phone := "+989120000001"
+
+	code, err := svc.OTPStart(ctx, phone, "", "127.0.0.1") // purpose omitted on start
+	if err != nil {
+		t.Fatalf("OTPStart: %v", err)
+	}
+	if _, err := svc.OTPVerify(ctx, phone, "", code); err != nil {
+		t.Fatalf("OTPVerify with an empty purpose must default to LOGIN: %v", err)
+	}
+}

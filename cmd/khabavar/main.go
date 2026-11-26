@@ -92,6 +92,9 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 	hh.Mount(mux)
 	mux.HandleFunc("POST /api/v1/auth/otp/start", identity.OTPStartHandler(svc, mockSmsDeliver(logger)))
 	mux.HandleFunc("POST /api/v1/auth/otp/verify", identity.OTPVerifyHandler(svc))
+	// Browser login page the authorize redirect points at (closes the dead end).
+	mux.HandleFunc("GET /api/v1/auth/otp/login", identity.OTPLoginPageHandler())
+	mux.HandleFunc("POST /api/v1/auth/otp/login", identity.OTPLoginSubmitHandler(svc, oidcSvc))
 	// Staff login for the panel (email + password → opaque session token).
 	mux.HandleFunc("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(svc, identity.NewDBAdminLoginStore(pool.Pool)))
 	mux.HandleFunc("GET /oauth/authorize", identity.AuthorizeHandler(oidcSvc))

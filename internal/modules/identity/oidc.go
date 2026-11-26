@@ -334,9 +334,20 @@ func (s *OIDCService) mintContinuation(req AuthorizeRequest, scopes []string) (s
 		return "", fmt.Errorf("continuation marshal: %w", err)
 	}
 	bb := base64.RawURLEncoding.EncodeToString(body)
-	mac := hmac.New(sha256.New, []byte(s.key))
-	mac.Write([]byte(bb))
-	return bb + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+	return bb + "." + base64.RawURLEncoding.EncodeToString(signContinuation(bb, s.key)), nil
+}
+
+// signContinuation returns the HMAC over the encoded payload. Mint and verify share
+// it so the two cannot drift.
+func signContinuation(encoded, key string) []byte {
+	mac := hmac.New(sha256.New, []byte(key))
+	mac.Write([]byte(encoded))
+	return mac.Sum(nil)
+}
+
+// hmacEqual is a constant-time comparison for the continuation signature.
+func hmacEqual(a, b []byte) bool {
+	return hmac.Equal(a, b)
 }
 
 // ── Token (POST /oauth/token) ──────────────────────────────────────────────────

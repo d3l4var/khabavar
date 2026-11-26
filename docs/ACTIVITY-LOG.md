@@ -766,6 +766,40 @@ build هر چهار اپ            → main, shop, admin, magazine
 رفع‌شده). ۱۰ `UPDATE` دیگر بدون بررسی باقی مانده که همه داخل تراکنش با
 `SELECT … FOR UPDATE` قبلی هستند (انبار، OAuth) — ریسک پایین، در فهرست کارها ثبت شد.
 
+### ۴.۲۶ ورود مرورگری OIDC + دو باگ مسدودکنندهٔ ورود — کامیت `feat(oidc-login)`
+
+**شکاف:** `/oauth/authorize` بدون نشست به `GET /api/v1/auth/otp/login?continuation=…`
+رجوع می‌داد که **mount نشده بود** — یعنی هیچ کلاینت ثالثی نمی‌توانست جریان را در مرورگر
+تمام کند (dead-end واقعی).
+
+**افزوده شد:** صفحهٔ ورود سمت‌سرور (HTML ساده، بدون فریم‌ورک) + `POST` که کد را
+می‌سنجد، نشست می‌سازد، `continuation` را با HMAC بازمی‌خواند و جریان را ادامه می‌دهد.
+توکن نشست هرگز در URL نمی‌رود.
+
+**دو باگ مسدودکننده که همین مسیر بیرون کشید:**
+
+1. **`OTPVerify` مقدار پیش‌فرض purpose را اعمال نمی‌کرد.** `OTPStart` خالی را `LOGIN`
+   می‌گیرد ولی verify نه؛ کلاینتی که در فراخوانی دوم `purpose` را نمی‌فرستاد، چالش را با
+   `purpose=''` می‌جست، پیدا نمی‌کرد و پاسخ **«invalid code»** می‌گرفت — که مثل کد اشتباه
+   به نظر می‌رسد، نه مثل فیلد جاافتاده.
+2. **ورود مشتری روی schema واقعی کاملاً شکسته بود.** `UpsertCustomerByPhone` از
+   `ON CONFLICT (phone)` استفاده می‌کرد، ولی ایندکس یکتا **جزئی** است
+   (`uq_customers_phone … WHERE phone IS NOT NULL`). Postgres بدون تکرار همان شرط، ایندکس
+   را نمی‌شناسد → `42P10` → هر ورود با OTP در آخرین قدم ۵۰۰ می‌داد. تست‌های واحد با
+   store حافظه‌ای این را نمی‌دیدند.
+
+**شاهد — جریان کامل با curl:**
+
+```
+GET /oauth/authorize (بدون نشست) → 302 به صفحهٔ ورود (قبلاً 404)
+GET  /api/v1/auth/otp/login       → 200 (HTML)
+POST /api/v1/auth/otp/login       → {"redirect_url":"…?code=932b225e…&state=xyz"}
+POST /oauth/token (code+PKCE)     → {"access_token":"df328d27…","token_type":"Bearer","expires_in":900,"refresh_token":"8cd82907…"}
+```
+
+تست‌های PG جدید: `TestPG_UpsertCustomerByPhoneIsIdempotent`،
+`TestOTPVerify_DefaultsPurposeToLogin` — هر دو PASS.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
