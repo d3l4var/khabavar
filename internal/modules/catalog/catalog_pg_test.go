@@ -159,3 +159,47 @@ func TestPG_StatusUpdateRejectsUnknownProduct(t *testing.T) {
 		t.Fatalf("UpdateProductStatus on a missing product: %v, want ErrProductNotFound", err)
 	}
 }
+
+// TestPG_ListProductsByCategory: the storefront category page depends on this query
+// and it had no test on the real schema.
+func TestPG_ListProductsByCategory(t *testing.T) {
+	pool := setupPG(t)
+	ctx := context.Background()
+	store := NewDBStore(pool)
+
+	var catID, productID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO categories (name, slug) VALUES ('بالش','pillows-list') RETURNING id`).Scan(&catID); err != nil {
+		t.Fatalf("seed category: %v", err)
+	}
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO products (title, slug, status, sleep_relevance, spec_source, spec_last_reviewed_at)
+		 VALUES ('بالش طبی','pillow-list-1','PUBLISHED','SLEEP_RELATED','برگه فنی', now()) RETURNING id`).Scan(&productID); err != nil {
+		t.Fatalf("seed product: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO product_categories (product_id, category_id) VALUES ($1,$2)`, productID, catID); err != nil {
+		t.Fatalf("link category: %v", err)
+	}
+
+	items, total, err := store.ListProductsByCategory(ctx, catID, ProductPublished, 1, 10)
+	if err != nil {
+		t.Fatalf("ListProductsByCategory: %v", err)
+	}
+	if total != 1 || len(items) != 1 || items[0].ID != productID {
+		t.Fatalf("items=%d total=%d, want the one published product", len(items), total)
+	}
+
+	// A draft in the same category must not appear in the published listing.
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO products (title, slug, status) VALUES ('پیش‌نویس','pillow-list-2','DRAFT')`); err != nil {
+		t.Fatalf("seed draft: %v", err)
+	}
+	items, total, err = store.ListProductsByCategory(ctx, catID, ProductPublished, 1, 10)
+	if err != nil {
+		t.Fatalf("ListProductsByCategory (2): %v", err)
+	}
+	if total != 1 || len(items) != 1 {
+		t.Fatalf("after adding a draft: items=%d total=%d, want 1", len(items), total)
+	}
+}

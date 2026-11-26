@@ -266,3 +266,109 @@ func TestPG_ScheduledPublish(t *testing.T) {
 	}
 	var _ = time.Now
 }
+
+// TestPG_TopicEditorAndRelations covers the content writes and reads that had no test on
+// the real schema: topic status, the editor assignment, source deletion and the
+// product-article relation with its mandatory reason (MA-5).
+func TestPG_TopicEditorAndRelations(t *testing.T) {
+	pool, svc, store := setupContent(t)
+	ctx := context.Background()
+
+	topicID, err := svc.CreateTopic(ctx, Topic{Name: "تغذیه", Slug: "nutrition-pg"})
+	if err != nil {
+		t.Fatalf("CreateTopic: %v", err)
+	}
+	topic, err := store.GetTopic(ctx, topicID)
+	if err != nil || topic == nil {
+		t.Fatalf("GetTopic: %v", err)
+	}
+	if err := store.UpdateTopicStatus(ctx, topicID, "INACTIVE"); err != nil {
+		t.Fatalf("UpdateTopicStatus: %v", err)
+	}
+	topic, _ = store.GetTopic(ctx, topicID)
+	if topic.Status != "INACTIVE" {
+		t.Fatalf("topic status = %q, want INACTIVE", topic.Status)
+	}
+
+	articleID, err := svc.CreateArticle(ctx, Article{
+		Title: "تغذیه و خواب", Slug: "nutrition-sleep", Body: "متن", Language: "fa", SourceType: "ORIGINAL",
+	})
+	if err != nil {
+		t.Fatalf("CreateArticle: %v", err)
+	}
+
+	var editorID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO admin_users (email, full_name) VALUES ('editor@khabavar.ir','ویرایشگر') RETURNING id`).Scan(&editorID); err != nil {
+		t.Fatalf("seed editor: %v", err)
+	}
+	if err := store.SetArticleEditor(ctx, articleID, editorID); err != nil {
+		t.Fatalf("SetArticleEditor: %v", err)
+	}
+	a, _ := store.GetArticle(ctx, articleID)
+	if a.EditorID != editorID {
+		t.Fatalf("editor_id = %q, want %q", a.EditorID, editorID)
+	}
+
+	if err := store.UpdateArticleStatus(ctx, articleID, StatusInReview, nil, time.Now()); err != nil {
+		t.Fatalf("UpdateArticleStatus: %v", err)
+	}
+	a, _ = store.GetArticle(ctx, articleID)
+	if a.Status != StatusInReview {
+		t.Fatalf("article status = %q, want %q", a.Status, StatusInReview)
+	}
+
+	srcID, err := svc.AddArticleSource(ctx, ArticleSource{
+		ArticleID: articleID, SourceType: CitationGuideline, Citation: "AASM 2015",
+	})
+	if err != nil {
+		t.Fatalf("AddArticleSource: %v", err)
+	}
+	if err := store.DeleteArticleSource(ctx, srcID); err != nil {
+		t.Fatalf("DeleteArticleSource: %v", err)
+	}
+	sources, err := store.ListArticleSources(ctx, articleID)
+	if err != nil {
+		t.Fatalf("ListArticleSources: %v", err)
+	}
+	if len(sources) != 0 {
+		t.Fatalf("sources = %+v, want none after delete", sources)
+	}
+}
+
+// TestPG_AddProductArticleRelation: the relation carries a mandatory reason (MA-5) and
+// had no test on the real schema.
+func TestPG_AddProductArticleRelation(t *testing.T) {
+	pool, svc, store := setupContent(t)
+	ctx := context.Background()
+
+	articleID, err := svc.CreateArticle(ctx, Article{
+		Title: "بهترین بالش", Slug: "best-pillow", Body: "متن", Language: "fa", SourceType: "ORIGINAL",
+	})
+	if err != nil {
+		t.Fatalf("CreateArticle: %v", err)
+	}
+	var productID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO products (title, slug, status) VALUES ('بالش طبی','pillow-rel','DRAFT') RETURNING id`).Scan(&productID); err != nil {
+		t.Fatalf("seed product: %v", err)
+	}
+
+	relID, err := store.AddProductArticleRelation(ctx, ProductArticleRelation{
+		ProductID: productID, ArticleID: articleID,
+		RelationType: "EDUCATIONAL", RelationReason: "راهنمای انتخاب بالش",
+	})
+	if err != nil {
+		t.Fatalf("AddProductArticleRelation: %v", err)
+	}
+	if relID == "" {
+		t.Fatal("expected a relation id")
+	}
+
+	// The reason is mandatory (MA-5): the database must refuse an empty one.
+	if _, err := store.AddProductArticleRelation(ctx, ProductArticleRelation{
+		ProductID: productID, ArticleID: articleID, RelationType: "EDUCATIONAL",
+	}); err == nil {
+		t.Fatal("a relation with an empty reason must be refused (MA-5)")
+	}
+}

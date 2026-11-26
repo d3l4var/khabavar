@@ -216,3 +216,36 @@ func TestPG_SupplierEvaluation(t *testing.T) {
 		t.Fatal("quality_score > 100 must be rejected")
 	}
 }
+
+// TestPG_ListSupplierVariantsByVariant: the storefront supplier panel reads this and it
+// had no test on the real schema.
+func TestPG_ListSupplierVariantsByVariant(t *testing.T) {
+	pool, svc, store := setupSuppliers(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-SUP-9")
+
+	supplierID, err := svc.CreateSupplier(ctx, Supplier{Name: "تأمین‌کننده ب", SupplierType: "MANUFACTURER"})
+	if err != nil {
+		t.Fatalf("CreateSupplier: %v", err)
+	}
+	var spID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO supplier_products (supplier_id, product_id, supplier_product_code)
+		 VALUES ($1,$2,'SUP-P-9') RETURNING id`,
+		supplierID, productID).Scan(&spID); err != nil {
+		t.Fatalf("seed supplier product: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO supplier_variants (supplier_product_id, variant_id, supplier_sku, purchase_price, currency, available_quantity, status)
+		 VALUES ($1,$2,'SUP-SKU-9',500000,'IRR',10,'ACTIVE')`, spID, variantID); err != nil {
+		t.Fatalf("seed supplier variant: %v", err)
+	}
+
+	rows, err := store.ListSupplierVariantsByVariant(ctx, variantID)
+	if err != nil {
+		t.Fatalf("ListSupplierVariantsByVariant: %v", err)
+	}
+	if len(rows) != 1 || rows[0].SupplierSKU != "SUP-SKU-9" {
+		t.Fatalf("rows = %+v, want the one supplier variant", rows)
+	}
+}

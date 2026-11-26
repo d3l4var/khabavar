@@ -312,3 +312,30 @@ func seedWarehouseRow(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cod
 	}
 	return id
 }
+
+// TestPG_WarehouseReads covers both warehouse lookups, which the service uses before
+// any stock movement.
+func TestPG_WarehouseReads(t *testing.T) {
+	pool, _, store := setupInventory(t)
+	ctx := context.Background()
+	id := seedWarehouseRow(t, ctx, pool, "WH-READ-1")
+
+	byID, err := store.GetWarehouse(ctx, id)
+	if err != nil || byID == nil {
+		t.Fatalf("GetWarehouse: %v", err)
+	}
+	byCode, err := store.GetWarehouseByCode(ctx, "WH-READ-1")
+	if err != nil || byCode == nil {
+		t.Fatalf("GetWarehouseByCode: %v", err)
+	}
+	if byID.ID != byCode.ID {
+		t.Fatalf("id lookup %s != code lookup %s", byID.ID, byCode.ID)
+	}
+	missing, err := store.GetWarehouseByCode(ctx, "WH-NOPE")
+	if err != nil {
+		t.Fatalf("unknown code must not error: %v", err)
+	}
+	if missing != nil {
+		t.Fatalf("unknown code returned %+v, want nil", missing)
+	}
+}

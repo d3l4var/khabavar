@@ -371,3 +371,52 @@ func TestPG_PaymentIntentAndAttemptReads(t *testing.T) {
 		t.Fatalf("UpdatePaymentIntentStatus on a missing intent: %v, want ErrPaymentIntentNotFound", err)
 	}
 }
+
+// TestPG_CartAndOrderItemReads covers the cart lifecycle and the order-item read that
+// the storefront and the panel both depend on.
+func TestPG_CartAndOrderItemReads(t *testing.T) {
+	pool, svc, store := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-CART-1")
+
+	var cartID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO carts (session_token, status, expires_at) VALUES ('sess-cart-1','ACTIVE', now() + interval '1 hour') RETURNING id`).Scan(&cartID); err != nil {
+		t.Fatalf("seed cart: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO cart_items (cart_id, variant_id, quantity) VALUES ($1,$2,2)`, cartID, variantID); err != nil {
+		t.Fatalf("seed cart item: %v", err)
+	}
+
+	cart, items, err := store.GetCart(ctx, cartID)
+	if err != nil || cart == nil {
+		t.Fatalf("GetCart: %v", err)
+	}
+	if len(items) != 1 || items[0].Quantity != 2 {
+		t.Fatalf("cart items = %+v, want one line of 2", items)
+	}
+
+	if err := store.UpdateCartStatus(ctx, cartID, CartAbandoned); err != nil {
+		t.Fatalf("UpdateCartStatus: %v", err)
+	}
+	cart, _, err = store.GetCart(ctx, cartID)
+	if err != nil || cart == nil {
+		t.Fatalf("GetCart after update: %v", err)
+	}
+	if cart.Status != CartAbandoned {
+		t.Fatalf("cart status = %q, want %q", cart.Status, CartAbandoned)
+	}
+
+	orderID, err := svc.CreateOrder(ctx, orderInput(productID, variantID, ""))
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	orderItems, err := store.ListOrderItems(ctx, orderID)
+	if err != nil {
+		t.Fatalf("ListOrderItems: %v", err)
+	}
+	if len(orderItems) != 1 || orderItems[0].VariantID != variantID {
+		t.Fatalf("order items = %+v, want the one line", orderItems)
+	}
+}

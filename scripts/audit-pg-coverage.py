@@ -27,7 +27,10 @@ def main() -> int:
     for path in sorted(glob.glob('internal/modules/*/*_db.go')):
         module = path.split('/')[2]
         src = open(path, encoding='utf-8').read()
-        methods = {m.group(2) for m in METHOD.finditer(src) if SQL_CALL.search(m.group(5))}
+        # Unexported helpers are reached through their exported callers, so a test of
+        # the caller covers them; only exported store methods are audited.
+        methods = {m.group(2) for m in METHOD.finditer(src)
+                   if SQL_CALL.search(m.group(5)) and m.group(2)[:1].isupper()}
         pg = ''.join(open(p, encoding='utf-8').read()
                      for p in glob.glob(f'internal/modules/{module}/*pg_test.go'))
         for name in sorted(methods):

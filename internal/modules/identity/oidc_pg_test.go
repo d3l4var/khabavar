@@ -327,3 +327,46 @@ func TestPG_UpsertCustomerByPhoneIsIdempotent(t *testing.T) {
 		t.Fatalf("upsert returned %q then %q, want the same customer", first, second)
 	}
 }
+
+// TestPG_FindAdminByEmail: the panel login reads admin_users through this store, and a
+// wrong predicate here would either lock everyone out or match the wrong row.
+func TestPG_FindAdminByEmail(t *testing.T) {
+	pool, _ := setupPG(t)
+	store := NewDBAdminLoginStore(pool)
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO admin_users (email, full_name, password_hash, status)
+		 VALUES ('ops@khabavar.ir','مدیر فروشگاه','$2a$12$abcdefghijklmnopqrstuv','ACTIVE')`); err != nil {
+		t.Fatalf("seed admin: %v", err)
+	}
+
+	got, err := store.FindAdminByEmail(ctx, "OPS@khabavar.ir") // case-insensitive
+	if err != nil || got == nil {
+		t.Fatalf("FindAdminByEmail: %v", err)
+	}
+	if got.Email != "ops@khabavar.ir" || got.Status != "ACTIVE" {
+		t.Fatalf("credential = %+v, want the seeded row", got)
+	}
+
+	missing, err := store.FindAdminByEmail(ctx, "nobody@khabavar.ir")
+	if err != nil {
+		t.Fatalf("unknown email must not error: %v", err)
+	}
+	if missing != nil {
+		t.Fatalf("unknown email returned %+v, want nil", missing)
+	}
+
+	// A row with no password must not be usable (no bypass).
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO admin_users (email, full_name) VALUES ('nopass@khabavar.ir','بدون گذرواژه')`); err != nil {
+		t.Fatalf("seed passwordless admin: %v", err)
+	}
+	nopass, err := store.FindAdminByEmail(ctx, "nopass@khabavar.ir")
+	if err != nil {
+		t.Fatalf("passwordless lookup: %v", err)
+	}
+	if nopass != nil {
+		t.Fatal("an admin with no password_hash must not be returned")
+	}
+}

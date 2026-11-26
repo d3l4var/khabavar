@@ -828,6 +828,29 @@ POST /oauth/token (code+PKCE)     → {"access_token":"df328d27…","token_type"
 `GetWarehouse`, `media.*`, `suppliers.ListSupplierVariantsByVariant`, …) در فهرست
 `scripts/audit-pg-coverage.py` ثبت شده‌اند.
 
+### ۴.۲۸ بستن پوشش PG تا ۱۰۰٪ و سخت‌کردن گیت — کامیت `test(pg-coverage-100)`
+
+```
+قبل:  81 متد SQL-دار · 60 پوشش (73.2%) · 21 بدون تست
+بعد:  81 متد SQL-دار · 81 پوشش (100%)  ·  0
+```
+
+**تست‌های تازه:** `media` (اولین تست PG این ماژول)، انبار (`GetWarehouse`,
+`GetWarehouseByCode`)، کاتالوگ (`ListProductsByCategory` — با اثبات اینکه پیش‌نویس در
+فهرست منتشرشده نمی‌آید)، محتوا (`GetTopic`, `UpdateTopicStatus`, `SetArticleEditor`,
+`UpdateArticleStatus`, `DeleteArticleSource`, `AddProductArticleRelation` با اثبات الزام
+`relation_reason` در سطح DB)، کامرس (`GetCart`, `UpdateCartStatus`, `ListOrderItems`)،
+تکمیل سفارش (`GetFulfillmentItem`, `UpdateFulfillmentItemStatus`,
+`UpdateFulfillmentOrderStatus`, `ListFulfillmentOrdersByOrder`,
+`ListShipmentItemsByShipment`)، هویت (`FindAdminByEmail` — شامل اثبات اینکه حساب بدون
+`password_hash` هرگز برنمی‌گردد)، تأمین‌کننده (`ListSupplierVariantsByVariant`).
+
+**ابزار:** اسکریپت بازرسی حالا helperهای غیرصادراتی را نادیده می‌گیرد (از طریق فراخوان
+صادراتی پوشش داده می‌شوند) و **گیت CI از advisory به blocking** تغییر کرد
+(`--fail-under 95`, `continue-on-error: false`).
+
+**شاهد:** `python3 scripts/audit-pg-coverage.py --fail-under 95` → `GATE_PASS`
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

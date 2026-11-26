@@ -349,3 +349,101 @@ func TestPG_ShipmentWrites(t *testing.T) {
 		t.Fatalf("events = %+v, want one IN_TRANSIT", events)
 	}
 }
+
+// TestPG_FulfillmentReadsAndItemStatus covers the reads and the item-level status change
+// that the panel and the shipment flow rely on.
+func TestPG_FulfillmentReadsAndItemStatus(t *testing.T) {
+	pool, svc, store := setupFulfillment(t)
+	ctx := context.Background()
+	orderID, itemID := seedOrderItemGraph(t, ctx, pool, "KHA-ORD-2026-000501", "SKU-FUL-11")
+	whID := seedWarehouse(t, ctx, pool, "WH-FUL-11")
+
+	foID, err := svc.CreateFulfillmentOrder(ctx, FulfillmentOrder{
+		OrderID: orderID, SourceType: SourceOwnedInventory, WarehouseID: whID,
+	})
+	if err != nil {
+		t.Fatalf("CreateFulfillmentOrder: %v", err)
+	}
+	if err := svc.AddFulfillmentItem(ctx, FulfillmentItem{
+		FulfillmentOrderID: foID, OrderItemID: itemID, Quantity: 1,
+	}, 3); err != nil {
+		t.Fatalf("AddFulfillmentItem: %v", err)
+	}
+
+	orders, err := store.ListFulfillmentOrdersByOrder(ctx, orderID)
+	if err != nil {
+		t.Fatalf("ListFulfillmentOrdersByOrder: %v", err)
+	}
+	if len(orders) != 1 || orders[0].ID != foID {
+		t.Fatalf("fulfillment orders = %+v, want the one just created", orders)
+	}
+
+	items, err := store.ListFulfillmentItemsByFulfillment(ctx, foID)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("ListFulfillmentItems: %v (n=%d)", err, len(items))
+	}
+	item, err := store.GetFulfillmentItem(ctx, items[0].ID)
+	if err != nil || item == nil {
+		t.Fatalf("GetFulfillmentItem: %v", err)
+	}
+	if err := store.UpdateFulfillmentItemStatus(ctx, item.ID, ItemProcessing); err != nil {
+		t.Fatalf("UpdateFulfillmentItemStatus: %v", err)
+	}
+	item, _ = store.GetFulfillmentItem(ctx, item.ID)
+	if item.Status != ItemProcessing {
+		t.Fatalf("item status = %q, want %q", item.Status, ItemProcessing)
+	}
+
+	if err := store.UpdateFulfillmentOrderStatus(ctx, foID, FulfillmentConfirmed, time.Now()); err != nil {
+		t.Fatalf("UpdateFulfillmentOrderStatus: %v", err)
+	}
+	fo, _ := store.GetFulfillmentOrder(ctx, foID)
+	if fo.Status != FulfillmentConfirmed {
+		t.Fatalf("fulfillment order status = %q, want %q", fo.Status, FulfillmentConfirmed)
+	}
+}
+
+// TestPG_ListShipmentItemsByShipment: the shipment detail view reads this and it had no
+// test on the real schema.
+func TestPG_ListShipmentItemsByShipment(t *testing.T) {
+	pool, svc, store := setupFulfillment(t)
+	ctx := context.Background()
+	orderID, itemID := seedOrderItemGraph(t, ctx, pool, "KHA-ORD-2026-000601", "SKU-FUL-12")
+	whID := seedWarehouse(t, ctx, pool, "WH-FUL-12")
+
+	foID, err := svc.CreateFulfillmentOrder(ctx, FulfillmentOrder{
+		OrderID: orderID, SourceType: SourceOwnedInventory, WarehouseID: whID,
+	})
+	if err != nil {
+		t.Fatalf("CreateFulfillmentOrder: %v", err)
+	}
+	if err := svc.AddFulfillmentItem(ctx, FulfillmentItem{
+		FulfillmentOrderID: foID, OrderItemID: itemID, Quantity: 1,
+	}, 3); err != nil {
+		t.Fatalf("AddFulfillmentItem: %v", err)
+	}
+	items, err := store.ListFulfillmentItemsByFulfillment(ctx, foID)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("ListFulfillmentItemsByFulfillment: %v (n=%d)", err, len(items))
+	}
+	shID, err := store.CreateShipment(ctx, Shipment{
+		FulfillmentOrderID: foID, Carrier: "POST", ServiceType: "EXPRESS",
+		TrackingNumber: "TRK-2", ShippingCost: 1000, Status: ShipmentLabelCreated,
+	})
+	if err != nil {
+		t.Fatalf("CreateShipment: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO shipment_items (shipment_id, fulfillment_item_id, quantity) VALUES ($1,$2,1)`,
+		shID, items[0].ID); err != nil {
+		t.Fatalf("seed shipment item: %v", err)
+	}
+
+	si, err := store.ListShipmentItemsByShipment(ctx, shID)
+	if err != nil {
+		t.Fatalf("ListShipmentItemsByShipment: %v", err)
+	}
+	if len(si) != 1 || si[0].FulfillmentItemID != items[0].ID {
+		t.Fatalf("shipment items = %+v, want the one line", si)
+	}
+}
