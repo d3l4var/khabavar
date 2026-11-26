@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -274,6 +275,15 @@ var (
 
 // guard against unused time import if test trimmed later
 var _ = time.Now
+
+// NextOrderNumber mints KHA-ORD-YYYY-NNNNNN from the order_number_seq sequence.
+func (s *DBStore) NextOrderNumber(ctx context.Context, year int) (string, error) {
+	var n int64
+	if err := s.pool.QueryRow(ctx, `SELECT nextval('order_number_seq')`).Scan(&n); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("KHA-ORD-%04d-%06d", year, n), nil
+}
 
 // ── RefundStore implementation ────────────────────────────────────────────────
 // Column set follows migration 000006 (DB v2 §10.6): a refund references the

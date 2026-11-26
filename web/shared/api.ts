@@ -99,6 +99,56 @@ export async function searchProducts(q: string, page = 1, pageSize = 20) {
   )
 }
 
+export type VariantPrice = {
+  variant_id: string
+  selling_price: number
+  discount: number
+  net_revenue: number
+  currency: string
+}
+
+// Storefront price: the confidential cost/economics fields are never exposed here
+// (R-05 §۲۴). A variant without an approved price answers 404, which the UI shows as
+// "not for sale" rather than as an error.
+export async function getVariantPrice(variantId: string) {
+  return request<{ data: VariantPrice }>(`/variants/${encodeURIComponent(variantId)}/price`)
+}
+
+// ── orders ──
+export type OrderItemInput = {
+  product_id: string
+  variant_id: string
+  sku_snapshot: string
+  title_snapshot: string
+  quantity: number
+  unit_price: number
+  discount_amount: number
+  tax_amount: number
+  supply_type: 'OWNED_INVENTORY' | 'SUPPLIER_SOURCED'
+}
+
+export type OrderInput = {
+  customer_id?: string
+  guest_phone?: string
+  order_number?: string
+  currency?: string
+  items: OrderItemInput[]
+  shipping_address: Record<string, string>
+  discount_total: number
+  shipping_total: number
+  tax_total: number
+}
+
+export async function createOrder(input: OrderInput) {
+  return request<{ id: string }>('/orders', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function getOrderByNumber(number: string) {
+  return request<{ id: string; order_number: string; status: string; grand_total: number; paid_total: number }>(
+    `/orders/${encodeURIComponent(number)}`,
+  )
+}
+
 // ── magazine ──
 export async function listArticles(page = 1, pageSize = 20) {
   return request<{ data: Article[]; total: number }>(`/articles?page=${page}&page_size=${pageSize}`)

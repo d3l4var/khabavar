@@ -3,6 +3,7 @@ package commerce
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -226,6 +227,11 @@ func TestReconcileTransaction_NotReconciled(t *testing.T) {
 	if res.Reconciled {
 		t.Fatal("expected NOT reconciled")
 	}
+}
+
+// NextOrderNumber satisfies Store for the refund tests, which never create orders.
+func (s *stubOrderStore) NextOrderNumber(_ context.Context, year int) (string, error) {
+	return fmt.Sprintf("KHA-ORD-%04d-000001", year), nil
 }
 
 // stubOrderStore is a minimal Store for refund tests (only GetOrder needed).

@@ -245,3 +245,38 @@ func TestPG_OrderTotalsConstraint(t *testing.T) {
 	_ = errors.Is(err, ErrOrderNotFound)
 	_ = time.Now
 }
+
+// TestPG_OrderNumberIsMintedByTheServer: the contract makes the business order number
+// server-owned (§۴.۱), so a checkout that omits it must still succeed and produce a
+// KHA-ORD-YYYY-NNNNNN number from the sequence.
+func TestPG_OrderNumberIsMintedByTheServer(t *testing.T) {
+	pool, svc, store := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-COM-9")
+
+	in := orderInput(productID, variantID, "")
+	id, err := svc.CreateOrder(ctx, in)
+	if err != nil {
+		t.Fatalf("CreateOrder without a number: %v", err)
+	}
+	o, err := store.GetOrder(ctx, id)
+	if err != nil || o == nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if o.OrderNumber == "" {
+		t.Fatal("the server must mint an order number")
+	}
+	if len(o.OrderNumber) != len("KHA-ORD-2026-000001") || o.OrderNumber[:8] != "KHA-ORD-" {
+		t.Fatalf("order_number = %q, want KHA-ORD-YYYY-NNNNNN", o.OrderNumber)
+	}
+
+	// Two checkouts must not collide on the unique number.
+	second, err := svc.CreateOrder(ctx, in)
+	if err != nil {
+		t.Fatalf("second CreateOrder: %v", err)
+	}
+	o2, _ := store.GetOrder(ctx, second)
+	if o2.OrderNumber == o.OrderNumber {
+		t.Fatalf("both orders got %q — the sequence must advance", o.OrderNumber)
+	}
+}

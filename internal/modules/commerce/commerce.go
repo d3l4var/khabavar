@@ -128,38 +128,38 @@ type OrderItemInput struct {
 
 // Order mirrors orders.
 type Order struct {
-	ID               string
-	OrderNumber      string
-	CustomerID       string
-	GuestPhone       string
-	Status           string
-	Currency         string
-	Subtotal         int64
-	DiscountTotal    int64
-	ShippingTotal    int64
-	TaxTotal         int64
-	GrandTotal       int64
-	PaidTotal        int64
-	RefundedTotal    int64
+	ID               string `json:"id"`
+	OrderNumber      string `json:"order_number"`
+	CustomerID       string `json:"customer_id,omitempty"`
+	GuestPhone       string `json:"guest_phone,omitempty"`
+	Status           string `json:"status"`
+	Currency         string `json:"currency"`
+	Subtotal         int64  `json:"subtotal"`
+	DiscountTotal    int64  `json:"discount_total"`
+	ShippingTotal    int64  `json:"shipping_total"`
+	TaxTotal         int64  `json:"tax_total"`
+	GrandTotal       int64  `json:"grand_total"`
+	PaidTotal        int64  `json:"paid_total"`
+	RefundedTotal    int64  `json:"refunded_total"`
 	ShippingAddrSnap json.RawMessage
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // OrderItem mirrors order_items.
 type OrderItem struct {
-	ID                 string
-	OrderID            string
-	ProductID          string
-	VariantID          string
-	SKUSnapshot        string
-	TitleSnapshot      string
-	AttributesSnapshot json.RawMessage
-	Quantity           int
-	UnitPrice          int64
-	DiscountAmount     int64
-	TaxAmount          int64
-	LineTotal          int64
+	ID                 string          `json:"id"`
+	OrderID            string          `json:"order_id"`
+	ProductID          string          `json:"product_id"`
+	VariantID          string          `json:"variant_id"`
+	SKUSnapshot        string          `json:"sku_snapshot"`
+	TitleSnapshot      string          `json:"title_snapshot"`
+	AttributesSnapshot json.RawMessage `json:"attributes_snapshot,omitempty"`
+	Quantity           int             `json:"quantity"`
+	UnitPrice          int64           `json:"unit_price"`
+	DiscountAmount     int64           `json:"discount_amount"`
+	TaxAmount          int64           `json:"tax_amount"`
+	LineTotal          int64           `json:"line_total"`
 	SupplyTypeSnapshot string
 }
 
@@ -231,6 +231,10 @@ type Store interface {
 	UpdateOrderPaid(ctx context.Context, id string, paidTotal int64, status string) error
 
 	// Payment intent
+	// NextOrderNumber mints the next business order number (KHA-ORD-YYYY-NNNNNN).
+	// A sequence, not a count, so concurrent checkouts cannot collide.
+	NextOrderNumber(ctx context.Context, year int) (string, error)
+
 	CreatePaymentIntent(ctx context.Context, pi PaymentIntent) (string, error)
 	GetActivePaymentIntent(ctx context.Context, orderID string) (*PaymentIntent, error)
 	UpdatePaymentIntentStatus(ctx context.Context, id, status string) error
@@ -277,6 +281,16 @@ func (s *Service) SetNow(f func() time.Time) {
 // and enqueues an "OrderCreated" domain event. The cart is NOT consumed here — the
 // caller decides whether to mark it CONVERTED (typically yes).
 func (s *Service) CreateOrder(ctx context.Context, in OrderInput) (string, error) {
+	// The business order number is server-owned (§۴.۱): mint it BEFORE validation so a
+	// caller that omits it is not rejected, and a web client never has to invent a
+	// sequence value.
+	if in.OrderNumber == "" {
+		num, err := s.store.NextOrderNumber(ctx, s.now().Year())
+		if err != nil {
+			return "", fmt.Errorf("mint order number: %w", err)
+		}
+		in.OrderNumber = num
+	}
 	if err := validateOrderInput(in); err != nil {
 		return "", err
 	}

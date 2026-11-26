@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ type memStore struct {
 	orderByNumber map[string]string // number → id
 	items         map[string][]OrderItem
 	intents       map[string][]*PaymentIntent // orderID → intents (newest last)
+	orderSeq      int
 }
 
 func newMemStore() *memStore {
@@ -53,6 +55,14 @@ func (m *memStore) UpdateCartStatus(_ context.Context, id, status string) error 
 	}
 	c.Status = status
 	return nil
+}
+
+// NextOrderNumber mirrors the DB sequence deterministically for tests.
+func (m *memStore) NextOrderNumber(_ context.Context, year int) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.orderSeq++
+	return fmt.Sprintf("KHA-ORD-%04d-%06d", year, m.orderSeq), nil
 }
 
 func (m *memStore) CreateOrder(_ context.Context, o Order, items []OrderItem) (string, error) {
@@ -291,13 +301,22 @@ func TestCreateOrder_AllowsGuestWithPhone(t *testing.T) {
 	}
 }
 
-func TestCreateOrder_RejectsMissingOrderNumber(t *testing.T) {
-	svc, _, _ := testService(t)
+// TestCreateOrder_MintsMissingOrderNumber: the business number is server-owned (§۴.۱),
+// so omitting it is not an error — the service mints KHA-ORD-YYYY-NNNNNN.
+func TestCreateOrder_MintsMissingOrderNumber(t *testing.T) {
+	svc, store, _ := testService(t)
 	in := validOrderInput()
 	in.OrderNumber = ""
-	_, err := svc.CreateOrder(context.Background(), in)
-	if !errors.Is(err, ErrOrderNumberRequired) {
-		t.Fatalf("expected ErrOrderNumberRequired, got %v", err)
+	id, err := svc.CreateOrder(context.Background(), in)
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	o, err := store.GetOrder(context.Background(), id)
+	if err != nil || o == nil {
+		t.Fatalf("GetOrder: %v", err)
+	}
+	if o.OrderNumber == "" || len(o.OrderNumber) < len("KHA-ORD-2026-000001") {
+		t.Fatalf("order_number = %q, want KHA-ORD-YYYY-NNNNNN", o.OrderNumber)
 	}
 }
 
