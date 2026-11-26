@@ -25,6 +25,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/khabavar/khabavar/internal/modules/shared"
 )
 
 // Status / type enums (mirrors CHECK constraints in 000007_fulfillment.up.sql).
@@ -173,9 +175,19 @@ type Store interface {
 
 // Service is the fulfillment module boundary (SAD §۴.۲).
 type Service struct {
-	store Store
-	now   func() time.Time
+	store   Store
+	now     func() time.Time
+	auditor AuditRecorder // optional; nil → no audit writes
 }
+
+// AuditRecorder records a sensitive action (IAM §۷). Declared here so fulfillment stays
+// free of an audit import, the same shape the other modules use.
+type AuditRecorder interface {
+	Record(ctx context.Context, actorType, actorID, action, entityType, entityID string, oldValues, newValues any, ip string) error
+}
+
+// SetAuditor wires the audit recorder (nil = no audit writes).
+func (s *Service) SetAuditor(a AuditRecorder) { s.auditor = a }
 
 // NewService wires the store. now is injected for deterministic tests.
 func NewService(store Store) *Service {
@@ -391,6 +403,14 @@ func (s *Service) TransitionShipmentStatus(ctx context.Context, id, to string, e
 		Source:      source,
 	}); err != nil {
 		return fmt.Errorf("record shipment event: %w", err)
+	}
+	// Shipping terms / shipment status is an audited category (IAM §۷). Written after the
+	// event row so the trail never claims a transition that was not recorded.
+	if s.auditor != nil {
+		if aerr := s.auditor.Record(ctx, "ADMIN", shared.ActorID(ctx), "shipment.status", "shipment", id,
+			map[string]any{"status": sh.Status}, map[string]any{"status": to, "source": source}, ""); aerr != nil {
+			return fmt.Errorf("audit shipment transition: %w", aerr)
+		}
 	}
 	return nil
 }

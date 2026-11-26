@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/khabavar/khabavar/internal/modules/shared"
 )
 
 // Status enums (mirrors CHECK constraints in 000003_supplier.up.sql).
@@ -164,10 +166,32 @@ type Store interface {
 	UpdateSupplier(ctx context.Context, sup Supplier) error
 }
 
+// AuditRecorder records a sensitive action (IAM §۷). Declaring the interface here keeps
+// suppliers free of an audit import, the same shape commerce/catalog/inventory use.
+type AuditRecorder interface {
+	Record(ctx context.Context, actorType, actorID, action, entityType, entityID string, oldValues, newValues any, ip string) error
+}
+
 // Service is the suppliers module boundary (SAD §۴.۲).
 type Service struct {
-	store Store
-	now   func() time.Time
+	store   Store
+	auditor AuditRecorder // optional; nil → no audit writes
+	now     func() time.Time
+}
+
+// SetAuditor wires the audit recorder (nil = no audit writes).
+func (s *Service) SetAuditor(a AuditRecorder) { s.auditor = a }
+
+// audit records a sensitive supplier action (IAM §۷). A nil auditor is a no-op; a real
+// failure is returned so the caller never reports success without a trail.
+func (s *Service) audit(ctx context.Context, action, entityID string, oldV, newV any) error {
+	if s.auditor == nil {
+		return nil
+	}
+	if err := s.auditor.Record(ctx, "ADMIN", shared.ActorID(ctx), action, "supplier", entityID, oldV, newV, ""); err != nil {
+		return fmt.Errorf("audit %s: %w", action, err)
+	}
+	return nil
 }
 
 // NewService wires the store. now is injected for deterministic tests.
@@ -219,7 +243,12 @@ func (s *Service) UpdateSupplierStatus(ctx context.Context, id, newStatus string
 	if !allowedTransition(existing.Status, newStatus) {
 		return ErrInvalidStatus
 	}
-	return s.store.UpdateSupplierStatus(ctx, id, newStatus)
+	if err := s.store.UpdateSupplierStatus(ctx, id, newStatus); err != nil {
+		return err
+	}
+	// Supplier approval/suspension is an audited category (IAM §۷).
+	return s.audit(ctx, "supplier.status", id,
+		map[string]any{"status": existing.Status}, map[string]any{"status": newStatus})
 }
 
 // allowedTransition enforces the state machine above.
@@ -301,7 +330,25 @@ func (s *Service) UpdateSupplierVariantPrice(ctx context.Context, id string, new
 	if validUntil != nil && validUntil.Before(now) {
 		return ErrPriceExpired
 	}
-	return s.store.UpdateSupplierVariantPrice(ctx, id, newPrice, now, validUntil, now)
+	// The old price is read first so the audit carries before/after: a purchase-cost change
+	// with no "before" is not auditable in practice.
+	var oldPrice int64
+	var haveOld bool
+	if sv, gerr := s.store.GetSupplierVariant(ctx, id); gerr == nil && sv != nil && sv.PurchasePrice != nil {
+		oldPrice, haveOld = *sv.PurchasePrice, true
+	}
+	if err := s.store.UpdateSupplierVariantPrice(ctx, id, newPrice, now, validUntil, now); err != nil {
+		return err
+	}
+	// Purchase cost is an audited category (IAM §۷).
+	oldV := any(nil)
+	if haveOld {
+		oldV = map[string]any{"price": oldPrice}
+	}
+	if err := s.audit(ctx, "supplier.price", id, oldV, map[string]any{"price": newPrice}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ListSupplierVariantsForVariant returns all active supply offers for a variant

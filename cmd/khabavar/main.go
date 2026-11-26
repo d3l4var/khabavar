@@ -150,13 +150,19 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	invSvc := inventory.NewService(inventory.NewDBStore(pool.Pool))
 	invSvc.SetAuditor(auditor)
 
+	supSvc := suppliers.NewService(suppliers.NewDBStore(pool.Pool))
+	supSvc.SetAuditor(auditor)
+
+	fulSvc := fulfillment.NewService(fulfillment.NewDBStore(pool.Pool))
+	fulSvc.SetAuditor(auditor)
+
 	svcs := services{
 		catalog:     catSvc,
 		pricing:     pricingSvc,
 		commerce:    comSvc,
-		suppliers:   suppliers.NewService(suppliers.NewDBStore(pool.Pool)),
+		suppliers:   supSvc,
 		inventory:   invSvc,
-		fulfillment: fulfillment.NewService(fulfillment.NewDBStore(pool.Pool)),
+		fulfillment: fulSvc,
 		media:       mediaSvc,
 		content:     contentSvc,
 		ecosystem:   ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc}),

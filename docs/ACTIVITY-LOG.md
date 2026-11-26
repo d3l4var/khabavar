@@ -1480,6 +1480,36 @@ actor درست؛ `delta=0` رد می‌شود و **audit نمی‌شود**؛ و 
 بخشی از کاتالوگ/قیمت (helper موجود در `pricing/admin.go`). باقی: هزینهٔ خرید، تأیید تأمین،
 شرایط ارسال.
 
+### ۴.۵۷ سه دستهٔ باقی‌ماندهٔ IAM §۷ — کامیت `feat(audit-seven)`
+
+با این دور، **هر هفت دستهٔ §۷** پوشش داده شد.
+
+| دسته | ماژول | action |
+|---|---|---|
+| بازپرداخت | commerce | `order.refund.issued` |
+| تغییر موجودی | inventory | `inventory.adjust` |
+| تغییر وضعیت سفارش | commerce | `order.paid` / `order.cancelled` |
+| قیمت فروش / کاتالوگ | catalog + pricing | helper موجود |
+| هزینهٔ خرید | suppliers | `supplier.price` |
+| تأیید/تعلیق تأمین | suppliers | `supplier.status` |
+| شرایط/وضعیت ارسال | fulfillment | `shipment.status` |
+
+**الگوی یکسان در هر سه ماژول:** `AuditRecorder` + `SetAuditor` (بدون import چرخه‌ای)،
+audit **بعد از** نوشتن رکورد اصلی، و **خطای برگشتی** نه بلعیده.
+
+**جزئیات مهم:**
+- `UpdateSupplierVariantPrice` قیمت قبلی را **قبل از** تغییر می‌خواند تا audit «قبل/بعد»
+  داشته باشد؛ audit بدون «قبل» در عمل قابل بازرسی نیست.
+- `TransitionShipmentStatus` قبل از هر نوشتن، منبع رخداد و مجاز بودن انتقال را بررسی
+  می‌کند؛ انتقال رد‌شده **audit نمی‌شود**.
+- هر سه در `main.go` وصل شدند.
+
+**شاهد:** `TestSupplierAudit`، `TestShipmentTransitionAudit`، `TestPG_OrderStatusAudit`،
+`TestAdjustStockWritesAudit` — هر چهار مورد علاوه بر ثبت رکورد، **خطای auditor را به
+فراخواننده برمی‌گردانند** و **عملیات رد‌شده را audit نمی‌کنند**.
+
+**تست‌ها: ۳۱۲ → ۳۱۶.**
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
