@@ -1,7 +1,7 @@
 # khabavar — Project Manifest
 
-**نسخه:** v1.1 — وضعیت واقعی (نه ادعای کامل)
-**تاریخ:** 2026-11-26
+**نسخه:** v1.2 — وضعیت واقعی (نه ادعای کامل)
+**تاریخ:** 2026-11-27
 **مخزن:** https://github.com/d3l4var/khabavar
 **شاخه:** main
 
@@ -15,14 +15,30 @@ khabavar یک پلتفرم تجارت الکترونیک تخصصی سلامت �
 |-------|-------|
 | ماژول‌های Go | ۱۳ (catalog, pricing, commerce, suppliers, inventory, fulfillment, media, content, ecosystem, notifications, identity, authorization, worker) + audit, shared |
 | پکیج‌های پلتفرم | ۸ (config, db, health, idempotency, log, ratelimit, security, testpg) |
-| migrationهای DB | ۱۱ |
-| تست‌های سبز | ۲۳۰+ (۰ FAIL؛ ۲۱۲ قبل از RBAC/refund) |
-| endpointهای HTTP | ~۶۰ |
+| migrationهای DB | ۱۶ |
+| تست‌های سبز | ۳۱۶ تابع تست (۰ FAIL؛ با و بدون PG) |
+| endpointهای HTTP | ۵۸ عملیات قرارداد — ۵۸/۵۸ mount شده (۱۲۶ ثبت مسیر با aliasها) |
 | سندهای مشخصات | ۱۴ (R-01..R-CI) |
 | سندهای منبع | ۱۱ (۰۱-۱۱) |
 | ران‌بوک‌ها | ۴ (Deployment, Backup/Restore, Incident Response, Monitoring) |
-| فازهای تکمیل‌شده | P1، P3، P4، P5a–P5f، P6، P7 (بک‌اند) |
-| فازهای باقی‌مانده | P2 (Design System) · فرانت‌اند · P5b-admin (روت‌های کاتالوگ/قیمت) · P8–P10 |
+| فازهای تکمیل‌شده | P1، P3، P4، P5a–P5f، P6، P7 (بک‌اند) · P2 (Design System) · فرانت‌اند (۴ اپ) |
+| فازهای باقی‌مانده | P8–P10 (سخت‌سازی/استقرار) · پوشش تست تا آستانهٔ R-CI §۳ |
+
+### اعداد تأییدشده (۲۰۲۶-۱۱-۲۷)
+
+| سنجه | مقدار | منبع |
+|---|---|---|
+| خطوط Go (بدون تست) | ۱۶٬۲۵۸ | `wc -l` روی `*.go` غیرتست |
+| خطوط تست | ۱۲٬۳۰۹ | `wc -l` روی `*_test.go` |
+| توابع تست | ۳۱۶ | `grep -rc 'func Test'` |
+| مسیرهای قرارداد mount‌شده | ۵۸ / ۵۸ | `scripts/audit-routes.py` (بخش «DECLARED BUT NOT MOUNTED» خالی) |
+| متدهای SQL با تست PG | ۸۹ / ۸۹ | `scripts/audit-pg-coverage.py` |
+| کامیت‌ها روی `main` | ۸۶ | `git log --oneline \| wc -l` |
+
+**پوشش تست فعلی (اندازه‌گیری‌شده، نه تخمین):** آستانهٔ R-CI §۳ برآورده **نشده** است.
+`inventory 47.2٪`، `pricing 61.7٪`، `commerce 68.3٪` (آستانهٔ مالی ۹۰٪)؛
+`content 45.4٪`، `media 47.4٪`، `identity 51.2٪`، `catalog 59.3٪`، `suppliers 60.2٪`،
+`fulfillment 60.8٪` (آستانهٔ سایر ۷۵٪). گام coverage در CI `continue-on-error` است.
 
 ## ساختار پروژه
 
@@ -32,7 +48,7 @@ khabavar/
 ├── internal/
 │   ├── modules/           # ۱۳ ماژول دامنه + audit + shared
 │   └── platform/          # config, db, health, idempotency, log, ratelimit, security
-├── migrations/            # ۱۱ migration SQL (identity→oidc_refresh_tokens)
+├── migrations/            # ۱۶ migration SQL (identity→return_requests)
 ├── docs/
 │   ├── specs/             # ۱۴ سند مشخصات تجمیع‌شده R-XX
 │   ├── source-material/   # ۱۱ سند اولیه
