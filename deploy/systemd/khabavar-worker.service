@@ -1,0 +1,24 @@
+[Unit]
+Description=KHABAVAR — worker unit (outbox, reservation expiry, notifications, cleanup)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=khabavar-worker
+Group=khabavar-worker
+EnvironmentFile=/etc/khabavar/khabavar-worker.env
+Environment=KH_ROLE=worker
+ExecStart=/opt/khabavar/bin/khabavar
+Restart=always
+RestartSec=30
+MemoryMax=512M
+TasksMax=512
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/khabavar /var/log/khabavar
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+[Unit]
+Description=KHABAVAR — api unit (9 modules, KH_ROLE=api)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=khabavar-api
+Group=khabavar-api
+EnvironmentFile=/etc/khabavar/khabavar-api.env
+Environment=KH_ROLE=api
+ExecStart=/opt/khabavar/bin/khabavar
+Restart=always
+RestartSec=5
+MemoryMax=1G
+TasksMax=1024
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/khabavar /var/log/khabavar /var/www
+
+[Install]
+WantedBy=multi-user.target
