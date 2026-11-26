@@ -405,3 +405,20 @@ func nullableStr(v string) any {
 
 // Compile-time assertion that DBStore satisfies Store.
 var _ Store = (*DBStore)(nil)
+
+// UpdateArticle rewrites the editable columns of an article. The status is not editable
+// here: the workflow has its own guarded transitions (SAD §۷.۲).
+func (s *DBStore) UpdateArticle(ctx context.Context, a Article) error {
+	ct, err := s.pool.Exec(ctx,
+		`UPDATE articles
+		    SET title = $2, slug = $3, summary = $4, body = $5, language = $6, updated_at = now()
+		  WHERE id = $1`,
+		a.ID, a.Title, a.Slug, a.Summary, a.Body, a.Language)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrArticleNotFound
+	}
+	return nil
+}

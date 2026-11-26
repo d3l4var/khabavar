@@ -1274,6 +1274,21 @@ retry همان اعلان → 200 (already_confirmed)
 
 **بازرسی مسیرها: ۱۱ → ۹.**
 
+### ۴.۴۶ ویرایش مقاله + بازبینی در پنل — کامیت `feat(article-edit)`
+
+- **`PATCH /admin/articles/{id}`**: `Service.UpdateArticle` + `DBStore.UpdateArticle`.
+  فیلدها pointer-based‌اند (PATCH نباید فیلدی را که ذکر نشده خالی کند)، **وضعیت قابل
+  ویرایش نیست** (گردش کار مسیرهای محافظت‌شدهٔ خودش را دارد)، و slug/body خالی رد می‌شود.
+- **`POST /admin/articles/{id}/review`**: قرارداد یک endpoint بازبینی می‌خواست؛ به‌جای
+  ماشین حالت دوم، `decision` روی همان انتقال‌های محافظت‌شده نگاشت می‌شود
+  (`submit`/`approve`/`reject`). ویرایشگرِ تأییدکننده از **actor احرازشده** می‌آید، نه از بدنه.
+
+**شاهد (PG):** `TestPG_UpdateArticleAndReview` — ویرایش عنوان با slug دست‌نخورده، وضعیت
+بعد از PATCH همان DRAFT، رد شدن slug/body خالی، رد شدن submit دوباره روی IN_REVIEW، و
+چرخهٔ submit → approve → reject.
+
+**بازرسی مسیرها: ۹ → ۷.**
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

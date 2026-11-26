@@ -128,6 +128,18 @@ func (m *memStore) GetArticleBySlug(_ context.Context, slug string) (*Article, e
 	return &cp, nil
 }
 
+// UpdateArticle mirrors the DB store: it rewrites the editable columns only.
+func (m *memStore) UpdateArticle(_ context.Context, a Article) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cur, ok := m.articles[a.ID]
+	if !ok {
+		return ErrArticleNotFound
+	}
+	cur.Title, cur.Slug, cur.Summary, cur.Body, cur.Language = a.Title, a.Slug, a.Summary, a.Body, a.Language
+	return nil
+}
+
 func (m *memStore) UpdateArticleStatus(_ context.Context, id, status string, publishedAt *time.Time, _ time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

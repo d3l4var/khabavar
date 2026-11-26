@@ -9,6 +9,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+
+	"github.com/khabavar/khabavar/internal/modules/shared"
 )
 
 // ListTopicsHandler serves GET /api/v1/topics — the topic tree (storefront).
@@ -305,4 +307,69 @@ func parsePositiveInt(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+// UpdateArticleHandler serves PATCH /api/v1/admin/articles/{id}. Status is not editable
+// here: publishing and review have their own guarded routes.
+func UpdateArticleHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Title    *string `json:"title"`
+			Slug     *string `json:"slug"`
+			Summary  *string `json:"summary"`
+			Body     *string `json:"body"`
+			Language *string `json:"language"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeContentErr(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		a, err := svc.UpdateArticle(r.Context(), r.PathValue("id"), ArticlePatch{
+			Title: req.Title, Slug: req.Slug, Summary: req.Summary, Body: req.Body, Language: req.Language,
+		})
+		if err != nil {
+			writeContentSvcErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}
+}
+
+// ReviewArticleHandler serves POST /api/v1/admin/articles/{id}/review — the contract's
+// single review endpoint. The decision maps onto the existing guarded transitions, so
+// there is one state machine, not two.
+func ReviewArticleHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Decision string `json:"decision"` // submit | approve | reject
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeContentErr(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		id := r.PathValue("id")
+		var err error
+		switch req.Decision {
+		case "submit":
+			err = svc.SubmitForReview(r.Context(), id)
+		case "approve":
+			// The editor is the authenticated actor, never a body field.
+			err = svc.Approve(r.Context(), id, shared.ActorID(r.Context()))
+		case "reject":
+			err = svc.RejectToDraft(r.Context(), id)
+		default:
+			writeContentErr(w, http.StatusBadRequest, "decision must be submit, approve or reject")
+			return
+		}
+		if err != nil {
+			writeContentSvcErr(w, err)
+			return
+		}
+		a, err := svc.GetArticle(r.Context(), id)
+		if err != nil {
+			writeContentSvcErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": id, "status": a.Status})
+	}
 }

@@ -150,6 +150,7 @@ type Store interface {
 	GetArticle(ctx context.Context, id string) (*Article, error)
 	GetArticleBySlug(ctx context.Context, slug string) (*Article, error)
 	UpdateArticleStatus(ctx context.Context, id, status string, publishedAt *time.Time, now time.Time) error
+	UpdateArticle(ctx context.Context, a Article) error
 	ListPublishedArticles(ctx context.Context, page, pageSize int) ([]Article, int, error)
 	ListArticlesByTopic(ctx context.Context, topicID string, page, pageSize int) ([]Article, int, error)
 	ListTranslations(ctx context.Context, parentArticleID string) ([]Article, error)
@@ -525,4 +526,54 @@ func (s *Service) ListRelationsForProduct(ctx context.Context, productID string)
 		return nil, ErrRelationNotFound
 	}
 	return s.store.ListRelationsForProduct(ctx, productID)
+}
+
+// ArticlePatch carries the editable fields; a nil pointer means "leave it alone", so a
+// PATCH never blanks a field the caller did not mention.
+type ArticlePatch struct {
+	Title    *string
+	Slug     *string
+	Summary  *string
+	Body     *string
+	Language *string
+}
+
+// UpdateArticle edits an article. A PUBLISHED article may still be edited, but it must
+// keep a title, a slug and a body — blanking one would break the public page.
+func (s *Service) UpdateArticle(ctx context.Context, id string, patch ArticlePatch) (*Article, error) {
+	a, err := s.store.GetArticle(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if a == nil {
+		return nil, ErrArticleNotFound
+	}
+	if patch.Title != nil {
+		a.Title = *patch.Title
+	}
+	if patch.Slug != nil {
+		if *patch.Slug == "" {
+			return nil, ErrSlugRequired
+		}
+		a.Slug = *patch.Slug
+	}
+	if patch.Summary != nil {
+		a.Summary = *patch.Summary
+	}
+	if patch.Body != nil {
+		a.Body = *patch.Body
+	}
+	if patch.Language != nil {
+		a.Language = *patch.Language
+	}
+	if a.Title == "" {
+		return nil, ErrTitleRequired
+	}
+	if a.Body == "" {
+		return nil, ErrBodyRequired
+	}
+	if err := s.store.UpdateArticle(ctx, *a); err != nil {
+		return nil, err
+	}
+	return a, nil
 }

@@ -103,6 +103,8 @@ var adminPermissions = map[string]string{
 	// ── content / magazine editorial workflow ──
 	"POST /api/v1/admin/topics":                  "content.article.edit",
 	"POST /api/v1/admin/articles":                "content.article.edit",
+	"PATCH /api/v1/admin/articles/{id}":          "content.article.edit",
+	"POST /api/v1/admin/articles/{id}/review":    "content.article.review",
 	"POST /api/v1/admin/articles/{id}/submit":    "content.article.edit",
 	"POST /api/v1/admin/articles/{id}/approve":   "content.article.review",
 	"POST /api/v1/admin/articles/{id}/schedule":  "content.article.publish",
@@ -325,6 +327,8 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/articles/{id}/sources", content.ListArticleSourcesHandler(s.content))
 	api.public("GET /api/v1/articles/{id}/products", content.ListRelationsForArticleHandler(s.content))
 	api.admin("POST /api/v1/admin/articles", content.CreateArticleHandler(s.content))
+	api.admin("PATCH /api/v1/admin/articles/{id}", content.UpdateArticleHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/review", content.ReviewArticleHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/submit", content.SubmitForReviewHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/approve", content.ApproveArticleHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/schedule", content.ScheduleArticleHandler(s.content))

@@ -372,3 +372,62 @@ func TestPG_AddProductArticleRelation(t *testing.T) {
 		t.Fatal("a relation with an empty reason must be refused (MA-5)")
 	}
 }
+
+// TestPG_UpdateArticleAndReview covers the panel's edit and the single review endpoint:
+// a PATCH rewrites the editable columns and leaves the status alone, the workflow still
+// refuses an illegal jump, and blanking a required field is refused.
+func TestPG_UpdateArticleAndReview(t *testing.T) {
+	_, svc, store := setupContent(t)
+	ctx := context.Background()
+
+	id, err := svc.CreateArticle(ctx, Article{
+		Title: "عنوان اول", Slug: "edit-me", Summary: "خلاصه", Body: "متن", Language: "fa", SourceType: "ORIGINAL",
+	})
+	if err != nil {
+		t.Fatalf("CreateArticle: %v", err)
+	}
+
+	newTitle := "عنوان دوم"
+	edited, err := svc.UpdateArticle(ctx, id, ArticlePatch{Title: &newTitle})
+	if err != nil {
+		t.Fatalf("UpdateArticle: %v", err)
+	}
+	if edited.Title != "عنوان دوم" || edited.Slug != "edit-me" {
+		t.Fatalf("edited = %+v, want the new title and the same slug", edited)
+	}
+	reloaded, _ := store.GetArticle(ctx, id)
+	if reloaded.Title != "عنوان دوم" || reloaded.Status != StatusDraft {
+		t.Fatalf("reloaded = %+v, want the new title and status DRAFT", reloaded)
+	}
+
+	// A blank slug or body is refused rather than written.
+	blank := ""
+	if _, err := svc.UpdateArticle(ctx, id, ArticlePatch{Slug: &blank}); !errors.Is(err, ErrSlugRequired) {
+		t.Fatalf("blank slug = %v, want ErrSlugRequired", err)
+	}
+	if _, err := svc.UpdateArticle(ctx, id, ArticlePatch{Body: &blank}); !errors.Is(err, ErrBodyRequired) {
+		t.Fatalf("blank body = %v, want ErrBodyRequired", err)
+	}
+
+	// Review decisions map onto the guarded transitions.
+	if err := svc.SubmitForReview(ctx, id); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if err := svc.SubmitForReview(ctx, id); err == nil {
+		t.Fatal("submitting an IN_REVIEW article must be refused")
+	}
+	if err := svc.Approve(ctx, id, ""); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	a, _ := store.GetArticle(ctx, id)
+	if a.Status != StatusApproved {
+		t.Fatalf("status = %q, want APPROVED", a.Status)
+	}
+	if err := svc.RejectToDraft(ctx, id); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	a, _ = store.GetArticle(ctx, id)
+	if a.Status != StatusDraft {
+		t.Fatalf("status = %q, want DRAFT after reject", a.Status)
+	}
+}
