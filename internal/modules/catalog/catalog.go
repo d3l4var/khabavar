@@ -51,14 +51,14 @@ var (
 
 // Category mirrors categories (parent_id forms the tree).
 type Category struct {
-	ID          string
-	ParentID    string
-	Name        string
-	Slug        string
-	Description string
-	ImageID     string
-	SortOrder   int
-	Status      string
+	ID          string `json:"id"`
+	ParentID    string `json:"parent_id,omitempty"`
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	Description string `json:"description,omitempty"`
+	ImageID     string `json:"image_id,omitempty"`
+	SortOrder   int    `json:"sort_order"`
+	Status      string `json:"status"`
 }
 
 // CategoryNode is a category with its children (built by Service.CategoryTree).
@@ -70,34 +70,34 @@ type CategoryNode struct {
 // Product mirrors products. SleepRelevance/SpecSource/SpecLastReviewedAt are the
 // publish-gate fields (PRD §۲ MA-1/MA-6).
 type Product struct {
-	ID                 string
-	Title              string
-	Slug               string
-	BrandID            string
-	ShortDescription   string
-	Description        string
-	Manufacturer       string
-	CountryOfOrigin    string
-	SleepRelevance     string
-	SpecSource         string
-	SpecLastReviewedAt *time.Time
-	Status             string
-	PublishedAt        *time.Time
-	CategoryIDs        []string
+	ID                 string     `json:"id"`
+	Title              string     `json:"title"`
+	Slug               string     `json:"slug"`
+	BrandID            string     `json:"brand_id,omitempty"`
+	ShortDescription   string     `json:"short_description,omitempty"`
+	Description        string     `json:"description,omitempty"`
+	Manufacturer       string     `json:"manufacturer,omitempty"`
+	CountryOfOrigin    string     `json:"country_of_origin,omitempty"`
+	SleepRelevance     string     `json:"sleep_relevance,omitempty"`
+	SpecSource         string     `json:"spec_source,omitempty"`
+	SpecLastReviewedAt *time.Time `json:"spec_last_reviewed_at,omitempty"`
+	Status             string     `json:"status"`
+	PublishedAt        *time.Time `json:"published_at,omitempty"`
+	CategoryIDs        []string   `json:"category_ids,omitempty"`
 }
 
 // Variant mirrors product_variants — the sellable unit (R-04 §۵). SKU is unique (§۱۵).
 type Variant struct {
-	ID          string
-	ProductID   string
-	SKU         string
-	Barcode     string
-	Attributes  json.RawMessage
-	WeightGrams *int
-	LengthMm    *int
-	WidthMm     *int
-	HeightMm    *int
-	Status      string
+	ID          string          `json:"id"`
+	ProductID   string          `json:"product_id"`
+	SKU         string          `json:"sku"`
+	Barcode     string          `json:"barcode,omitempty"`
+	Attributes  json.RawMessage `json:"attributes,omitempty"`
+	WeightGrams *int            `json:"weight_grams,omitempty"`
+	LengthMm    *int            `json:"length_mm,omitempty"`
+	WidthMm     *int            `json:"width_mm,omitempty"`
+	HeightMm    *int            `json:"height_mm,omitempty"`
+	Status      string          `json:"status"`
 }
 
 // ProductDetail is a product with its variants (the product-page payload).
@@ -124,10 +124,20 @@ type Store interface {
 
 // Service is the catalog module boundary (SAD §۴.۲).
 type Service struct {
-	store  Store
-	search SearchStore // optional; nil → fallback linear scan (tests only)
-	now    func() time.Time
+	store   Store
+	search  SearchStore   // optional; nil → fallback linear scan (tests only)
+	auditor AuditRecorder // optional; nil → no audit writes
+	now     func() time.Time
 }
+
+// AuditRecorder records a sensitive action (IAM §۷). *audit.Recorder satisfies it;
+// declaring the interface here keeps catalog free of an audit import.
+type AuditRecorder interface {
+	Record(ctx context.Context, actorType, actorID, action, entityType, entityID string, oldValues, newValues any, ip string) error
+}
+
+// SetAuditor wires the audit recorder (nil = no audit writes).
+func (s *Service) SetAuditor(a AuditRecorder) { s.auditor = a }
 
 // SetSearchStore wires the search backend (DBStore implements SearchStore).
 // If not called, SearchProducts falls back to a linear scan (tests only).

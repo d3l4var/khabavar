@@ -1,0 +1,199 @@
+// admin.go exposes the catalogue write surface (R-07 admin-products, R-04, QC-05).
+//
+// Every handler here is mounted behind authorization.Require (cmd/khabavar/routes.go):
+// catalog.product.edit for create/edit, catalog.product.publish for the publish gate
+// and status transitions, catalog.attribute.manage for taxonomy. Publication and
+// status changes are audited (IAM §۷: order status / catalogue publication are
+// sensitive actions).
+package catalog
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/khabavar/khabavar/internal/modules/shared"
+)
+
+// productRequest is the admin create payload. Publish-gate fields are optional at
+// creation (the gate is enforced on publish, not on draft).
+type productRequest struct {
+	Title              string     `json:"title"`
+	Slug               string     `json:"slug"`
+	BrandID            string     `json:"brand_id"`
+	ShortDescription   string     `json:"short_description"`
+	Description        string     `json:"description"`
+	Manufacturer       string     `json:"manufacturer"`
+	CountryOfOrigin    string     `json:"country_of_origin"`
+	SleepRelevance     string     `json:"sleep_relevance"`
+	SpecSource         string     `json:"spec_source"`
+	SpecLastReviewedAt *time.Time `json:"spec_last_reviewed_at"`
+	CategoryIDs        []string   `json:"category_ids"`
+}
+
+// CreateProductHandler serves POST /api/v1/admin/products.
+func CreateProductHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req productRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			return
+		}
+		id, err := svc.CreateProduct(r.Context(), Product{
+			Title:              req.Title,
+			Slug:               req.Slug,
+			BrandID:            req.BrandID,
+			ShortDescription:   req.ShortDescription,
+			Description:        req.Description,
+			Manufacturer:       req.Manufacturer,
+			CountryOfOrigin:    req.CountryOfOrigin,
+			SleepRelevance:     req.SleepRelevance,
+			SpecSource:         req.SpecSource,
+			SpecLastReviewedAt: req.SpecLastReviewedAt,
+			CategoryIDs:        req.CategoryIDs,
+		})
+		if err != nil {
+			writeCatalogErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+	}
+}
+
+// AdminProductDetailHandler serves GET /api/v1/admin/products/{id} — the panel view,
+// including DRAFT/PAUSED products the storefront must never see.
+func AdminProductDetailHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		d, err := svc.GetProductDetail(r.Context(), r.PathValue("id"))
+		if err != nil {
+			writeCatalogErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, d)
+	}
+}
+
+// PublishProductHandler serves POST /api/v1/admin/products/{id}/publish. The MA-1/MA-6
+// gate is enforced by the Service, so an incomplete product returns 422 with the
+// missing-field reason rather than a raw CHECK violation.
+func PublishProductHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if err := svc.PublishProduct(r.Context(), id); err != nil {
+			if errors.Is(err, ErrPublishGateMissing) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+					"error": err.Error(), "code": "publish_gate_missing",
+				})
+				return
+			}
+			writeCatalogErr(w, err)
+			return
+		}
+		svc.audit(r, "catalog.product.published", id, nil, map[string]any{"status": ProductPublished})
+		writeJSON(w, http.StatusOK, map[string]string{"status": ProductPublished})
+	}
+}
+
+// ProductStatusHandler serves POST /api/v1/admin/products/{id}/status with
+// {"status":"PAUSED"}. Only transitions the Service allows are accepted; anything else
+// is a 400 rather than a silent write.
+func ProductStatusHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			return
+		}
+		id := r.PathValue("id")
+		var err error
+		switch req.Status {
+		case ProductPaused:
+			err = svc.PauseProduct(r.Context(), id)
+		default:
+			// Publishing has its own route and its own gate; anything else is refused
+			// so the panel cannot bypass MA-1/MA-6 with a status write.
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "unsupported status transition", "code": "invalid_status",
+				"allowed": ProductPaused,
+			})
+			return
+		}
+		if err != nil {
+			writeCatalogErr(w, err)
+			return
+		}
+		svc.audit(r, "catalog.product.status_changed", id, nil, map[string]any{"status": req.Status})
+		writeJSON(w, http.StatusOK, map[string]string{"status": req.Status})
+	}
+}
+
+// CreateCategoryHandler serves POST /api/v1/admin/categories.
+func CreateCategoryHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ParentID    string `json:"parent_id"`
+			Name        string `json:"name"`
+			Slug        string `json:"slug"`
+			Description string `json:"description"`
+			SortOrder   int    `json:"sort_order"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			return
+		}
+		id, err := svc.CreateCategory(r.Context(), Category{
+			ParentID: req.ParentID, Name: req.Name, Slug: req.Slug,
+			Description: req.Description, SortOrder: req.SortOrder,
+		})
+		if err != nil {
+			writeCatalogErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+	}
+}
+
+// CreateVariantHandler serves POST /api/v1/admin/variants — the sellable unit. The SKU
+// uniqueness rule (§۱۵) is checked by the Service and surfaces as 409.
+func CreateVariantHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ProductID   string          `json:"product_id"`
+			SKU         string          `json:"sku"`
+			Barcode     string          `json:"barcode"`
+			Attributes  json.RawMessage `json:"attributes"`
+			WeightGrams *int            `json:"weight_grams"`
+			LengthMm    *int            `json:"length_mm"`
+			WidthMm     *int            `json:"width_mm"`
+			HeightMm    *int            `json:"height_mm"`
+			Status      string          `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			return
+		}
+		id, err := svc.CreateVariant(r.Context(), Variant{
+			ProductID: req.ProductID, SKU: req.SKU, Barcode: req.Barcode,
+			Attributes: req.Attributes, WeightGrams: req.WeightGrams,
+			LengthMm: req.LengthMm, WidthMm: req.WidthMm, HeightMm: req.HeightMm,
+			Status: req.Status,
+		})
+		if err != nil {
+			writeCatalogErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+	}
+}
+
+// audit records a sensitive catalogue action (IAM §۷). A nil recorder is a no-op.
+func (s *Service) audit(r *http.Request, action, entityID string, oldV, newV any) {
+	if s.auditor == nil {
+		return
+	}
+	_ = s.auditor.Record(r.Context(), "ADMIN", shared.ActorID(r.Context()), action, "product", entityID,
+		oldV, newV, "")
+}

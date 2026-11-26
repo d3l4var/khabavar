@@ -50,49 +50,49 @@ var (
 
 // CostRecord mirrors product_cost_records. Amounts are rials.
 type CostRecord struct {
-	ID                       string
-	VariantID                string
-	SupplyType               string
-	SupplierID               string
-	PurchaseCost             int64
-	InboundFreight           int64
-	InspectionCost           int64
-	PackagingCost            int64
-	FulfillmentCost          int64
-	EstimatedPaymentFee      int64
-	EstimatedShippingSubsidy int64
-	ExpectedReturnCost       int64
-	Currency                 string
-	ValidFrom                time.Time
-	ValidUntil               *time.Time
-	CreatedBy                string
+	ID                       string     `json:"id"`
+	VariantID                string     `json:"variant_id"`
+	SupplyType               string     `json:"supply_type"`
+	SupplierID               string     `json:"supplier_id,omitempty"`
+	PurchaseCost             int64      `json:"purchase_cost"`
+	InboundFreight           int64      `json:"inbound_freight"`
+	InspectionCost           int64      `json:"inspection_cost"`
+	PackagingCost            int64      `json:"packaging_cost"`
+	FulfillmentCost          int64      `json:"fulfillment_cost"`
+	EstimatedPaymentFee      int64      `json:"estimated_payment_fee"`
+	EstimatedShippingSubsidy int64      `json:"estimated_shipping_subsidy"`
+	ExpectedReturnCost       int64      `json:"expected_return_cost"`
+	Currency                 string     `json:"currency"`
+	ValidFrom                time.Time  `json:"valid_from"`
+	ValidUntil               *time.Time `json:"valid_until,omitempty"`
+	CreatedBy                string     `json:"created_by,omitempty"`
 }
 
 // PriceRecord mirrors product_price_records. SellingPrice is rials ex-tax.
 type PriceRecord struct {
-	ID                     string
-	VariantID              string
-	SellingPrice           int64
-	DiscountPolicy         json.RawMessage
-	TargetContributionRate *float64
-	CalculatedContribution *int64
-	Currency               string
-	ValidFrom              time.Time
-	ValidUntil             *time.Time
-	ApprovedBy             string
+	ID                     string          `json:"id"`
+	VariantID              string          `json:"variant_id"`
+	SellingPrice           int64           `json:"selling_price"`
+	DiscountPolicy         json.RawMessage `json:"discount_policy,omitempty"`
+	TargetContributionRate *float64        `json:"target_contribution_rate,omitempty"`
+	CalculatedContribution *int64          `json:"calculated_contribution,omitempty"`
+	Currency               string          `json:"currency"`
+	ValidFrom              time.Time       `json:"valid_from"`
+	ValidUntil             *time.Time      `json:"valid_until,omitempty"`
+	ApprovedBy             string          `json:"approved_by,omitempty"`
 }
 
 // UnitEconomics is the per-variant computed view (R-05 §۲۱).
 type UnitEconomics struct {
-	VariantID              string
-	Currency               string
-	SellingPrice           int64
-	Discount               int64
-	NetRevenue             int64
-	TotalCost              int64
-	Contribution           int64
-	ContributionRate       float64
-	TargetContributionRate *float64
+	VariantID              string   `json:"variant_id"`
+	Currency               string   `json:"currency"`
+	SellingPrice           int64    `json:"selling_price"`
+	Discount               int64    `json:"discount"`
+	NetRevenue             int64    `json:"net_revenue"`
+	TotalCost              int64    `json:"total_cost"`
+	Contribution           int64    `json:"contribution"`
+	ContributionRate       float64  `json:"contribution_rate"`
+	TargetContributionRate *float64 `json:"target_contribution_rate,omitempty"`
 	Warnings               []string `json:"warnings,omitempty"`
 }
 
@@ -113,9 +113,19 @@ type Store interface {
 
 // Service is the pricing module boundary.
 type Service struct {
-	store Store
-	now   func() time.Time
+	store   Store
+	auditor AuditRecorder // optional; nil → no audit writes
+	now     func() time.Time
 }
+
+// AuditRecorder records a sensitive action (IAM §۷: price and cost are audited
+// categories). *audit.Recorder satisfies it, so pricing needs no audit import.
+type AuditRecorder interface {
+	Record(ctx context.Context, actorType, actorID, action, entityType, entityID string, oldValues, newValues any, ip string) error
+}
+
+// SetAuditor wires the audit recorder (nil = no audit writes).
+func (s *Service) SetAuditor(a AuditRecorder) { s.auditor = a }
 
 func NewService(store Store) *Service { return &Service{store: store, now: time.Now} }
 

@@ -92,7 +92,7 @@ func TestEconomicsHandler_FullEconomics(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// Admin endpoint exposes the confidential fields.
-	for _, want := range []string{`"TotalCost":5500000`, `"Contribution":4000000`, `"NetRevenue":9500000`} {
+	for _, want := range []string{`"total_cost":5500000`, `"contribution":4000000`, `"net_revenue":9500000`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q: %s", want, body)
 		}

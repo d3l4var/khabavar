@@ -227,15 +227,83 @@ route                          STORE_MANAGER  FINANCE  SUPER_ADMIN
 `/admin/audit-logs` رکورد واقعی بازپرداخت را برگرداند
 (`order.refund.issued`، actor = شناسهٔ FINANCE، old/new values کامل).
 
+### ۴.۱۰ سطح نوشتنی کاتالوگ و قیمت‌گذاری (P5b-admin) — کامیت `feat(admin-write)`
+
+دوازده روت نوشتنی که قرارداد اعلام کرده بود و سرویس‌شان از قبل وجود داشت، به HTTP و
+RBAC وصل شدند:
+
+| روت | مجوز |
+|-----|------|
+| `POST /admin/products` | `catalog.product.edit` |
+| `GET /admin/products/{id}` | `catalog.product.view` |
+| `POST /admin/products/{id}/publish` | `catalog.product.publish` |
+| `POST /admin/products/{id}/status` | `catalog.product.publish` |
+| `POST /admin/categories` | `catalog.attribute.manage` |
+| `POST /admin/variants` | `catalog.product.edit` |
+| `POST /admin/variants/{id}/cost-records` | `pricing.cost.manage` |
+| `GET /admin/variants/{id}/cost-records` | `pricing.cost.manage` |
+| `POST /admin/variants/{id}/price-records` | `pricing.price.approve` |
+| `GET /admin/variants/{id}/price-records` | `pricing.price.approve` |
+| `POST /admin/price-records/{id}/approve` | `pricing.price.approve` |
+| `GET /admin/variants/{id}/economics` | `reports.financial.view` |
+
+تصمیم‌های ریزبینانه‌ای که در پیاده‌سازی گرفته شد:
+
+- **تأییدکنندهٔ قیمت از نشست خوانده می‌شود، نه از بدنه.** `approved_by` =
+  `shared.ActorID(ctx)` (R-05 §۹.۲). اگر actor خالی باشد، ۴۰۱ برمی‌گردد — fail closed.
+- **`POST /admin/products/{id}/status` فقط `PAUSED` را می‌پذیرد.** انتشار روت و دروازهٔ
+  جداگانه دارد، تا پنل نتواند با یک نوشتن وضعیت، MA-1/MA-6 را دور بزند.
+- **دروازهٔ انتشار ۴۲۲ می‌دهد** (نه ۴۰۹ قدیمی) با کد `publish_gate_missing` و دلیل
+  مشخص، به‌جای نقض خام CHECK.
+- **`ErrNoValidCost` در مسیر نوشتن ۴۰۹ است، نه ۴۰۴:** نبودِ هزینهٔ معتبر یک تعارض وضعیت
+  است که اپراتور باید حل کند.
+- **سه دستهٔ حساس IAM §۷ حالا audit می‌شوند:** `catalog.product.published`،
+  `catalog.product.status_changed`، `pricing.cost.recorded`، `pricing.price.recorded`،
+  `pricing.price.approved` — با تزریق `SetAuditor` و بدون import کردن پکیج audit.
+- **JSON همهٔ پاسخ‌ها snake_case شد.** `Product`, `Variant`, `Category`, `CostRecord`,
+  `PriceRecord`, `UnitEconomics` تگ نداشتند و کلیدهای Go (`ID`, `SellingPrice`) برمی‌گرداندند
+  — ناسازگار با بقیهٔ API و با قرارداد. یک تست قدیمی که کلید Go را assert می‌کرد به‌روز شد.
+
+**شاهد — زنجیرهٔ کامل QC-05/R-05 روی باینری واقعی:**
+
+```
+POST /admin/products  (بدون فیلدهای دروازه)     201
+POST /admin/products/{id}/publish                422  publish_gate_missing
+POST /admin/products  (با sleep_relevance+spec)  201
+POST /admin/products/{id}/publish                200  {"status":"PUBLISHED"}
+POST /admin/variants  (SKU-MP-001)               201
+POST /admin/variants  (همان SKU)                 409  duplicate_sku
+POST /admin/variants/{id}/cost-records           201  total_cost=515000  currency=IRR
+POST /admin/variants/{id}/price-records (450k)   201  warnings=[BR-06 …]
+POST /admin/variants/{id}/price-records (900k)   201  PENDING_APPROVAL
+POST /admin/price-records/{id}/approve (FINANCE) 200  approved_by=<FINANCE id>
+POST /admin/price-records/{id}/approve (تکرار)   409  already_approved
+GET  /admin/variants/{id}/economics              200  contribution=385000 rate=0.428
+GET  /variants/{id}/price (storefront)           200  بدون فیلدهای محرمانه
+GET  /admin/products/{id} (STORE_MANAGER)        200  محصول DRAFT هم دیده می‌شود
+GET  /products/{id} (storefront، همان DRAFT)     404  منتشر نشده
+```
+
+ماتریس مجوز روی همین روت‌ها:
+
+```
+POST /admin/products                    STORE_MANAGER=400 (مجوز دارد)  FINANCE=403
+POST /admin/variants/{id}/cost-records  STORE_MANAGER=400               FINANCE=400
+POST /admin/price-records/{id}/approve  STORE_MANAGER=404               FINANCE=404
+GET  /admin/variants/{id}/economics     STORE_MANAGER=403               FINANCE=200
+```
+
+(۴۰۰ = مجوز داشت، بدنه ناقص؛ ۴۰۴ = مجوز داشت، رکورد نیست. این‌ها رفتار درست‌اند.)
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
-1. **روت‌های نوشتنی ادمین که پیاده نشده‌اند** (خواندنی‌ها در §۴.۹ اضافه شدند):
-   `/admin/products` (ایجاد/ویرایش/انتشار/تغییر وضعیت)،
-   `/admin/variants/{id}/cost-records`، `/admin/variants/{id}/price-records`،
-   `/admin/price-records/{id}/approve`، `/admin/stock`، `/admin/stock/movements`،
-   `/admin/reservations`. این‌ها همان «P5b-admin» نقشهٔ راه‌اند و پیش‌نیاز پنل مدیریت.
+1. **روت‌های ادمین باقی‌مانده** — کاتالوگ و قیمت‌گذاری در §۴.۱۰ بسته شد. باقی:
+   `/admin/stock`، `/admin/stock/movements`، `/admin/reservations` (نوشتن موجودی از پنل؛
+   سرویس inventory از قبل وجود دارد و فقط لایهٔ HTTP و مجوز `inventory.manage` لازم است)،
+   و ویرایش محصول (`PATCH /admin/products/{id}`) که در قرارداد هست ولی سرویس
+   `UpdateProduct` ندارد.
 2. **فرانت‌اند** — `web/{main,shop,magazine,admin}` هر کدام ۱۰ خط scaffold است. P2
    (Design System) و سپس صفحات UJ. تا آن زمان دروازهٔ a11y فقط هشدار می‌دهد.
 3. **پوشش تست** — آستانهٔ R-CI §۳: ≥۹۰٪ منطق مالی/موجودی، ≥۷۵٪ سایر. وضعیت فعلی:

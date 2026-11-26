@@ -123,6 +123,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 
 	catSvc := catalog.NewService(catalog.NewDBStore(pool.Pool))
 	catSvc.SetSearchStore(catalog.NewDBStore(pool.Pool))
+	catSvc.SetAuditor(auditor)
 	contentSvc := content.NewService(content.NewDBStore(pool.Pool))
 	contentSvc.SetSearchStore(content.NewDBStore(pool.Pool))
 
@@ -134,9 +135,12 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 
 	mediaSvc := media.NewService(media.NewDBStore(pool.Pool), media.NewLocalStorage(cfg.StorageLocalRoot))
 
+	pricingSvc := pricing.NewService(pricing.NewDBStore(pool.Pool))
+	pricingSvc.SetAuditor(auditor)
+
 	svcs := services{
 		catalog:     catSvc,
-		pricing:     pricing.NewService(pricing.NewDBStore(pool.Pool)),
+		pricing:     pricingSvc,
 		commerce:    comSvc,
 		suppliers:   suppliers.NewService(suppliers.NewDBStore(pool.Pool)),
 		inventory:   inventory.NewService(inventory.NewDBStore(pool.Pool)),

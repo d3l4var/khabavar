@@ -67,6 +67,22 @@ var adminPermissions = map[string]string{
 	"POST /api/v1/admin/media":        "catalog.product.edit",
 	"DELETE /api/v1/admin/media/{id}": "catalog.product.edit",
 
+	// ── catalogue writes (QC-05, R-04) ──
+	"POST /api/v1/admin/products":              "catalog.product.edit",
+	"GET /api/v1/admin/products/{id}":          "catalog.product.view",
+	"POST /api/v1/admin/products/{id}/publish": "catalog.product.publish",
+	"POST /api/v1/admin/products/{id}/status":  "catalog.product.publish",
+	"POST /api/v1/admin/categories":            "catalog.attribute.manage",
+	"POST /api/v1/admin/variants":              "catalog.product.edit",
+
+	// ── pricing writes (R-05) ──
+	"POST /api/v1/admin/variants/{id}/cost-records":  "pricing.cost.manage",
+	"GET /api/v1/admin/variants/{id}/cost-records":   "pricing.cost.manage",
+	"POST /api/v1/admin/variants/{id}/price-records": "pricing.price.approve",
+	"GET /api/v1/admin/variants/{id}/price-records":  "pricing.price.approve",
+	"POST /api/v1/admin/price-records/{id}/approve":  "pricing.price.approve",
+	"GET /api/v1/admin/variants/{id}/economics":      "reports.financial.view",
+
 	// ── admin reads (contract: /admin/orders, /admin/audit-logs, /admin/users|roles|permissions) ──
 	"GET /api/v1/admin/orders":      "order.view",
 	"GET /api/v1/admin/audit-logs":  "audit.read",
@@ -259,6 +275,22 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(s.content))
 	api.admin("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(s.content))
+
+	// ── catalogue writes (QC-05) ──
+	api.admin("POST /api/v1/admin/products", catalog.CreateProductHandler(s.catalog))
+	api.admin("GET /api/v1/admin/products/{id}", catalog.AdminProductDetailHandler(s.catalog))
+	api.admin("POST /api/v1/admin/products/{id}/publish", catalog.PublishProductHandler(s.catalog))
+	api.admin("POST /api/v1/admin/products/{id}/status", catalog.ProductStatusHandler(s.catalog))
+	api.admin("POST /api/v1/admin/categories", catalog.CreateCategoryHandler(s.catalog))
+	api.admin("POST /api/v1/admin/variants", catalog.CreateVariantHandler(s.catalog))
+
+	// ── pricing writes (R-05) ──
+	api.admin("POST /api/v1/admin/variants/{id}/cost-records", pricing.CreateCostRecordHandler(s.pricing))
+	api.admin("GET /api/v1/admin/variants/{id}/cost-records", pricing.ListCostRecordsHandler(s.pricing))
+	api.admin("POST /api/v1/admin/variants/{id}/price-records", pricing.CreatePriceRecordHandler(s.pricing))
+	api.admin("GET /api/v1/admin/variants/{id}/price-records", pricing.ListPriceRecordsHandler(s.pricing))
+	api.admin("POST /api/v1/admin/price-records/{id}/approve", pricing.ApprovePriceRecordHandler(s.pricing))
+	api.admin("GET /api/v1/admin/variants/{id}/economics", pricing.UnitEconomicsHandler(s.pricing))
 
 	// ── admin reads ──
 	api.admin("GET /api/v1/admin/orders", commerce.ListOrdersHandler(s.orderList))
