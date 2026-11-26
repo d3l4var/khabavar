@@ -13,6 +13,7 @@ import { Badge, Button, Card, Container, Footer, Header, StateBlock, useAsync } 
 import {
   adminListAudit,
   adminListOrders,
+  adminLogin,
   adminListProducts,
   adminListRoles,
   adminListStock,
@@ -46,30 +47,57 @@ function useHashRoute() {
 }
 
 function LoginScreen({ onDone }: { onDone: () => void }) {
-  const [token, setToken] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setBusy(true)
+    try {
+      await adminLogin(email, password)
+      onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'ورود ناموفق بود.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <Container>
       <h1 style={{ marginTop: 'var(--kh-space-6)' }}>ورود به پنل مدیریت</h1>
       <p style={{ color: 'var(--kh-text-muted)' }}>
-        توکن نشست پنل را وارد کنید. جریان کامل OIDC (Authorization Code + PKCE) در گام بعدی وصل می‌شود.
+        ورود با ایمیل و گذرواژهٔ سازمانی. توکن نشست در همین تب نگه داشته می‌شود.
       </p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          setAdminToken(token.trim())
-          onDone()
-        }}
-        style={{ display: 'grid', gap: 'var(--kh-space-3)', maxWidth: '520px' }}
-      >
-        <input
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="access token"
-          aria-label="توکن دسترسی"
-          style={{ padding: 'var(--kh-space-3)', borderRadius: 'var(--kh-radius-sm)', border: '1px solid var(--kh-border)', background: 'var(--kh-surface)', color: 'var(--kh-text)', font: 'inherit' }}
-        />
-        <Button type="submit" disabled={!token.trim()}>
-          ورود
+      <form onSubmit={submit} style={{ display: 'grid', gap: 'var(--kh-space-3)', maxWidth: '420px' }}>
+        <label>
+          ایمیل
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="username"
+            style={{ width: '100%', padding: 'var(--kh-space-3)', marginTop: 'var(--kh-space-1)' }}
+          />
+        </label>
+        <label>
+          گذرواژه
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            style={{ width: '100%', padding: 'var(--kh-space-3)', marginTop: 'var(--kh-space-1)' }}
+          />
+        </label>
+        {error ? <StateBlock kind="error" message={error} /> : null}
+        <Button type="submit" disabled={busy}>
+          {busy ? 'در حال ورود…' : 'ورود'}
         </Button>
       </form>
     </Container>

@@ -92,6 +92,8 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 	hh.Mount(mux)
 	mux.HandleFunc("POST /api/v1/auth/otp/start", identity.OTPStartHandler(svc, mockSmsDeliver(logger)))
 	mux.HandleFunc("POST /api/v1/auth/otp/verify", identity.OTPVerifyHandler(svc))
+	// Staff login for the panel (email + password → opaque session token).
+	mux.HandleFunc("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(svc, identity.NewDBAdminLoginStore(pool.Pool)))
 	mux.HandleFunc("GET /oauth/authorize", identity.AuthorizeHandler(oidcSvc))
 	mux.HandleFunc("POST /oauth/token", identity.TokenHandler(oidcSvc))
 	hh.SetReady(true)

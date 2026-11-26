@@ -216,6 +216,25 @@ async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
+// Staff login: email + password against the identity unit, which answers an opaque
+// session token. The token is what every /admin/* call sends as Bearer.
+export async function adminLogin(email: string, password: string) {
+  const res = await fetch(`${BASE}/auth/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  if (!res.ok) {
+    const status = res.status
+    const message =
+      status === 401 ? 'ایمیل یا گذرواژه نادرست است.' : status === 403 ? 'این حساب فعال نیست.' : `خطای ${status}`
+    throw new ApiError(status, 'login_failed', message)
+  }
+  const body = (await res.json()) as { access_token: string }
+  setAdminToken(body.access_token)
+  return body.access_token
+}
+
 export type AdminOrder = {
   id: string
   order_number: string

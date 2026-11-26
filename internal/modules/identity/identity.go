@@ -47,6 +47,7 @@ type OTPChallenge struct {
 type Session struct {
 	ID          string
 	CustomerID  string
+	AdminUserID string
 	ServiceCode string
 	TokenHash   string
 	ExpiresAt   time.Time
@@ -159,6 +160,27 @@ func (s *Service) OTPVerify(ctx context.Context, phone, purpose, submittedCode s
 
 // IssueSession creates a per-service session for the given customer and returns
 // the raw access token (returned once; only token_hash is stored — ADR-IAM-00۴).
+// IssueAdminSession issues a session bound to admin_user_id (panel login).
+func (s *Service) IssueAdminSession(ctx context.Context, adminUserID, serviceCode, ip, ua string) (string, error) {
+	token, err := randomToken()
+	if err != nil {
+		return "", err
+	}
+	sess := Session{
+		ID:          uuid.NewString(),
+		AdminUserID: adminUserID,
+		ServiceCode: serviceCode,
+		TokenHash:   HashOTP(token, s.key),
+		ExpiresAt:   s.now().Add(s.accessTTL),
+		IPAddress:   ip,
+		UserAgent:   ua,
+	}
+	if err := s.store.CreateSession(ctx, sess); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
 func (s *Service) IssueSession(ctx context.Context, customerID, serviceCode, ip, ua string) (string, error) {
 	token, err := randomToken()
 	if err != nil {
@@ -246,9 +268,10 @@ func (s *DBStore) UpsertCustomerByPhone(ctx context.Context, phone string) (stri
 
 func (s *DBStore) CreateSession(ctx context.Context, sess Session) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO identity_sessions (id, customer_id, service_code, token_hash, ip_address, user_agent, expires_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		sess.ID, sess.CustomerID, sess.ServiceCode, sess.TokenHash, nullableStr(sess.IPAddress), sess.UserAgent, sess.ExpiresAt)
+		`INSERT INTO identity_sessions (id, customer_id, admin_user_id, service_code, token_hash, ip_address, user_agent, expires_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+		sess.ID, nullableStr(sess.CustomerID), nullableStr(sess.AdminUserID), sess.ServiceCode,
+		sess.TokenHash, nullableStr(sess.IPAddress), sess.UserAgent, sess.ExpiresAt)
 	return err
 }
 
