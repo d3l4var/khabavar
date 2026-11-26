@@ -227,6 +227,12 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/variants/{id}/price", pricing.StorefrontPriceHandler(s.pricing))
 
 	// ── commerce (P4) ──
+	// Server-side cart (DB §14.1). Guests are identified by X-Guest-Cart-Token.
+	api.public("GET /api/v1/cart", commerce.CartHandler(s.commerce))
+	api.public("POST /api/v1/cart/items", commerce.AddCartItemHandler(s.commerce))
+	api.public("PATCH /api/v1/cart/items/{id}", commerce.UpdateCartItemHandler(s.commerce))
+	api.public("DELETE /api/v1/cart/items/{id}", commerce.DeleteCartItemHandler(s.commerce))
+
 	api.public("POST /api/v1/orders", commerce.CreateOrderHandler(s.commerce))
 	// GET /orders/{id} accepts either the internal UUID or the business order number
 	// (KHA-ORD-YYYY-NNNNNN) — the contract exposes /orders/{orderNumber}. The two are

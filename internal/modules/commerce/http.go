@@ -48,6 +48,10 @@ type errorResponse struct {
 // (anything outside the domain sentinels) become a generic 500: SQL text, table names
 // and driver state must never reach a client. The detail goes to the log instead.
 func writeError(w http.ResponseWriter, err error) {
+	if code, name := cartErrorCode(err); code != 0 {
+		writeJSON(w, code, map[string]any{"error": err.Error(), "code": name})
+		return
+	}
 	code := statusForError(err)
 	if code >= http.StatusInternalServerError {
 		slog.Error("commerce: request failed", "err", err)

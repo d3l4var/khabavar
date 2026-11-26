@@ -138,6 +138,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	comSvc := commerce.NewService(commerce.NewDBStore(pool.Pool), commerce.NewDBEventEnqueuer(pool.Pool))
 	comSvc.SetRefundStore(commerce.NewDBStore(pool.Pool))
 	comSvc.SetAttemptStore(commerce.NewDBStore(pool.Pool))
+	comSvc.SetCartStore(commerce.NewDBStore(pool.Pool))
 	comSvc.SetPaymentProvider(cfg.PaymentAdapter)
 	comSvc.SetAuditor(auditor)
 

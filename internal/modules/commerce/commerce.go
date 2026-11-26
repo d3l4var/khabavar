@@ -65,6 +65,9 @@ const (
 var (
 	ErrCartNotFound          = errors.New("commerce: cart not found")
 	ErrCartEmpty             = errors.New("commerce: cart is empty")
+	ErrCartItemNotFound      = errors.New("commerce: cart item not found")
+	ErrCartTokenRequired     = errors.New("commerce: X-Guest-Cart-Token is required")
+	ErrCartQuantityInvalid   = errors.New("commerce: quantity must be between 1 and 10")
 	ErrOrderNotFound         = errors.New("commerce: order not found")
 	ErrPaymentIntentNotFound = errors.New("commerce: payment intent not found")
 	ErrInvalidTransition     = errors.New("commerce: invalid status transition")
@@ -254,6 +257,7 @@ type EventEnqueuer interface {
 
 // Service is the commerce module boundary (SAD §۴.۲).
 type Service struct {
+	carts    CartStore
 	store    Store
 	queue    EventEnqueuer
 	refunds  RefundStore         // optional; wired via SetRefundStore (nil → refund methods error)

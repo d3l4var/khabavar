@@ -420,3 +420,122 @@ func TestPG_CartAndOrderItemReads(t *testing.T) {
 		t.Fatalf("order items = %+v, want the one line", orderItems)
 	}
 }
+
+// TestPG_CartLifecycle covers the server-side cart store: guest cart creation (the
+// partial unique index needs the same predicate in ON CONFLICT), item upsert, quantity
+// set, delete, merge and the priced view.
+func TestPG_CartLifecycle(t *testing.T) {
+	pool, svc, store := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-CART-PG")
+	_ = productID
+
+	// Guest cart is created once and returned again for the same token.
+	c1, err := store.GetOrCreateCart(ctx, "", "guest-token-1")
+	if err != nil {
+		t.Fatalf("GetOrCreateCart: %v", err)
+	}
+	c2, err := store.GetOrCreateCart(ctx, "", "guest-token-1")
+	if err != nil {
+		t.Fatalf("GetOrCreateCart (again): %v", err)
+	}
+	if c1.ID != c2.ID {
+		t.Fatalf("same token produced two carts: %s vs %s", c1.ID, c2.ID)
+	}
+
+	// Adding the same variant twice must sum, not duplicate (unique cart_id+variant_id).
+	if err := store.AddCartItem(ctx, c1.ID, variantID, 2); err != nil {
+		t.Fatalf("AddCartItem: %v", err)
+	}
+	if err := store.AddCartItem(ctx, c1.ID, variantID, 3); err != nil {
+		t.Fatalf("AddCartItem (again): %v", err)
+	}
+	view, err := store.CartView(ctx, c1.ID)
+	if err != nil {
+		t.Fatalf("CartView: %v", err)
+	}
+	if len(view.Items) != 1 || view.Items[0].Quantity != 5 {
+		t.Fatalf("items = %+v, want one line of 5", view.Items)
+	}
+	// No approved price yet: the line must be reported unavailable, not with a stale price.
+	if view.Items[0].Availability != "UNAVAILABLE" || view.Items[0].UnitPrice != 0 {
+		t.Fatalf("unpriced line = %+v, want UNAVAILABLE with zero price", view.Items[0])
+	}
+
+	// An approved price makes the line priced and the subtotal add up.
+	var adminID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO admin_users (email, full_name) VALUES ($1,'تأییدکننده') RETURNING id`,
+		"price-approver-"+uuid.NewString()[:8]+"@khabavar.ir").Scan(&adminID); err != nil {
+		t.Fatalf("seed approver: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO product_price_records (variant_id, selling_price, currency, valid_from, approved_by)
+		 VALUES ($1, 900000, 'IRR', now() - interval '1 minute', $2)`, variantID, adminID); err != nil {
+		t.Fatalf("seed price: %v", err)
+	}
+	view, err = store.CartView(ctx, c1.ID)
+	if err != nil {
+		t.Fatalf("CartView (priced): %v", err)
+	}
+	if view.Items[0].UnitPrice != 900000 || view.Subtotal != 4500000 {
+		t.Fatalf("priced line = %+v subtotal=%d, want 900000 x5", view.Items[0], view.Subtotal)
+	}
+
+	// Absolute quantity, then zero removes the line.
+	itemID := view.Items[0].ItemID
+	if err := store.SetCartItemQuantity(ctx, c1.ID, itemID, 1); err != nil {
+		t.Fatalf("SetCartItemQuantity: %v", err)
+	}
+	view, _ = store.CartView(ctx, c1.ID)
+	if view.Items[0].Quantity != 1 {
+		t.Fatalf("quantity = %d, want 1", view.Items[0].Quantity)
+	}
+	if err := store.SetCartItemQuantity(ctx, c1.ID, itemID, 0); err != nil {
+		t.Fatalf("SetCartItemQuantity(0): %v", err)
+	}
+	view, _ = store.CartView(ctx, c1.ID)
+	if len(view.Items) != 0 {
+		t.Fatalf("items = %+v, want none after quantity 0", view.Items)
+	}
+
+	// Deleting a line from another cart must not work (scoped by cart_id).
+	if err := store.AddCartItem(ctx, c1.ID, variantID, 1); err != nil {
+		t.Fatalf("AddCartItem: %v", err)
+	}
+	view, _ = store.CartView(ctx, c1.ID)
+	other, _ := store.GetOrCreateCart(ctx, "", "guest-token-2")
+	if err := store.DeleteCartItem(ctx, other.ID, view.Items[0].ItemID); !errors.Is(err, ErrCartItemNotFound) {
+		t.Fatalf("cross-cart delete = %v, want ErrCartItemNotFound", err)
+	}
+
+	// Merge folds the guest cart into the customer cart and retires the guest one.
+	custCart, err := store.GetOrCreateCart(ctx, seedCustomerRow(t, ctx, pool), "")
+	if err != nil {
+		t.Fatalf("customer cart: %v", err)
+	}
+	if err := store.MergeCarts(ctx, c1.ID, custCart.ID); err != nil {
+		t.Fatalf("MergeCarts: %v", err)
+	}
+	merged, _ := store.CartView(ctx, custCart.ID)
+	if len(merged.Items) != 1 || merged.Items[0].Quantity != 1 {
+		t.Fatalf("merged items = %+v, want the guest line", merged.Items)
+	}
+	guestAfter, _ := store.CartView(ctx, c1.ID)
+	if len(guestAfter.Items) != 0 {
+		t.Fatalf("guest cart still has items after merge: %+v", guestAfter.Items)
+	}
+	_ = svc
+}
+
+// seedCustomerRow inserts a customer and returns its id.
+func seedCustomerRow(t *testing.T, ctx context.Context, pool *pgxpool.Pool) string {
+	t.Helper()
+	var id string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO customers (phone) VALUES ($1) RETURNING id`,
+		"+9891200"+uuid.NewString()[:6]).Scan(&id); err != nil {
+		t.Fatalf("seed customer: %v", err)
+	}
+	return id
+}
