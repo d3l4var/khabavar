@@ -67,6 +67,18 @@ jobs:
           npm ci --no-audit --no-fund
           cd main && npx tsc -b --noEmit
 
+  pg-coverage-audit:
+    name: pg-coverage-audit
+    runs-on: ubuntu-latest
+    # Advisory for now: it prints the SQL-bearing store methods with no PG test, so a
+    # new store method that only ever runs against the in-memory fake is visible in the
+    # PR. Promote to blocking (--fail-under) once the remaining gaps are closed.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: list store methods without a PG test
+        run: python3 scripts/audit-pg-coverage.py
+
   # ── gate 2: openapi-validate ────────────────────────────────────────────────
   openapi-validate:
     name: openapi-validate
