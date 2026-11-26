@@ -29,6 +29,16 @@ const (
 	sessionCookiePath = "/oauth"
 )
 
+// requestIsSecure reports whether the browser reached us over TLS. Behind the reverse
+// proxy r.TLS is nil (nginx terminates TLS), so X-Forwarded-Proto decides — without it
+// the cookie would be issued without Secure in production.
+func requestIsSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
 // SetSessionCookie writes the session cookie (HttpOnly, SameSite=Lax, scoped to /oauth).
 func SetSessionCookie(w http.ResponseWriter, r *http.Request, token string, ttl time.Duration) {
 	http.SetCookie(w, &http.Cookie{
@@ -36,7 +46,7 @@ func SetSessionCookie(w http.ResponseWriter, r *http.Request, token string, ttl 
 		Value:    token,
 		Path:     sessionCookiePath,
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   requestIsSecure(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(ttl.Seconds()),
 	})
@@ -49,7 +59,7 @@ func ClearSessionCookie(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     sessionCookiePath,
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   requestIsSecure(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})

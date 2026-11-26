@@ -989,6 +989,33 @@ orders: 4   (KHA-ORD-2026-000002 · PENDING_PAYMENT · ۹۰٬۰۰۰ تومان)
 مینیمال قفل می‌کرد). کد یک‌بارمصرف است، ولی رفرش همان تب خطای «جریان منقضی» می‌دهد و کاربر
 باید دوباره وارد شود.
 
+### ۴.۳۵ سه شکاف تولیدی که همین جریان OIDC لو داد — کامیت `fix(deploy-oidc)`
+
+جریان OIDC که در ۴.۳۴ کار کرد، سه چیز را در **تنظیمات تولید** لو داد:
+
+1. **`/auth/callback` در nginx به سرویس هویت پروکسی می‌شد.** بلوک `location /auth/` وجود
+   داشت و مسیر callback پنل را می‌بلعید → در تولید ۴۰۴، در حالی که در تست کار می‌کرد.
+   حالا `/auth/callback` از SPA سرو می‌شود و فقط `/api/v1/auth/` به سرویس هویت می‌رود.
+2. **`/oauth/` اصلاً پروکسی نبود.** `/oauth/authorize` به `try_files` می‌افتاد و HTML
+   برمی‌گرداند — یعنی ریدایرکت هرگز اتفاق نمی‌افتاد. برای هر چهار دامنه اضافه شد.
+3. **کوکی در تولید `Secure` نبود.** سرویس Go پشت nginx، `r.TLS` را nil می‌بیند؛ کوکی
+   HttpOnly بدون `Secure` روی HTTP هم فرستاده می‌شد. `requestIsSecure` حالا
+   `X-Forwarded-Proto` را هم می‌خواند و nginx آن هدر (و `Host`/`X-Real-IP`/
+   `X-Forwarded-For`) را می‌فرستد.
+
+تست‌های تازه: `TestSessionCookieFlags` (سه حالت: TLS مستقیم، پشت nginx، HTTP ساده) و
+`TestBearerFromCookieIgnoresNonGET` (کوکی هرگز متد تغییردهنده را احراز نمی‌کند).
+
+### ۴.۳۶ `operationId` برای هر ۵۸ عملیات — کامیت `docs(openapi)`
+
+قرارداد هیچ `operationId` نداشت (۰ از ۵۸)، پس تولید کلاینت از روی spec نام‌گذاری تصادفی
+می‌گرفت. برای همهٔ عملیات نام camelCase اضافه شد (`postAuthOtpRequest`,
+`getOauthAuthorize`, `getAdminOrders`, …).
+
+**شاهد:** `npx @stoplight/spectral-cli lint api/openapi.yaml --ruleset api/.spectral.yaml
+--fail-severity=error` → **0 errors** (۲۹ warning از نوع `operation-description` که از قبل
+بودند و گیت CI روی error است، نه warning).
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

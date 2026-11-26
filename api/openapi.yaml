@@ -1079,6 +1079,7 @@ paths:
   # ───────────────────────── identity — CIAM ─────────────────────────
   /auth/otp/request:
     post:
+      operationId: postAuthOtpRequest
       tags: [identity]
       summary: درخواست کد OTP
       description: ارسال کد شش‌رقمی — سقف ۵ ارسال در ساعت به هر شماره و قفل پس از تلاش‌های ناموفق (سیاست مصوب مرحله ۳). کد خام هرگز ذخیره نمی‌شود.
@@ -1100,6 +1101,7 @@ paths:
 
   /auth/otp/verify:
     post:
+      operationId: postAuthOtpVerify
       tags: [identity]
       summary: تأیید کد OTP
       security: []
@@ -1120,6 +1122,7 @@ paths:
 
   /oauth/authorize:
     get:
+      operationId: getOauthAuthorize
       tags: [identity]
       summary: شروع جریان OIDC Authorization Code + PKCE
       description: |
@@ -1142,6 +1145,7 @@ paths:
 
   /oauth/token:
     post:
+      operationId: postOauthToken
       tags: [identity]
       summary: تبادل کد با توکن
       security: []
@@ -1160,6 +1164,7 @@ paths:
 
   /oauth/logout:
     post:
+      operationId: postOauthLogout
       tags: [identity]
       summary: ابطال نشست فعلی این سرویس
       description: نشست‌های سرویس‌های دیگر دست‌نخورده می‌مانند — نشست‌ها مستقل‌اند (CIAM §۵).
@@ -1171,6 +1176,7 @@ paths:
 
   /me:
     get:
+      operationId: getMe
       tags: [identity]
       summary: پروفایل کاربر جاری
       security:
@@ -1185,6 +1191,7 @@ paths:
 
   /me/addresses:
     get:
+      operationId: getMeAddresses
       tags: [identity]
       summary: فهرست آدرس‌های من
       security:
@@ -1202,6 +1209,7 @@ paths:
                     items: { $ref: "#/components/schemas/AddressSnapshot" }
         "401": { $ref: "#/components/responses/Unauthorized" }
     post:
+      operationId: postMeAddresses
       tags: [identity]
       summary: افزودن آدرس
       security:
@@ -1222,6 +1230,7 @@ paths:
 
   /me/addresses/{addressId}:
     patch:
+      operationId: patchMeAddressesAddressId
       tags: [identity]
       summary: ویرایش آدرس یا تنظیم پیش‌فرض
       security:
@@ -1242,6 +1251,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
+      operationId: deleteMeAddressesAddressId
       tags: [identity]
       summary: حذف آدرس
       security:
@@ -1256,6 +1266,7 @@ paths:
   # ───────────────────────── catalog — مرور عمومی ─────────────────────────
   /catalog/categories:
     get:
+      operationId: getCatalogCategories
       tags: [catalog]
       summary: درخت دسته‌بندی‌ها
       security: []
@@ -1273,6 +1284,7 @@ paths:
 
   /catalog/products:
     get:
+      operationId: getCatalogProducts
       tags: [catalog]
       summary: جست‌وجو و فهرست محصولات
       description: جست‌وجوی فارسی با نرمال‌سازی ی/ک عربی و نیم‌فاصله (DB §۱۵)؛ فیلتر ویژگی‌ها به‌صورت attribute.<code>=<option>
@@ -1294,6 +1306,7 @@ paths:
 
   /catalog/products/{slug}:
     get:
+      operationId: getCatalogProductsSlug
       tags: [catalog]
       summary: جزئیات محصول
       security: []
@@ -1310,6 +1323,7 @@ paths:
   # ───────────────────────── cart — سبد ─────────────────────────
   /cart:
     get:
+      operationId: getCart
       tags: [cart]
       summary: سبد جاری (مشتری یا مهمان)
       description: مهمان با هدر X-Guest-Cart-Token شناسایی می‌شود؛ مشتری با توکن.
@@ -1325,6 +1339,7 @@ paths:
 
   /cart/items:
     post:
+      operationId: postCartItems
       tags: [cart]
       summary: افزودن Variant به سبد
       security: []
@@ -1346,6 +1361,7 @@ paths:
 
   /cart/items/{cartItemId}:
     patch:
+      operationId: patchCartItemsCartItemId
       tags: [cart]
       summary: تغییر تعداد
       security: []
@@ -1364,6 +1380,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Cart" }
     delete:
+      operationId: deleteCartItemsCartItemId
       tags: [cart]
       summary: حذف آیتم
       security: []
@@ -1375,6 +1392,7 @@ paths:
 
   /cart/merge:
     post:
+      operationId: postCartMerge
       tags: [cart]
       summary: ادغام سبد مهمان پس از ورود
       security:
@@ -1395,6 +1413,7 @@ paths:
   # ───────────────────────── checkout — تسویه و پرداخت ─────────────────────────
   /checkout:
     post:
+      operationId: postCheckout
       tags: [checkout]
       summary: ثبت سفارش و شروع پرداخت
       description: |
@@ -1427,6 +1446,7 @@ paths:
 
   /payments/webhook:
     post:
+      operationId: postPaymentsWebhook
       tags: [checkout]
       summary: اعلان سرویس‌به‌سرویس درگاه (Notify)
       description: |
@@ -1454,6 +1474,7 @@ paths:
 
   /payments/return:
     get:
+      operationId: getPaymentsReturn
       tags: [checkout]
       summary: بازگشت مرورگر از درگاه
       description: سرور وضعیت تراکنش را استعلام می‌کند (Idempotent) و کاربر را به صفحه نتیجه سفارش هدایت می‌کند.
@@ -1468,6 +1489,7 @@ paths:
   # ───────────────────────── orders — سفارش‌ها ─────────────────────────
   /orders/{orderNumber}:
     get:
+      operationId: getOrdersOrderNumber
       tags: [orders]
       summary: مشاهده سفارش
       description: مشتری با توکن؛ مهمان با phone مطابق سفارش (پیگیری UJ-01). پاسخ شامل وضعیت، اقلام، Fulfillmentها و رویدادهای مرسوله است.
@@ -1486,6 +1508,7 @@ paths:
 
   /me/orders:
     get:
+      operationId: getMeOrders
       tags: [orders]
       summary: سفارش‌های من
       security:
@@ -1504,6 +1527,7 @@ paths:
 
   /orders/{orderNumber}/cancel:
     post:
+      operationId: postOrdersOrderNumberCancel
       tags: [orders]
       summary: درخواست لغو سفارش یا قلم
       description: فقط تا پیش از آماده‌سازی فیزیکی (PRD O-3)؛ رزروها آزاد و در صورت پرداخت موفق، بازپرداخت آغاز می‌شود.
@@ -1528,6 +1552,7 @@ paths:
 
   /orders/{orderNumber}/return-requests:
     post:
+      operationId: postOrdersOrderNumberReturnRequests
       tags: [orders]
       summary: ثبت درخواست مرجوعی قلم‌ها پس از تحویل
       description: |
@@ -1558,6 +1583,7 @@ paths:
   # ───────────────────────── magazine — مجله ─────────────────────────
   /magazine/articles:
     get:
+      operationId: getMagazineArticles
       tags: [magazine]
       summary: فهرست مقالات منتشرشده
       security: []
@@ -1575,6 +1601,7 @@ paths:
 
   /magazine/articles/{slug}:
     get:
+      operationId: getMagazineArticlesSlug
       tags: [magazine]
       summary: متن کامل مقاله
       security: []
@@ -1590,6 +1617,7 @@ paths:
 
   /magazine/topics:
     get:
+      operationId: getMagazineTopics
       tags: [magazine]
       summary: موضوعات مجله
       security: []
@@ -1607,6 +1635,7 @@ paths:
 
   /catalog/products/{slug}/articles:
     get:
+      operationId: getCatalogProductsSlugArticles
       tags: [magazine]
       summary: مقالات مرتبط با محصول
       description: فقط ارتباط‌های EDUCATIONAL و PRODUCT_GUIDE با دلیل ثبت‌شده (MA-5) — بدون دستکاری تجاری محتوای علمی.
@@ -1623,6 +1652,7 @@ paths:
   # ───────────────────────── admin — کاتالوگ ─────────────────────────
   /admin/products:
     post:
+      operationId: postAdminProducts
       tags: [admin-products]
       summary: ایجاد محصول و Variantها
       security:
@@ -1644,6 +1674,7 @@ paths:
 
   /admin/products/{productId}:
     patch:
+      operationId: patchAdminProductsProductId
       tags: [admin-products]
       summary: ویرایش محصول
       security:
@@ -1666,6 +1697,7 @@ paths:
 
   /admin/products/{productId}/status:
     post:
+      operationId: postAdminProductsProductIdStatus
       tags: [admin-products]
       summary: تغییر وضعیت محصول در چرخه QC
       description: گذارهای مجاز — DRAFT→DATA_REVIEW→APPROVED→PUBLISHED؛ وضعیت‌های PAUSED/DISCONTINUED هم از PUBLISHED.
@@ -1692,6 +1724,7 @@ paths:
 
   /admin/products/{productId}/publish:
     post:
+      operationId: postAdminProductsProductIdPublish
       tags: [admin-products]
       summary: انتشار محصول — دروازه QC-05
       description: |
@@ -1718,6 +1751,7 @@ paths:
   # ───────────────────────── admin — تأمین و موجودی ─────────────────────────
   /admin/suppliers:
     post:
+      operationId: postAdminSuppliers
       tags: [admin-supply]
       summary: ثبت تأمین‌کننده
       description: مجوز supplier.manage — ثبت/تأیید تأمین‌کننده در Audit Log حساس ثبت می‌شود (DB §13.1).
@@ -1736,6 +1770,7 @@ paths:
 
   /admin/suppliers/{supplierId}:
     patch:
+      operationId: patchAdminSuppliersSupplierId
       tags: [admin-supply]
       summary: ویرایش یا تغییر وضعیت تأمین‌کننده
       security:
@@ -1765,6 +1800,7 @@ paths:
 
   /admin/suppliers/{supplierId}/evaluations:
     post:
+      operationId: postAdminSuppliersSupplierIdEvaluations
       tags: [admin-supply]
       summary: ثبت ارزیابی وزنی تأمین‌کننده
       description: مجوز supplier.evaluate — نسخه وزن‌ها در رکورد قفل می‌شود (DB §7.4).
@@ -1783,6 +1819,7 @@ paths:
 
   /admin/stock:
     get:
+      operationId: getAdminStock
       tags: [admin-supply]
       summary: موجودی انبارها
       security:
@@ -1801,6 +1838,7 @@ paths:
 
   /admin/stock/movements:
     post:
+      operationId: postAdminStockMovements
       tags: [admin-supply]
       summary: ثبت حرکت موجودی
       description: مجوز inventory.adjust — اصلاح فقط با حرکت؛ رزرو/آزادسازی با قفل ردیفی در تراکنش (DB §14.2).
@@ -1823,6 +1861,7 @@ paths:
 
   /admin/reservations:
     get:
+      operationId: getAdminReservations
       tags: [admin-supply]
       summary: رزروهای موجودی
       security:
@@ -1842,6 +1881,7 @@ paths:
   # ───────────────────────── admin — قیمت‌گذاری ─────────────────────────
   /admin/variants/{variantId}/cost-records:
     post:
+      operationId: postAdminVariantsVariantIdCostRecords
       tags: [admin-pricing]
       summary: ثبت هزینه تمام‌شده
       description: مجوز pricing.cost.manage (STORE_MANAGER/FINANCE) — ثبت در Audit Log حساس.
@@ -1860,6 +1900,7 @@ paths:
 
   /admin/variants/{variantId}/price-records:
     post:
+      operationId: postAdminVariantsVariantIdPriceRecords
       tags: [admin-pricing]
       summary: پیشنهاد قیمت فروش
       description: رکورد با وضعیت در انتظار تأیید ثبت می‌شود — تأیید نقش مجاز الزامی است (DB §9.2).
@@ -1878,6 +1919,7 @@ paths:
 
   /admin/price-records/{priceRecordId}/approve:
     post:
+      operationId: postAdminPriceRecordsPriceRecordIdApprove
       tags: [admin-pricing]
       summary: تأیید یا رد قیمت فروش
       description: مجوز pricing.price.approve — STORE_MANAGER یا FINANCE.
@@ -1898,6 +1940,7 @@ paths:
   # ───────────────────────── admin — سفارش‌ها ─────────────────────────
   /admin/orders:
     get:
+      operationId: getAdminOrders
       tags: [admin-orders]
       summary: فهرست سفارش‌ها
       security:
@@ -1916,6 +1959,7 @@ paths:
 
   /admin/orders/{orderNumber}/fulfillments:
     post:
+      operationId: postAdminOrdersOrderNumberFulfillments
       tags: [admin-orders]
       summary: ایجاد Fulfillment (تفکیک منبع تأمین)
       description: مجوز order.manage — مجموع تخصیص هر قلم در تراکنش کنترل می‌شود (DB §11.2).
@@ -1939,6 +1983,7 @@ paths:
 
   /admin/fulfillments/{fulfillmentId}/shipments:
     post:
+      operationId: postAdminFulfillmentsFulfillmentIdShipments
       tags: [admin-orders]
       summary: ثبت مرسوله برای Fulfillment
       description: هر Fulfillment می‌تواند چند Shipment داشته باشد (DB §11.3 / ADR-COM-001).
@@ -1957,6 +2002,7 @@ paths:
 
   /admin/shipments/{shipmentId}/events:
     post:
+      operationId: postAdminShipmentsShipmentIdEvents
       tags: [admin-orders]
       summary: ثبت رویداد رهگیری
       description: ثبت ترتیب زمانی — از MANUAL یا Webhook بار (DB §11.5)؛ تغییر وضعیت سفارش در Audit ثبت می‌شود.
@@ -1975,6 +2021,7 @@ paths:
 
   /admin/orders/{orderNumber}/refunds:
     post:
+      operationId: postAdminOrdersOrderNumberRefunds
       tags: [admin-orders]
       summary: ثبت بازپرداخت جزئی
       description: فقط FINANCE (order.refund.approve) — متصل به تراکنش موفق اصلی؛ سقف بازپرداخت سرور کنترل می‌شود (BR-05).
@@ -1998,6 +2045,7 @@ paths:
 
   /admin/orders/{orderNumber}/cancel:
     post:
+      operationId: postAdminOrdersOrderNumberCancel
       tags: [admin-orders]
       summary: تأیید لغو سفارش (عملیاتی)
       description: مجوز order.cancel.approve — آزادسازی رزروها و شروع بازپرداخت در صورت پرداخت موفق.
@@ -2022,6 +2070,7 @@ paths:
   # ───────────────────────── admin — مجله ─────────────────────────
   /admin/articles:
     post:
+      operationId: postAdminArticles
       tags: [admin-content]
       summary: ایجاد مقاله
       description: مجوز content.article.edit (EDITOR/CONTENT_MANAGER)
@@ -2039,6 +2088,7 @@ paths:
 
   /admin/articles/{articleId}:
     patch:
+      operationId: patchAdminArticlesArticleId
       tags: [admin-content]
       summary: ویرایش مقاله
       security:
@@ -2056,6 +2106,7 @@ paths:
 
   /admin/articles/{articleId}/review:
     post:
+      operationId: postAdminArticlesArticleIdReview
       tags: [admin-content]
       summary: بازبینی محتوایی و سلامت محتوا
       description: مجوز content.article.review (CONTENT_REVIEWER) — نتیجه دروازه تحریریه (SAD §7.2).
@@ -2078,6 +2129,7 @@ paths:
 
   /admin/articles/{articleId}/publish:
     post:
+      operationId: postAdminArticlesArticleIdPublish
       tags: [admin-content]
       summary: انتشار مقاله
       description: مجوز content.article.publish (CONTENT_MANAGER) — شرط انتشار حداقل یک منبع معتبر (ADR-CONTENT-001).
@@ -2095,6 +2147,7 @@ paths:
 
   /admin/articles/{articleId}/relations:
     post:
+      operationId: postAdminArticlesArticleIdRelations
       tags: [admin-content]
       summary: ثبت رابطه مقاله-محصول
       description: مجوز content.relation.manage — با دلیل ارتباط (MA-5).
@@ -2114,6 +2167,7 @@ paths:
   # ───────────────────────── admin — سیستم ─────────────────────────
   /admin/audit-logs:
     get:
+      operationId: getAdminAuditLogs
       tags: [admin-system]
       summary: جست‌وجوی Audit Log
       description: مجوز audit.read — فقط خواندنی؛ SUPER_ADMIN و FINANCE.
@@ -2137,6 +2191,7 @@ paths:
 
   /admin/roles:
     get:
+      operationId: getAdminRoles
       tags: [admin-system]
       summary: نقش‌ها و مجوزهای هر نقش
       description: مجوز identity.user.manage — ماتریس نقش‌های مصوب مرحله ۳.
@@ -2157,6 +2212,7 @@ paths:
 
   /admin/permissions:
     get:
+      operationId: getAdminPermissions
       tags: [admin-system]
       summary: فهرست مجوزها
       security:
@@ -2175,6 +2231,7 @@ paths:
 
   /admin/users:
     post:
+      operationId: postAdminUsers
       tags: [admin-system]
       summary: ایجاد کاربر پرسنل
       description: مجوز identity.user.manage — فقط SUPER_ADMIN.
@@ -2191,6 +2248,7 @@ paths:
 
   /admin/users/{userId}:
     patch:
+      operationId: patchAdminUsersUserId
       tags: [admin-system]
       summary: تغییر وضعیت یا نقش‌های کاربر پرسنل
       security:
