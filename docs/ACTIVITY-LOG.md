@@ -919,6 +919,38 @@ cookie، بدون PKCE     → 400
 ورود مستقیم کارمند است. `scripts/dev/003_dev_oidc_redirect.sql` برای وایت‌لیست کردن
 `http://127.0.0.1:5180/auth/callback` در محیط توسعه اضافه شد.
 
+### ۴.۳۲ Storybook برای Design System — کامیت `feat(storybook)`
+
+`web/.storybook` با فریم‌ورک `@storybook/react-vite` ساخته شد و **همهٔ استوری‌ها در
+`fa-IR` / RTL** رندر می‌شوند — کامپوننتی که در LTR سالم به نظر می‌رسد ممکن است در محصول
+واقعی بشکند.
+
+استوری‌ها: Button (اصلی/ثانویه/غیرفعال/پیوند)، Badge (چهار tone)، Card، StateBlock
+(loading/empty/error)، ProductCard، ArticleCard، و صفحه‌آرایی (Header/Footer/Container).
+
+**دروازهٔ a11y حالا روی Storybook هم اجرا می‌شود:**
+
+```
+/iframe.html?id=design-system-components--buttons        PASS (۱۰ قاعده)
+/iframe.html?id=design-system-components--states         PASS
+/iframe.html?id=design-system-components--product-cards  PASS
+```
+
+اسکریپت‌های npm: `storybook` (dev)، `build-storybook`، `a11y`.
+
+### ۴.۳۳ اتصال پنل به جریان کوکی — تلاش دوم، باز هم برگردانده شد
+
+پیاده شد (ناوبری کامل صفحه → `/auth/callback` → تبادل کد با verifier). در مرورگر
+**daemon قفل می‌کند** هر بار که اپ با `?code=` بوت می‌شود — یعنی نشانهٔ یک حلقه در مسیر
+بوت کلاینت است، نه فقط هارنس. چون نتوانستم تأیید کنم، دوباره برگرداندم و پنل روی ورود
+مستقیم کارمند ماند (کار و تست‌شده).
+
+**آنچه تأیید شده:** سمت سرور کامل کار می‌کند (۴.۳۱): کوکی ست می‌شود، authorize با کوکی +
+PKCE + state کد می‌دهد، و بدون state/PKCE با ۴۰۰ رد می‌شود.
+
+**گام بعدی مشخص:** پروب روی `document.location.search` در اولین خط بوت (قبل از React)،
+تا معلوم شود آیا `?code=` اصلاً به اپ می‌رسد یا هارنس آن را در fallback از دست می‌دهد.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
