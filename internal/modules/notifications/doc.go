@@ -1,7 +1,8 @@
-// Package notifications — ماژول «notifications».
+// Package notifications implements the notifications module (SAD §۴.۲, ADR-ARCH-011):
+// SMS and email delivery adapters, plus a dispatcher that consumes domain events
+// from the outbox and routes them to the right channel.
 //
-// مسئولیت: اعلان‌ها (نسخه اول: درون‌سیستمی + Mock پیامک)
-// موجودیت‌ها: notifications
+// مسئولیت: اعلان‌ها (SMS + Email adapters + dispatcher)
 // وابستگی مجاز (SAD §۴.۲): shared
 //
 // قواعد وابستگی (الزامی، SAD §۴.۲):
@@ -10,15 +11,5 @@
 //  ۳. وابستگی دایره‌ای ممنوع.
 //  ۴. هر عملیات حساس: Idempotency Key + Audit (ADR-ARCH-008/010).
 //
-// نقطه شروع پیاده‌سازی: IMPLEMENTATION_GUIDE.md فاز مربوطه.
+// نوع‌ها، SmsAdapter/EmailAdapter و Dispatcher در notifications.go تعریف شده‌اند.
 package notifications
-
-// Service مرز ماژول است؛ فراخوانی‌کننده فقط از طریق این رابط با ماژول صحبت می‌کند.
-type Service interface {
-	// TODO: متدهای دامنه طبق OpenAPI و SAD §۷
-}
-
-// New سازنده پیش‌فرض؛ وابستگی‌ها تزریق می‌شوند (هرگز import مستقیم از ماژول غیرمجاز).
-func New( /* deps */ ) Service {
-	panic("not implemented — see IMPLEMENTATION_GUIDE.md")
-}
