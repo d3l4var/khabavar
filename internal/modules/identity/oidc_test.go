@@ -37,7 +37,7 @@ type memOIDCStore struct {
 
 type memSession struct {
 	id, customerID, adminUserID, serviceCode, tokenHash, ip, ua string
-	expiresAt                                                    time.Time
+	expiresAt                                                   time.Time
 }
 
 func newMemOIDCStore() *memOIDCStore {

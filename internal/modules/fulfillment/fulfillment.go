@@ -13,7 +13,7 @@
 //     quantity. The Service checks this before creating each fulfillment_item.
 //   - Shipment status transitions follow a forward-only path:
 //     LABEL_CREATED → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED
-//                                        ↘ FAILED → RETURNED
+//     ↘ FAILED → RETURNED
 //     A DELIVERED shipment cannot move back; a FAILED shipment can only go to
 //     RETURNED. The Service enforces this state machine.
 //   - Shipment events are append-only (§11.5): RecordEvent always INSERTs, never
@@ -61,9 +61,9 @@ const (
 	ShipmentReturned       = "RETURNED"
 
 	// Shipment event source (§11.5).
-	EventSourceManual    = "MANUAL"
-	EventSourceCarrier   = "CARRIER_API"
-	EventSourceWebhook   = "WEBHOOK"
+	EventSourceManual  = "MANUAL"
+	EventSourceCarrier = "CARRIER_API"
+	EventSourceWebhook = "WEBHOOK"
 )
 
 // Sentinel errors. HTTP handlers map these to status codes.
@@ -84,50 +84,50 @@ var (
 // FulfillmentOrder mirrors fulfillment_orders. One order may have multiple
 // fulfillment orders (e.g. one OWNED_INVENTORY + one SUPPLIER_SOURCED).
 type FulfillmentOrder struct {
-	ID                 string
-	OrderID            string
-	SourceType         string
-	WarehouseID        string // set iff source_type = OWNED_INVENTORY
-	SupplierID         string // set iff source_type = SUPPLIER_SOURCED
-	Status             string
-	EstimatedReadyAt   *time.Time
+	ID                  string
+	OrderID             string
+	SourceType          string
+	WarehouseID         string // set iff source_type = OWNED_INVENTORY
+	SupplierID          string // set iff source_type = SUPPLIER_SOURCED
+	Status              string
+	EstimatedReadyAt    *time.Time
 	EstimatedDeliveryAt *time.Time
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // FulfillmentItem mirrors fulfillment_items. The allocation invariant (§11.2)
 // says Σ(fulfillment_items.quantity for one order_item) ≤ order_item.quantity.
 type FulfillmentItem struct {
-	ID               string
+	ID                 string
 	FulfillmentOrderID string
-	OrderItemID      string
-	Quantity         int
-	Status           string
-	CreatedAt        time.Time
+	OrderItemID        string
+	Quantity           int
+	Status             string
+	CreatedAt          time.Time
 }
 
 // Shipment mirrors shipments. A fulfillment order may have multiple shipments
 // (e.g. partial shipments, split across packages — §11.3).
 type Shipment struct {
-	ID                string
+	ID                 string
 	FulfillmentOrderID string
-	Carrier           string
-	ServiceType       string
-	TrackingNumber    string
-	ShippingCost      int64 // IRR
-	Status            string
-	ShippedAt         *time.Time
-	DeliveredAt       *time.Time
-	CreatedAt         time.Time
+	Carrier            string
+	ServiceType        string
+	TrackingNumber     string
+	ShippingCost       int64 // IRR
+	Status             string
+	ShippedAt          *time.Time
+	DeliveredAt        *time.Time
+	CreatedAt          time.Time
 }
 
 // ShipmentItem mirrors shipment_items — a fulfillment_item split across packages (§11.4).
 type ShipmentItem struct {
-	ID               string
-	ShipmentID       string
+	ID                string
+	ShipmentID        string
 	FulfillmentItemID string
-	Quantity         int
+	Quantity          int
 }
 
 // ShipmentEvent mirrors shipment_events — the append-only timeline (§11.5).
@@ -348,10 +348,12 @@ func (s *Service) CreateShipment(ctx context.Context, sh Shipment) (string, erro
 
 // TransitionShipmentStatus moves a shipment through its lifecycle. The allowed
 // transitions (§11.3):
-//   LABEL_CREATED → IN_TRANSIT
-//   IN_TRANSIT → OUT_FOR_DELIVERY
-//   OUT_FOR_DELIVERY → DELIVERED | FAILED
-//   FAILED → RETURNED
+//
+//	LABEL_CREATED → IN_TRANSIT
+//	IN_TRANSIT → OUT_FOR_DELIVERY
+//	OUT_FOR_DELIVERY → DELIVERED | FAILED
+//	FAILED → RETURNED
+//
 // DELIVERED and RETURNED are terminal (cannot transition further).
 // Each transition also records a shipment_event (§11.5 audit trail).
 func (s *Service) TransitionShipmentStatus(ctx context.Context, id, to string, eventCode, description, source string) error {
@@ -379,11 +381,11 @@ func (s *Service) TransitionShipmentStatus(ctx context.Context, id, to string, e
 		// implementation handles this in UpdateShipmentStatus for simplicity).
 	}
 	_, _ = s.store.RecordShipmentEvent(ctx, ShipmentEvent{
-		ShipmentID: id,
-		EventCode:  eventCode,
+		ShipmentID:  id,
+		EventCode:   eventCode,
 		Description: description,
-		OccurredAt: now,
-		Source:     source,
+		OccurredAt:  now,
+		Source:      source,
 	})
 	return nil
 }

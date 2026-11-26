@@ -56,15 +56,15 @@ var EvalWeights = map[string]float64{
 
 // Sentinel errors. HTTP handlers map these to status codes.
 var (
-	ErrSupplierNotFound      = errors.New("suppliers: supplier not found")
-	ErrSupplierProductNotFound = errors.New("suppliers: supplier product not found")
-	ErrSupplierVariantNotFound = errors.New("suppliers: supplier variant not found")
-	ErrInvalidStatus         = errors.New("suppliers: invalid status transition")
+	ErrSupplierNotFound         = errors.New("suppliers: supplier not found")
+	ErrSupplierProductNotFound  = errors.New("suppliers: supplier product not found")
+	ErrSupplierVariantNotFound  = errors.New("suppliers: supplier variant not found")
+	ErrInvalidStatus            = errors.New("suppliers: invalid status transition")
 	ErrDuplicateSupplierProduct = errors.New("suppliers: supplier+product link already exists")
-	ErrScoreOutOfRange       = errors.New("suppliers: score must be 0-100")
-	ErrNameRequired          = errors.New("suppliers: name required")
-	ErrPriceNegative         = errors.New("suppliers: purchase price cannot be negative")
-	ErrPriceExpired          = errors.New("suppliers: supplier price expired (price_valid_until in past)")
+	ErrScoreOutOfRange          = errors.New("suppliers: score must be 0-100")
+	ErrNameRequired             = errors.New("suppliers: name required")
+	ErrPriceNegative            = errors.New("suppliers: purchase price cannot be negative")
+	ErrPriceExpired             = errors.New("suppliers: supplier price expired (price_valid_until in past)")
 )
 
 // Supplier mirrors suppliers.
@@ -195,10 +195,12 @@ func (s *Service) CreateSupplier(ctx context.Context, sup Supplier) (string, err
 }
 
 // UpdateSupplierStatus transitions a supplier's status. The allowed transitions:
-//   ACTIVE → PROBATION | SUSPENDED
-//   PROBATION → ACTIVE | SUSPENDED
-//   SUSPENDED → PROBATION | RETIRED
-//   RETIRED → PROBATION (review-reactivate only)
+//
+//	ACTIVE → PROBATION | SUSPENDED
+//	PROBATION → ACTIVE | SUSPENDED
+//	SUSPENDED → PROBATION | RETIRED
+//	RETIRED → PROBATION (review-reactivate only)
+//
 // A RETIRED→ACTIVE jump is rejected (must go through PROBATION review).
 func (s *Service) UpdateSupplierStatus(ctx context.Context, id, newStatus string) error {
 	if newStatus != SupplierActive && newStatus != SupplierProbation &&

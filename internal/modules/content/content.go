@@ -31,18 +31,18 @@ import (
 // Status / type enums (mirrors CHECK constraints in 000008_content.up.sql).
 const (
 	// Article status (SAD §۷.۲ editorial workflow).
-	StatusDraft      = "DRAFT"
-	StatusInReview   = "IN_REVIEW"
-	StatusApproved   = "APPROVED"
-	StatusScheduled  = "SCHEDULED"
-	StatusPublished  = "PUBLISHED"
+	StatusDraft       = "DRAFT"
+	StatusInReview    = "IN_REVIEW"
+	StatusApproved    = "APPROVED"
+	StatusScheduled   = "SCHEDULED"
+	StatusPublished   = "PUBLISHED"
 	StatusUnpublished = "UNPUBLISHED"
-	StatusArchived   = "ARCHIVED"
+	StatusArchived    = "ARCHIVED"
 
 	// Article source_type (SAD §۷.۳).
-	SourceOriginal   = "ORIGINAL"
+	SourceOriginal    = "ORIGINAL"
 	SourceTranslation = "TRANSLATION"
-	SourceCurated    = "CURATED"
+	SourceCurated     = "CURATED"
 
 	// Article citation source_type (ADR-CONTENT-001).
 	CitationJournal   = "JOURNAL"
@@ -56,31 +56,31 @@ const (
 	TopicInactive = "INACTIVE"
 
 	// Product-article relation type (§12.3).
-	RelationRelated       = "RELATED"
-	RelationEducational   = "EDUCATIONAL"
-	RelationProductGuide  = "PRODUCT_GUIDE"
-	RelationComparison    = "COMPARISON"
+	RelationRelated      = "RELATED"
+	RelationEducational  = "EDUCATIONAL"
+	RelationProductGuide = "PRODUCT_GUIDE"
+	RelationComparison   = "COMPARISON"
 
 	DefaultLanguage = "fa-IR"
 )
 
 // Sentinel errors. HTTP handlers map these to status codes.
 var (
-	ErrTopicNotFound       = errors.New("content: topic not found")
-	ErrArticleNotFound     = errors.New("content: article not found")
-	ErrSourceNotFound      = errors.New("content: article source not found")
-	ErrRelationNotFound    = errors.New("content: product-article relation not found")
-	ErrSlugRequired        = errors.New("content: slug required")
-	ErrDuplicateSlug       = errors.New("content: slug already exists")
-	ErrTitleRequired       = errors.New("content: title required")
-	ErrBodyRequired        = errors.New("content: body required")
-	ErrInvalidStatus       = errors.New("content: invalid status transition")
-	ErrPublishGateNoSource = errors.New("content: cannot publish without at least one source (ADR-CONTENT-001)")
-	ErrRelationReasonReq   = errors.New("content: relation_reason required (MA-5)")
-	ErrInvalidRelationType = errors.New("content: invalid relation_type")
-	ErrInvalidCitationType = errors.New("content: invalid citation source_type")
+	ErrTopicNotFound        = errors.New("content: topic not found")
+	ErrArticleNotFound      = errors.New("content: article not found")
+	ErrSourceNotFound       = errors.New("content: article source not found")
+	ErrRelationNotFound     = errors.New("content: product-article relation not found")
+	ErrSlugRequired         = errors.New("content: slug required")
+	ErrDuplicateSlug        = errors.New("content: slug already exists")
+	ErrTitleRequired        = errors.New("content: title required")
+	ErrBodyRequired         = errors.New("content: body required")
+	ErrInvalidStatus        = errors.New("content: invalid status transition")
+	ErrPublishGateNoSource  = errors.New("content: cannot publish without at least one source (ADR-CONTENT-001)")
+	ErrRelationReasonReq    = errors.New("content: relation_reason required (MA-5)")
+	ErrInvalidRelationType  = errors.New("content: invalid relation_type")
+	ErrInvalidCitationType  = errors.New("content: invalid citation source_type")
 	ErrInvalidArticleSource = errors.New("content: invalid article source_type")
-	ErrCannotPublish       = errors.New("content: article is not in a publishable status")
+	ErrCannotPublish        = errors.New("content: article is not in a publishable status")
 )
 
 // Topic mirrors topics (DB v2 §۱۲.۱). A topic tree via parent_id.
@@ -291,13 +291,13 @@ func (s *Service) GetPublishedArticleBySlug(ctx context.Context, slug string) (*
 
 // allowedTransitions defines the editorial workflow state machine (SAD §۷.۲).
 var allowedTransitions = map[string][]string{
-	StatusDraft:      {StatusInReview},
-	StatusInReview:   {StatusApproved, StatusDraft},
-	StatusApproved:   {StatusScheduled, StatusPublished, StatusDraft},
-	StatusScheduled:  {StatusPublished, StatusApproved},
-	StatusPublished:  {StatusUnpublished, StatusArchived},
+	StatusDraft:       {StatusInReview},
+	StatusInReview:    {StatusApproved, StatusDraft},
+	StatusApproved:    {StatusScheduled, StatusPublished, StatusDraft},
+	StatusScheduled:   {StatusPublished, StatusApproved},
+	StatusPublished:   {StatusUnpublished, StatusArchived},
 	StatusUnpublished: {StatusPublished, StatusArchived},
-	StatusArchived:   {}, // terminal
+	StatusArchived:    {}, // terminal
 }
 
 // SubmitForReview moves DRAFT → IN_REVIEW.

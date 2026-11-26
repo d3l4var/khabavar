@@ -54,7 +54,9 @@ func CreateSupplierHandler(svc *Service) http.HandlerFunc {
 func UpdateSupplierStatusHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		var req struct{ Status string `json:"status"` }
+		var req struct {
+			Status string `json:"status"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeSupErr(w, http.StatusBadRequest, "invalid json")
 			return

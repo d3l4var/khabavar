@@ -22,9 +22,9 @@ import (
 
 // SleepRelevance enums (mirrors the catalog.sleep_relevance CHECK constraint).
 const (
-	SleepRelevanceSleepAid    = "SLEEP_AID"
+	SleepRelevanceSleepAid     = "SLEEP_AID"
 	SleepRelevanceSleepRelated = "SLEEP_RELATED"
-	SleepRelevanceGeneral     = "GENERAL"
+	SleepRelevanceGeneral      = "GENERAL"
 )
 
 // SearchFilter holds the storefront search parameters.
@@ -39,8 +39,8 @@ type SearchFilter struct {
 
 // SearchResult is a product hit with a relevance snippet (the matched context).
 type SearchResult struct {
-	Product  Product
-	Snippet  string // short excerpt showing the match context (for UI highlighting)
+	Product Product
+	Snippet string // short excerpt showing the match context (for UI highlighting)
 }
 
 // SearchStore is the persistence boundary for product search. DBStore implements it.

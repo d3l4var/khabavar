@@ -121,7 +121,9 @@ func SubmitForReviewHandler(svc *Service) http.HandlerFunc {
 func ApproveArticleHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		var req struct{ EditorID string `json:"editor_id"` }
+		var req struct {
+			EditorID string `json:"editor_id"`
+		}
 		json.NewDecoder(r.Body).Decode(&req)
 		if err := svc.Approve(r.Context(), id, req.EditorID); err != nil {
 			writeContentSvcErr(w, err)
@@ -198,7 +200,9 @@ func ListArticleSourcesHandler(svc *Service) http.HandlerFunc {
 func LinkArticleTopicHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		artID := r.PathValue("id")
-		var req struct{ TopicID string `json:"topic_id"` }
+		var req struct {
+			TopicID string `json:"topic_id"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeContentErr(w, http.StatusBadRequest, "invalid json")
 			return

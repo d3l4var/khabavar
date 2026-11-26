@@ -25,12 +25,12 @@ const (
 	CategoryStatusActive   = "ACTIVE"
 	CategoryStatusInactive = "INACTIVE"
 
-	ProductDraft         = "DRAFT"
-	ProductDataReview    = "DATA_REVIEW"
-	ProductApproved      = "APPROVED"
-	ProductPublished     = "PUBLISHED"
-	ProductPaused        = "PAUSED"
-	ProductDiscontinued  = "DISCONTINUED"
+	ProductDraft        = "DRAFT"
+	ProductDataReview   = "DATA_REVIEW"
+	ProductApproved     = "APPROVED"
+	ProductPublished    = "PUBLISHED"
+	ProductPaused       = "PAUSED"
+	ProductDiscontinued = "DISCONTINUED"
 
 	VariantDraft        = "DRAFT"
 	VariantActive       = "ACTIVE"

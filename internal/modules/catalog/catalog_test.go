@@ -10,12 +10,12 @@ import (
 
 // memStore is an in-memory catalog.Store for unit tests.
 type memStore struct {
-	mu     sync.Mutex
-	cats   map[string]Category
-	prods  map[string]*memProduct
-	vars   map[string]Variant // keyed by id
-	bySKU  map[string]string  // sku → variant id
-	seq    int
+	mu    sync.Mutex
+	cats  map[string]Category
+	prods map[string]*memProduct
+	vars  map[string]Variant // keyed by id
+	bySKU map[string]string  // sku → variant id
+	seq   int
 }
 
 type memProduct struct {

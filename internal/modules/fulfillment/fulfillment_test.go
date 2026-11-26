@@ -10,17 +10,17 @@ import (
 
 // memStore is an in-memory fulfillment.Store for unit tests.
 type memStore struct {
-	mu        sync.Mutex
-	fulfill   map[string]*FulfillmentOrder
-	byOrder   map[string][]string // orderID → []fulfillmentID
-	items     map[string]*FulfillmentItem
-	itemsByFO map[string][]string // fulfillmentOrderID → []itemID
-	shipments map[string]*Shipment
-	shipByFO  map[string][]string
-	shipItems map[string]*ShipmentItem
+	mu             sync.Mutex
+	fulfill        map[string]*FulfillmentOrder
+	byOrder        map[string][]string // orderID → []fulfillmentID
+	items          map[string]*FulfillmentItem
+	itemsByFO      map[string][]string // fulfillmentOrderID → []itemID
+	shipments      map[string]*Shipment
+	shipByFO       map[string][]string
+	shipItems      map[string]*ShipmentItem
 	shipItemByShip map[string][]string
-	events    map[string][]ShipmentEvent // shipmentID → events
-	seq       int
+	events         map[string][]ShipmentEvent // shipmentID → events
+	seq            int
 }
 
 func newMemStore() *memStore {

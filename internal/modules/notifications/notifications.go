@@ -54,8 +54,8 @@ type MockSmsAdapter struct {
 
 // MockDelivery records a mock SMS send for test inspection.
 type MockDelivery struct {
-	Phone    string
-	MsgLen   int
+	Phone  string
+	MsgLen int
 }
 
 // Send logs the delivery and captures it. The raw message is NOT logged in
@@ -130,6 +130,7 @@ type Event struct {
 //   - OrderShipped → SMS ("سفارش شما ارسال شد")
 //   - RefundIssued → SMS ("بازپرداخت شما انجام شد")
 //   - OtpCode → SMS (the OTP code; never logged)
+//
 // Unknown event types are silently skipped (the worker's fallback handles logging).
 func (d *Dispatcher) Dispatch(ctx context.Context, e Event) error {
 	phone, _ := e.Payload["phone"].(string)

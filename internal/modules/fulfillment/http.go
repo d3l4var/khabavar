@@ -14,10 +14,10 @@ import (
 func CreateFulfillmentOrderHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			OrderID      string `json:"order_id"`
-			SourceType   string `json:"source_type"`
-			WarehouseID  string `json:"warehouse_id"`
-			SupplierID   string `json:"supplier_id"`
+			OrderID     string `json:"order_id"`
+			SourceType  string `json:"source_type"`
+			WarehouseID string `json:"warehouse_id"`
+			SupplierID  string `json:"supplier_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeFulErr(w, http.StatusBadRequest, "invalid json")

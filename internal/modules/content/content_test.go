@@ -10,17 +10,17 @@ import (
 
 // memStore is an in-memory content.Store for unit tests.
 type memStore struct {
-	mu        sync.Mutex
-	topics    map[string]*Topic
-	articles  map[string]*Article
-	sources   map[string]*ArticleSource
+	mu           sync.Mutex
+	topics       map[string]*Topic
+	articles     map[string]*Article
+	sources      map[string]*ArticleSource
 	sourcesByArt map[string][]string
-	links     map[string]map[string]bool // articleID → set of topicID
-	relations map[string]*ProductArticleRelation
-	relByArt  map[string][]string
-	relByProd map[string][]string
-	slugIdx   map[string]string // slug → articleID
-	seq       int
+	links        map[string]map[string]bool // articleID → set of topicID
+	relations    map[string]*ProductArticleRelation
+	relByArt     map[string][]string
+	relByProd    map[string][]string
+	slugIdx      map[string]string // slug → articleID
+	seq          int
 }
 
 func newMemStore() *memStore {

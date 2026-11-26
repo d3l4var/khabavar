@@ -7,15 +7,15 @@
 // code, never in the head.
 //
 // Signature rules implemented here:
-//   • TotalCost sums all eight landed-cost components (additive, including shipping
+//   - TotalCost sums all eight landed-cost components (additive, including shipping
 //     subsidy — see R-05 §۱۹ worked example).
-//   • NetRevenue = SellingPrice − Discount; Contribution = NetRevenue − TotalCost;
+//   - NetRevenue = SellingPrice − Discount; Contribution = NetRevenue − TotalCost;
 //     ContributionRate = Contribution / NetRevenue (zero-division guarded).
-//   • A cost/price record is "currently valid" only inside its [valid_from, valid_until)
+//   - A cost/price record is "currently valid" only inside its [valid_from, valid_until)
 //     window; expired records are never used as the live price (R-05 §۲۲).
-//   • A selling price requires approval by an authorised role before it is live
+//   - A selling price requires approval by an authorised role before it is live
 //     (R-05 §۹.۲ — approved_by must be set).
-//   • BR-06: a non-positive contribution is flagged as a warning (not blocked) for
+//   - BR-06: a non-positive contribution is flagged as a warning (not blocked) for
 //     review; the record is still created pending approval.
 package pricing
 
@@ -29,8 +29,8 @@ import (
 
 // Supply types (mirrors product_cost_records.supply_type CHECK).
 const (
-	SupplyOwnedInventory   = "OWNED_INVENTORY"
-	SupplySupplierSourced  = "SUPPLIER_SOURCED"
+	SupplyOwnedInventory  = "OWNED_INVENTORY"
+	SupplySupplierSourced = "SUPPLIER_SOURCED"
 )
 
 // DefaultCurrency is rials (R-05 §۲۲).
@@ -70,16 +70,16 @@ type CostRecord struct {
 
 // PriceRecord mirrors product_price_records. SellingPrice is rials ex-tax.
 type PriceRecord struct {
-	ID                    string
-	VariantID             string
-	SellingPrice          int64
-	DiscountPolicy        json.RawMessage
+	ID                     string
+	VariantID              string
+	SellingPrice           int64
+	DiscountPolicy         json.RawMessage
 	TargetContributionRate *float64
 	CalculatedContribution *int64
-	Currency              string
-	ValidFrom             time.Time
-	ValidUntil            *time.Time
-	ApprovedBy            string
+	Currency               string
+	ValidFrom              time.Time
+	ValidUntil             *time.Time
+	ApprovedBy             string
 }
 
 // UnitEconomics is the per-variant computed view (R-05 §۲۱).

@@ -12,23 +12,23 @@ import (
 // ── In-memory Store + EventEnqueuer for unit tests ────────────────────────────
 
 type memStore struct {
-	mu       sync.Mutex
-	carts    map[string]*Cart
-	cartItems map[string][]CartItem
-	orders   map[string]*Order
+	mu            sync.Mutex
+	carts         map[string]*Cart
+	cartItems     map[string][]CartItem
+	orders        map[string]*Order
 	orderByNumber map[string]string // number → id
-	items    map[string][]OrderItem
-	intents  map[string][]*PaymentIntent // orderID → intents (newest last)
+	items         map[string][]OrderItem
+	intents       map[string][]*PaymentIntent // orderID → intents (newest last)
 }
 
 func newMemStore() *memStore {
 	return &memStore{
-		carts:    map[string]*Cart{},
-		cartItems: map[string][]CartItem{},
-		orders:   map[string]*Order{},
+		carts:         map[string]*Cart{},
+		cartItems:     map[string][]CartItem{},
+		orders:        map[string]*Order{},
 		orderByNumber: map[string]string{},
-		items:    map[string][]OrderItem{},
-		intents:  map[string][]*PaymentIntent{},
+		items:         map[string][]OrderItem{},
+		intents:       map[string][]*PaymentIntent{},
 	}
 }
 

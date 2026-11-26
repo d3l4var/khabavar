@@ -21,7 +21,7 @@ const (
 
 // SearchResult is a unified hit — either a product or an article.
 type SearchResult struct {
-	Type    string `json:"type"`     // "product" | "article"
+	Type    string `json:"type"` // "product" | "article"
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Slug    string `json:"slug"`
@@ -47,10 +47,10 @@ type ProductSearcher interface {
 
 // ProductHit is what the catalog module returns to ecosystem.
 type ProductHit struct {
-	ID          string
-	Title       string
-	Slug        string
-	Snippet     string
+	ID      string
+	Title   string
+	Slug    string
+	Snippet string
 }
 
 // ArticleSearcher is the content module's search boundary.

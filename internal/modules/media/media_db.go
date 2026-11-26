@@ -60,7 +60,8 @@ func (s *DBStore) DeleteAsset(ctx context.Context, id string) error {
 
 // LocalStorage is a filesystem-backed StorageAdapter for dev/test. The rootDir
 // is created on first Put. Storage keys are mapped to paths under rootDir:
-//   "IMAGE/<uuid>/file.jpg" → rootDir/IMAGE/<uuid>/file.jpg
+//
+//	"IMAGE/<uuid>/file.jpg" → rootDir/IMAGE/<uuid>/file.jpg
 //
 // In production this would be replaced by S3Storage (wrapping aws-sdk-go-v2).
 type LocalStorage struct {

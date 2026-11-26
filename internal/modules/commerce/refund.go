@@ -61,12 +61,12 @@ var (
 // refundableStatuses is the set of order statuses where a refund is allowed
 // (payment was captured).
 var refundableStatuses = map[string]bool{
-	OrderPaid:            true,
-	OrderInFulfillment:   true,
-	OrderPartiallyShip:   true,
-	OrderShipped:         true,
-	OrderDelivered:       true,
-	OrderCompleted:       true,
+	OrderPaid:              true,
+	OrderInFulfillment:     true,
+	OrderPartiallyShip:     true,
+	OrderShipped:           true,
+	OrderDelivered:         true,
+	OrderCompleted:         true,
 	OrderPartiallyRefunded: true,
 }
 
@@ -146,12 +146,12 @@ func (s *Service) ListRefunds(ctx context.Context, orderID string) ([]Refund, er
 
 // ReconciliationResult holds the transaction reconciliation outcome for an order.
 type ReconciliationResult struct {
-	OrderID            string
-	PaidTotal          int64
-	SucceededAttempts  int64 // sum of succeeded payment attempts
-	RefundedTotal      int64
+	OrderID                 string
+	PaidTotal               int64
+	SucceededAttempts       int64 // sum of succeeded payment attempts
+	RefundedTotal           int64
 	ExpectedPaidAfterRefund int64 // SucceededAttempts − RefundedTotal
-	Reconciled         bool   // PaidTotal == SucceededAttempts − RefundedTotal
+	Reconciled              bool  // PaidTotal == SucceededAttempts − RefundedTotal
 }
 
 // ReconcileTransaction checks that the order's PaidTotal equals the sum of
@@ -171,12 +171,12 @@ func (s *Service) ReconcileTransaction(ctx context.Context, orderID string) (*Re
 	}
 	expected := succeeded - o.RefundedTotal
 	return &ReconciliationResult{
-		OrderID:                  orderID,
-		PaidTotal:                o.PaidTotal,
-		SucceededAttempts:        succeeded,
-		RefundedTotal:            o.RefundedTotal,
-		ExpectedPaidAfterRefund:  expected,
-		Reconciled:               o.PaidTotal == expected,
+		OrderID:                 orderID,
+		PaidTotal:               o.PaidTotal,
+		SucceededAttempts:       succeeded,
+		RefundedTotal:           o.RefundedTotal,
+		ExpectedPaidAfterRefund: expected,
+		Reconciled:              o.PaidTotal == expected,
 	}, nil
 }
 

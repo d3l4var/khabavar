@@ -453,8 +453,8 @@ func TestCreateEvaluation_ComputesWeightedTotal(t *testing.T) {
 	supID, _ := svc.CreateSupplier(context.Background(), Supplier{Name: "S"})
 	// All scores = 100 → total = 100.00.
 	evID, err := svc.CreateEvaluation(context.Background(), Evaluation{
-		SupplierID:       supID,
-		QualityScore:     100, PricingScore: 100, AvailabilityScore: 100,
+		SupplierID:   supID,
+		QualityScore: 100, PricingScore: 100, AvailabilityScore: 100,
 		WarrantyScore: 100, DocumentationScore: 100, FlexibilityScore: 100,
 		LogisticsScore: 100, CommunicationScore: 100,
 	})
@@ -477,8 +477,8 @@ func TestCreateEvaluation_ComputesWeightedTotal(t *testing.T) {
 	//   logistics=90 (×0.05=4.5), communication=30 (×0.05=1.5)
 	//   total = 20+12+6+10+5+7+4.5+1.5 = 66.0
 	_, err = svc.CreateEvaluation(context.Background(), Evaluation{
-		SupplierID:       supID,
-		QualityScore:     80, PricingScore: 60, AvailabilityScore: 40,
+		SupplierID:   supID,
+		QualityScore: 80, PricingScore: 60, AvailabilityScore: 40,
 		WarrantyScore: 100, DocumentationScore: 50, FlexibilityScore: 70,
 		LogisticsScore: 90, CommunicationScore: 30,
 	})

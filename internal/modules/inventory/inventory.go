@@ -48,19 +48,19 @@ const (
 
 // Sentinel errors. HTTP handlers map these to status codes.
 var (
-	ErrWarehouseNotFound    = errors.New("inventory: warehouse not found")
-	ErrStockBalanceNotFound = errors.New("inventory: stock balance not found")
-	ErrInsufficientStock    = errors.New("inventory: insufficient sellable stock")
-	ErrReservationNotFound  = errors.New("inventory: reservation not found")
-	ErrReservationSource    = errors.New("inventory: reservation must have exactly one of warehouse_id or supplier_id")
-	ErrReservationExpiryReq = errors.New("inventory: reservation expires_at required")
-	ErrReservationNotActive = errors.New("inventory: reservation is not active")
-	ErrZeroQuantity         = errors.New("inventory: movement quantity must be non-zero")
-	ErrWarehouseCodeReq     = errors.New("inventory: warehouse_code required")
-	ErrWarehouseNameReq     = errors.New("inventory: warehouse name required")
+	ErrWarehouseNotFound      = errors.New("inventory: warehouse not found")
+	ErrStockBalanceNotFound   = errors.New("inventory: stock balance not found")
+	ErrInsufficientStock      = errors.New("inventory: insufficient sellable stock")
+	ErrReservationNotFound    = errors.New("inventory: reservation not found")
+	ErrReservationSource      = errors.New("inventory: reservation must have exactly one of warehouse_id or supplier_id")
+	ErrReservationExpiryReq   = errors.New("inventory: reservation expires_at required")
+	ErrReservationNotActive   = errors.New("inventory: reservation is not active")
+	ErrZeroQuantity           = errors.New("inventory: movement quantity must be non-zero")
+	ErrWarehouseCodeReq       = errors.New("inventory: warehouse_code required")
+	ErrWarehouseNameReq       = errors.New("inventory: warehouse name required")
 	ErrDuplicateWarehouseCode = errors.New("inventory: warehouse_code already exists")
-	ErrNegativeOnHand       = errors.New("inventory: on_hand_quantity cannot be negative")
-	ErrNegativeReserved     = errors.New("inventory: reserved_quantity cannot be negative")
+	ErrNegativeOnHand         = errors.New("inventory: on_hand_quantity cannot be negative")
+	ErrNegativeReserved       = errors.New("inventory: reserved_quantity cannot be negative")
 )
 
 // Warehouse mirrors warehouses.

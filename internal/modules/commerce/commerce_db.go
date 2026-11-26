@@ -267,7 +267,7 @@ func nullableStr(s string) any {
 
 // Compile-time assertions.
 var (
-	_ Store        = (*DBStore)(nil)
+	_ Store         = (*DBStore)(nil)
 	_ EventEnqueuer = (*DBEventEnqueuer)(nil)
 )
 

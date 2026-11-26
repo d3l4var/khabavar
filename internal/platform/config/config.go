@@ -19,7 +19,7 @@ type Config struct {
 	RefreshTokenTTL    int // seconds
 	HTTPAddr           string
 	LogLevel           string
-	AuthCodeTTLSeconds int // OIDC authorization-code TTL (seconds, default 600)
+	AuthCodeTTLSeconds int    // OIDC authorization-code TTL (seconds, default 600)
 	OIDCIssuer         string // id_token.iss (e.g. https://id.khabavar.ir)
 	WorkerInterval     int    // outbox poll interval, seconds (default 5)
 	WorkerBatchSize    int    // outbox claim batch size (default 100)

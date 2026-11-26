@@ -8,9 +8,9 @@ import (
 
 // stubProductSearcher is a test ProductSearcher.
 type stubProductSearcher struct {
-	hits   []ProductHit
-	total  int
-	err    error
+	hits  []ProductHit
+	total int
+	err   error
 }
 
 func (s stubProductSearcher) SearchProducts(_ context.Context, q string, _, _ int) ([]ProductHit, int, error) {
