@@ -67,6 +67,8 @@ var (
 	ErrCartEmpty             = errors.New("commerce: cart is empty")
 	ErrCartItemNotFound      = errors.New("commerce: cart item not found")
 	ErrCartTokenRequired     = errors.New("commerce: X-Guest-Cart-Token is required")
+	ErrShippingAddressReq    = errors.New("commerce: shipping_address is required")
+	ErrGuestPhoneRequired    = errors.New("commerce: guest_phone is required for a guest checkout (MA-8)")
 	ErrCartQuantityInvalid   = errors.New("commerce: quantity must be between 1 and 10")
 	ErrOrderNotFound         = errors.New("commerce: order not found")
 	ErrPaymentIntentNotFound = errors.New("commerce: payment intent not found")

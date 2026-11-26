@@ -77,6 +77,10 @@ func cartErrorCode(err error) (int, string) {
 	switch {
 	case errors.Is(err, ErrCartTokenRequired):
 		return http.StatusBadRequest, "cart_token_required"
+	case errors.Is(err, ErrShippingAddressReq):
+		return http.StatusBadRequest, "shipping_address_required"
+	case errors.Is(err, ErrGuestPhoneRequired):
+		return http.StatusBadRequest, "guest_phone_required"
 	case errors.Is(err, ErrCartNotFound):
 		return http.StatusNotFound, "cart_not_found"
 	case errors.Is(err, ErrCartItemNotFound):
@@ -85,5 +89,35 @@ func cartErrorCode(err error) (int, string) {
 		return http.StatusBadRequest, "invalid_quantity"
 	default:
 		return 0, ""
+	}
+}
+
+// CheckoutHandler serves POST /api/v1/checkout (contract: order + payment intent).
+func CheckoutHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var in CheckoutInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json", "code": "invalid_body"})
+			return
+		}
+		res, err := svc.Checkout(r.Context(), "", r.Header.Get(guestTokenHeader), in)
+		if err != nil {
+			var unavailable *ErrCheckoutUnavailable
+			if errors.As(err, &unavailable) {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+					"error": "some lines are not sellable right now",
+					"code":  "checkout_unavailable",
+					"items": unavailable.Lines,
+				})
+				return
+			}
+			if errors.Is(err, ErrCartEmpty) {
+				writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": "cart_empty"})
+				return
+			}
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, res)
 	}
 }

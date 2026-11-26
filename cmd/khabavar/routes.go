@@ -229,6 +229,7 @@ func mountRoutes(api *apiMux, s services) {
 	// ── commerce (P4) ──
 	// Server-side cart (DB §14.1). Guests are identified by X-Guest-Cart-Token.
 	api.public("GET /api/v1/cart", commerce.CartHandler(s.commerce))
+	api.public("POST /api/v1/checkout", commerce.CheckoutHandler(s.commerce))
 	api.public("POST /api/v1/cart/items", commerce.AddCartItemHandler(s.commerce))
 	api.public("PATCH /api/v1/cart/items/{id}", commerce.UpdateCartItemHandler(s.commerce))
 	api.public("DELETE /api/v1/cart/items/{id}", commerce.DeleteCartItemHandler(s.commerce))

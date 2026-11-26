@@ -27,6 +27,7 @@ type CartStore interface {
 // CartLine is one priced line of the cart as the storefront sees it.
 type CartLine struct {
 	ItemID            string `json:"id"`
+	ProductID         string `json:"product_id"`
 	VariantID         string `json:"variant_id"`
 	SKU               string `json:"sku"`
 	ProductTitle      string `json:"product_title"`
@@ -197,7 +198,7 @@ func (s *DBStore) CartView(ctx context.Context, cartID string) (*CartView, error
 	v.ExpiresAt = expires
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT ci.id, ci.variant_id, pv.sku, p.title, ci.quantity,
+		`SELECT ci.id, p.id, ci.variant_id, pv.sku, p.title, ci.quantity,
 		        COALESCE(pr.selling_price, 0) AS unit_price,
 		        pr.id IS NOT NULL AS has_price
 		   FROM cart_items ci
@@ -219,7 +220,7 @@ func (s *DBStore) CartView(ctx context.Context, cartID string) (*CartView, error
 	v.Items = make([]CartLine, 0, 4)
 	for rows.Next() {
 		var l CartLine
-		if err := rows.Scan(&l.ItemID, &l.VariantID, &l.SKU, &l.ProductTitle, &l.Quantity,
+		if err := rows.Scan(&l.ItemID, &l.ProductID, &l.VariantID, &l.SKU, &l.ProductTitle, &l.Quantity,
 			&l.UnitPrice, &l.PriceRecordExists); err != nil {
 			return nil, err
 		}
