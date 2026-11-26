@@ -1462,6 +1462,24 @@ actor درست؛ `delta=0` رد می‌شود و **audit نمی‌شود**؛ و 
 **یک باگ حین کار:** نسخهٔ اول بلوک audit را با الگوی متنی اشتباه در `ReceiveStock` جا
 داد (جایی که `delta`/`notes` وجود ندارد) — کامپایل گرفت و اصلاح شد.
 
+### ۴.۵۶ audit تغییر وضعیت سفارش — کامیت `feat(order-audit)`
+
+دستهٔ دوم از هفت دستهٔ IAM §۷: **تغییر وضعیت سفارش**.
+
+- `Service.auditOrder(ctx, action, orderID, from, to, reason)` — یک نقطهٔ واحد، با
+  `shared.ActorID(ctx)` برای actor و **خطای برگشتی** (نه بلعیده).
+- دو نقطهٔ فراخوانی: `ConfirmPaymentForOrder` (`order.paid`) و `CancelOrder`
+  (`order.cancelled` با دلیل در payload).
+- audit بعد از نوشتن وضعیت و بعد از enqueue نوشته می‌شود، تا تریل ادعای تغییری نکند که
+  ثبت نشده.
+
+**شاهد (PG):** `TestPG_OrderStatusAudit` — هر دو اقدام در audit ظاهر می‌شوند
+(`order.cancelled`، `order.paid`) و خطای auditor از `CancelOrder` به فراخواننده برمی‌گردد.
+
+**پوشش دسته‌های §۷ تا اینجا:** بازپرداخت ✓، تغییر موجودی ✓، تغییر وضعیت سفارش ✓،
+بخشی از کاتالوگ/قیمت (helper موجود در `pricing/admin.go`). باقی: هزینهٔ خرید، تأیید تأمین،
+شرایط ارسال.
+
 ---
 
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)

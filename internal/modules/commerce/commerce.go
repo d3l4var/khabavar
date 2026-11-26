@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/khabavar/khabavar/internal/modules/shared"
 )
 
 // ── Status enums (mirror CHECK constraints in 000006_commerce.up.sql) ─────────
@@ -558,6 +560,10 @@ func (s *Service) ConfirmPaymentForOrder(ctx context.Context, orderID string) er
 		"paid_total":   o.GrandTotal,
 		"currency":     o.Currency,
 	})
+	// A payment confirmation changes the order status, which is an audited category (IAM §۷).
+	if aerr := s.auditOrder(ctx, "order.paid", orderID, OrderPendingPayment, OrderPaid, ""); aerr != nil {
+		return aerr
+	}
 	return nil
 }
 
@@ -580,6 +586,10 @@ func (s *Service) CancelOrder(ctx context.Context, orderID, reason string) error
 	if err := s.store.UpdateOrderStatus(ctx, orderID, OrderCancelled); err != nil {
 		return fmt.Errorf("cancel: %w", err)
 	}
+	// An order status change is one of the seven audited categories (IAM §۷).
+	if aerr := s.auditOrder(ctx, "order.cancelled", orderID, o.Status, OrderCancelled, reason); aerr != nil {
+		return aerr
+	}
 	s.enqueue(ctx, "OrderCancelled", "order", orderID, map[string]any{
 		"order_id":     orderID,
 		"order_number": o.OrderNumber,
@@ -589,6 +599,22 @@ func (s *Service) CancelOrder(ctx context.Context, orderID, reason string) error
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+// auditOrder records an order status change (IAM §۷). A nil auditor is a no-op; a real
+// failure is returned so a status change without a trail is never reported as success.
+func (s *Service) auditOrder(ctx context.Context, action, orderID, from, to, reason string) error {
+	if s.auditor == nil {
+		return nil
+	}
+	payload := map[string]any{"from": from, "to": to}
+	if reason != "" {
+		payload["reason"] = reason
+	}
+	if err := s.auditor.Record(ctx, "ADMIN", shared.ActorID(ctx), action, "order", orderID, nil, payload, ""); err != nil {
+		return fmt.Errorf("audit %s: %w", action, err)
+	}
+	return nil
+}
 
 // enqueue is a best-effort event enqueue. A nil EventEnqueuer means events are
 // dropped (unit tests that don't assert events).
