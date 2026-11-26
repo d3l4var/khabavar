@@ -123,97 +123,27 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 
 	catSvc := catalog.NewService(catalog.NewDBStore(pool.Pool))
 	catSvc.SetSearchStore(catalog.NewDBStore(pool.Pool))
-	api.public("GET /api/v1/categories", catalog.CategoryTreeHandler(catSvc))
-	api.public("GET /api/v1/categories/{id}/products", catalog.ListProductsByCategoryHandler(catSvc))
-	api.public("GET /api/v1/products/{id}", catalog.ProductDetailHandler(catSvc))
-	api.public("GET /api/v1/products/search", catalog.SearchProductsHandler(catSvc))
-
-	priceSvc := pricing.NewService(pricing.NewDBStore(pool.Pool))
-	api.public("GET /api/v1/variants/{id}/price", pricing.StorefrontPriceHandler(priceSvc))
-
-	// Commerce (P4): order lifecycle + payment + outbox events (R-06 §۱۰)
-	comSvc := commerce.NewService(commerce.NewDBStore(pool.Pool), commerce.NewDBEventEnqueuer(pool.Pool))
-	comSvc.SetRefundStore(commerce.NewDBStore(pool.Pool))
-	api.public("POST /api/v1/orders", commerce.CreateOrderHandler(comSvc))
-	api.public("GET /api/v1/orders/{id}", commerce.GetOrderHandler(comSvc))
-	api.public("GET /api/v1/orders/by-number/{number}", commerce.GetOrderByNumberHandler(comSvc))
-	api.public("POST /api/v1/orders/{id}/payment-intents", commerce.CreatePaymentIntentHandler(comSvc))
-	api.public("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(comSvc))
-	api.public("POST /api/v1/orders/{id}/cancel", commerce.CancelOrderHandler(comSvc))
-	api.admin("POST /api/v1/admin/orders/{id}/refunds", commerce.CreateRefundHandler(comSvc))
-	api.admin("GET /api/v1/admin/orders/{id}/refunds", commerce.ListRefundsHandler(comSvc))
-	api.admin("GET /api/v1/admin/orders/{id}/reconcile", commerce.ReconcileTransactionHandler(comSvc))
-
-	// Suppliers (P5c): admin writes + storefront multi-source reads (R-05 §۲/۳)
-	supSvc := suppliers.NewService(suppliers.NewDBStore(pool.Pool))
-	api.admin("POST /api/v1/admin/suppliers", suppliers.CreateSupplierHandler(supSvc))
-	api.admin("PATCH /api/v1/admin/suppliers/{id}/status", suppliers.UpdateSupplierStatusHandler(supSvc))
-	api.public("GET /api/v1/variants/{id}/suppliers", suppliers.ListSupplierVariantsHandler(supSvc))
-	api.admin("GET /api/v1/admin/supplier-variants/{id}/price-history", suppliers.ListPriceHistoryHandler(supSvc))
-	api.admin("POST /api/v1/admin/suppliers/{id}/evaluations", suppliers.CreateEvaluationHandler(supSvc))
-	api.admin("GET /api/v1/admin/suppliers/{id}/evaluations", suppliers.ListEvaluationsHandler(supSvc))
-
-	// Inventory (P5d): admin writes + storefront stock reads (R-07 §inventory)
-	invSvc := inventory.NewService(inventory.NewDBStore(pool.Pool))
-	api.admin("POST /api/v1/admin/warehouses", inventory.CreateWarehouseHandler(invSvc))
-	api.public("GET /api/v1/warehouses/{wid}/variants/{vid}/stock", inventory.GetStockBalanceHandler(invSvc))
-	api.admin("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/receive", inventory.ReceiveStockHandler(invSvc))
-	api.admin("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/adjust", inventory.AdjustStockHandler(invSvc))
-	api.admin("POST /api/v1/admin/inventory/reserve", inventory.ReserveForOrderHandler(invSvc))
-	api.admin("DELETE /api/v1/admin/inventory/reservations/{id}", inventory.ReleaseReservationHandler(invSvc))
-	api.admin("POST /api/v1/admin/inventory/reservations/{id}/convert", inventory.ConvertReservationHandler(invSvc))
-	api.admin("GET /api/v1/admin/warehouses/{wid}/variants/{vid}/movements", inventory.ListMovementsHandler(invSvc))
-
-	// Fulfillment (P5e): admin writes + storefront fulfillment status reads (R-07 §fulfillment)
-	fulSvc := fulfillment.NewService(fulfillment.NewDBStore(pool.Pool))
-	api.admin("POST /api/v1/admin/fulfillment-orders", fulfillment.CreateFulfillmentOrderHandler(fulSvc))
-	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/confirm", fulfillment.ConfirmFulfillmentHandler(fulSvc))
-	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/processing", fulfillment.StartProcessingHandler(fulSvc))
-	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/ready", fulfillment.MarkReadyHandler(fulSvc))
-	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/shipped", fulfillment.MarkShippedHandler(fulSvc))
-	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/delivered", fulfillment.MarkDeliveredHandler(fulSvc))
-	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/cancel", fulfillment.CancelFulfillmentHandler(fulSvc))
-	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/reject", fulfillment.RejectFulfillmentHandler(fulSvc))
-	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/shipments", fulfillment.CreateShipmentHandler(fulSvc))
-	api.admin("POST /api/v1/admin/shipments/{id}/transition", fulfillment.TransitionShipmentHandler(fulSvc))
-	api.public("GET /api/v1/shipments/{id}/events", fulfillment.ListShipmentEventsHandler(fulSvc))
-	api.public("GET /api/v1/orders/{id}/fulfillment", fulfillment.ListFulfillmentOrdersByOrderHandler(fulSvc))
-	api.public("GET /api/v1/fulfillment-orders/{id}/shipments", fulfillment.ListShipmentsByFulfillmentHandler(fulSvc))
-
-	// Media (P5f): upload (admin) + asset metadata/content (R-07 §media)
-	mediaStore := media.NewDBStore(pool.Pool)
-	mediaStorage := media.NewLocalStorage(cfg.StorageLocalRoot)
-	mediaSvc := media.NewService(mediaStore, mediaStorage)
-	api.admin("POST /api/v1/admin/media", media.UploadHandler(mediaSvc))
-	api.public("GET /api/v1/media/{id}", media.GetAssetHandler(mediaSvc))
-	api.public("GET /api/v1/media/{id}/content", media.GetContentHandler(mediaSvc))
-	api.admin("DELETE /api/v1/admin/media/{id}", media.DeleteHandler(mediaSvc))
-
-	// Content/Magazine (P4): storefront reads + admin editorial workflow (R-07 §content)
 	contentSvc := content.NewService(content.NewDBStore(pool.Pool))
 	contentSvc.SetSearchStore(content.NewDBStore(pool.Pool))
-	api.public("GET /api/v1/topics", content.ListTopicsHandler(contentSvc))
-	api.admin("POST /api/v1/admin/topics", content.CreateTopicHandler(contentSvc))
-	api.public("GET /api/v1/articles", content.ListPublishedArticlesHandler(contentSvc))
-	api.public("GET /api/v1/articles/{slug}", content.GetArticleBySlugHandler(contentSvc))
-	api.public("GET /api/v1/articles/{id}/sources", content.ListArticleSourcesHandler(contentSvc))
-	api.public("GET /api/v1/articles/{id}/products", content.ListRelationsForArticleHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles", content.CreateArticleHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/submit", content.SubmitForReviewHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/approve", content.ApproveArticleHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/schedule", content.ScheduleArticleHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/publish", content.PublishArticleHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/unpublish", content.UnpublishArticleHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/archive", content.ArchiveArticleHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/reject", content.RejectToDraftHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(contentSvc))
-	api.admin("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(contentSvc))
 
-	// Ecosystem (P7): unified search across products and articles (R-19 P7)
-	eco := ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc})
-	api.public("GET /api/v1/search", ecosystem.SearchHandler(eco))
-	api.public("GET /api/v1/navigation", ecosystem.NavigationHandler())
+	comSvc := commerce.NewService(commerce.NewDBStore(pool.Pool), commerce.NewDBEventEnqueuer(pool.Pool))
+	comSvc.SetRefundStore(commerce.NewDBStore(pool.Pool))
+	comSvc.SetAuditor(auditor)
+
+	mediaSvc := media.NewService(media.NewDBStore(pool.Pool), media.NewLocalStorage(cfg.StorageLocalRoot))
+
+	svcs := services{
+		catalog:     catSvc,
+		pricing:     pricing.NewService(pricing.NewDBStore(pool.Pool)),
+		commerce:    comSvc,
+		suppliers:   suppliers.NewService(suppliers.NewDBStore(pool.Pool)),
+		inventory:   inventory.NewService(inventory.NewDBStore(pool.Pool)),
+		fulfillment: fulfillment.NewService(fulfillment.NewDBStore(pool.Pool)),
+		media:       mediaSvc,
+		content:     contentSvc,
+		ecosystem:   ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc}),
+	}
+	mountRoutes(api, svcs)
 
 	hh.SetReady(true)
 	serve(ctx, cfg.HTTPAddr, mux, logger)

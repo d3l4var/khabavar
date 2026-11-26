@@ -85,6 +85,19 @@ func TestPublicRoutesNeedNoToken(t *testing.T) {
 	}
 }
 
+// TestMountRoutesHasNoPatternConflicts mounts the whole api route table on a fresh
+// ServeMux. ServeMux panics at registration when two patterns are ambiguous (this is
+// how the api unit once failed to start: /orders/by-number/{number} vs
+// /orders/{id}/fulfillment), so this test is the startup smoke check.
+func TestMountRoutesHasNoPatternConflicts(t *testing.T) {
+	mux := http.NewServeMux()
+	api := newAPIMux(mux, newAdminGuard(nil, denyAllChecker{}, nil))
+	mountRoutes(api, services{}) // panics on a conflicting pattern
+	if len(api.mounted) < 50 {
+		t.Fatalf("only %d routes mounted — route table looks truncated", len(api.mounted))
+	}
+}
+
 // denyAllChecker is a PermissionChecker that never grants.
 type denyAllChecker struct{}
 

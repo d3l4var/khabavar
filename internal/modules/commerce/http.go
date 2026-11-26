@@ -6,6 +6,8 @@ package commerce
 import (
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -42,14 +44,27 @@ type errorResponse struct {
 	Code  string `json:"code"`
 }
 
+// writeError maps a domain error to a stable HTTP response. Infrastructure failures
+// (anything outside the domain sentinels) become a generic 500: SQL text, table names
+// and driver state must never reach a client. The detail goes to the log instead.
 func writeError(w http.ResponseWriter, err error) {
 	code := statusForError(err)
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(errorResponse{
-		Error: err.Error(),
-		Code:  strings.ToUpper(strings.ReplaceAll(err.Error(), " ", "_")),
-	})
+	if code >= http.StatusInternalServerError {
+		slog.Error("commerce: request failed", "err", err)
+		writeJSON(w, code, errorResponse{Error: "internal error", Code: "internal_error"})
+		return
+	}
+	writeJSON(w, code, errorResponse{Error: err.Error(), Code: errorCode(err)})
+}
+
+// errorCode derives a stable machine-readable code from a domain error, dropping the
+// detail suffix (": status=X") so the code does not vary per request.
+func errorCode(err error) string {
+	msg := err.Error()
+	if i := strings.IndexByte(msg, ':'); i > 0 {
+		msg = msg[:i]
+	}
+	return strings.ToUpper(strings.NewReplacer(" ", "_", "-", "_").Replace(msg))
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -135,7 +150,10 @@ func CreateOrderHandler(svc *Service) http.Handler {
 
 // ── GetOrderDetail ────────────────────────────────────────────────────────────
 
-// GetOrderHandler handles GET /api/v1/orders/{id}.
+// GetOrderHandler handles GET /api/v1/orders/{id}. The path segment may be either the
+// internal UUID or the business order number (KHA-ORD-YYYY-NNNNNN) — the contract
+// exposes GET /orders/{orderNumber} for guest tracking (UJ-01), and keeping one route
+// avoids an ambiguous ServeMux pattern with /orders/{id}/fulfillment.
 func GetOrderHandler(svc *Service) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract {id} from the path. We use strings.Cut to avoid importing chi/gorilla
@@ -143,6 +161,15 @@ func GetOrderHandler(svc *Service) http.Handler {
 		id := r.PathValue("id")
 		if id == "" {
 			id = strings.TrimPrefix(r.URL.Path, "/api/v1/orders/")
+		}
+		if _, err := uuid.Parse(id); err != nil {
+			o, err := svc.GetOrderByNumber(r.Context(), NormalizeOrderNumber(id))
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, o)
+			return
 		}
 		d, err := svc.GetOrderDetail(r.Context(), id)
 		if err != nil {

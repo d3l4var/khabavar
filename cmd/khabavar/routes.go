@@ -12,6 +12,16 @@ import (
 	"net/http"
 
 	"github.com/khabavar/khabavar/internal/modules/authorization"
+	"github.com/khabavar/khabavar/internal/modules/catalog"
+	"github.com/khabavar/khabavar/internal/modules/commerce"
+	"github.com/khabavar/khabavar/internal/modules/content"
+	"github.com/khabavar/khabavar/internal/modules/ecosystem"
+	"github.com/khabavar/khabavar/internal/modules/fulfillment"
+	"github.com/khabavar/khabavar/internal/modules/inventory"
+	"github.com/khabavar/khabavar/internal/modules/media"
+	"github.com/khabavar/khabavar/internal/modules/pricing"
+	"github.com/khabavar/khabavar/internal/modules/shared"
+	"github.com/khabavar/khabavar/internal/modules/suppliers"
 )
 
 // adminPermissions maps each mounted admin route pattern to the seed permission code
@@ -118,10 +128,127 @@ func (a *apiMux) admin(pattern string, h http.Handler) {
 	a.mounted[pattern] = perm
 }
 
-// newAdminGuard composes authentication with the audited permission check.
+// newAdminGuard composes authentication with the audited permission check and copies
+// the authenticated admin id into the shared actor context, so modules can record who
+// performed a sensitive action (IAM §۷).
 func newAdminGuard(resolve authorization.SubjectResolver, chk authorization.PermissionChecker, aud authorization.Auditor) func(string, http.Handler) http.Handler {
 	return func(permission string, next http.Handler) http.Handler {
 		return authorization.Authenticate(resolve,
-			authorization.RequireAudited(chk, aud, permission, next))
+			withActor(authorization.RequireAudited(chk, aud, permission, next)))
 	}
+}
+
+// withActor stores the authenticated admin id in the shared actor context.
+func withActor(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id := authorization.AdminUserID(r.Context()); id != "" {
+			r = r.WithContext(shared.WithActorID(r.Context(), id))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// services holds every module service the api unit mounts. Keeping them in one
+// struct lets mountRoutes be exercised by a test with zero values, which is how the
+// route table is checked for ServeMux pattern conflicts before a deploy does it.
+type services struct {
+	catalog     *catalog.Service
+	pricing     *pricing.Service
+	commerce    *commerce.Service
+	suppliers   *suppliers.Service
+	inventory   *inventory.Service
+	fulfillment *fulfillment.Service
+	media       *media.Service
+	content     *content.Service
+	ecosystem   *ecosystem.Service
+}
+
+// mountRoutes registers every api-unit route. Handlers are closures over the
+// services, so a zero-value services struct mounts fine (nothing is invoked) — that
+// is what TestMountRoutesHasNoPatternConflicts relies on.
+func mountRoutes(api *apiMux, s services) {
+	// ── catalog (P5a) ──
+	api.public("GET /api/v1/categories", catalog.CategoryTreeHandler(s.catalog))
+	api.public("GET /api/v1/categories/{id}/products", catalog.ListProductsByCategoryHandler(s.catalog))
+	api.public("GET /api/v1/products/{id}", catalog.ProductDetailHandler(s.catalog))
+	api.public("GET /api/v1/products/search", catalog.SearchProductsHandler(s.catalog))
+
+	// ── pricing (P5b) ──
+	api.public("GET /api/v1/variants/{id}/price", pricing.StorefrontPriceHandler(s.pricing))
+
+	// ── commerce (P4) ──
+	api.public("POST /api/v1/orders", commerce.CreateOrderHandler(s.commerce))
+	// GET /orders/{id} accepts either the internal UUID or the business order number
+	// (KHA-ORD-YYYY-NNNNNN) — the contract exposes /orders/{orderNumber}. The two are
+	// one route on purpose: separate /orders/by-number/{n} and /orders/{id}/fulfillment
+	// patterns are ambiguous for ServeMux and panic at startup.
+	api.public("GET /api/v1/orders/{id}", commerce.GetOrderHandler(s.commerce))
+	api.public("POST /api/v1/orders/{id}/payment-intents", commerce.CreatePaymentIntentHandler(s.commerce))
+	api.public("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(s.commerce))
+	api.public("POST /api/v1/orders/{id}/cancel", commerce.CancelOrderHandler(s.commerce))
+	api.admin("POST /api/v1/admin/orders/{id}/refunds", commerce.CreateRefundHandler(s.commerce))
+	api.admin("GET /api/v1/admin/orders/{id}/refunds", commerce.ListRefundsHandler(s.commerce))
+	api.admin("GET /api/v1/admin/orders/{id}/reconcile", commerce.ReconcileTransactionHandler(s.commerce))
+
+	// ── suppliers (P5c) ──
+	api.admin("POST /api/v1/admin/suppliers", suppliers.CreateSupplierHandler(s.suppliers))
+	api.admin("PATCH /api/v1/admin/suppliers/{id}/status", suppliers.UpdateSupplierStatusHandler(s.suppliers))
+	api.public("GET /api/v1/variants/{id}/suppliers", suppliers.ListSupplierVariantsHandler(s.suppliers))
+	api.admin("GET /api/v1/admin/supplier-variants/{id}/price-history", suppliers.ListPriceHistoryHandler(s.suppliers))
+	api.admin("POST /api/v1/admin/suppliers/{id}/evaluations", suppliers.CreateEvaluationHandler(s.suppliers))
+	api.admin("GET /api/v1/admin/suppliers/{id}/evaluations", suppliers.ListEvaluationsHandler(s.suppliers))
+
+	// ── inventory (P5d) ──
+	api.admin("POST /api/v1/admin/warehouses", inventory.CreateWarehouseHandler(s.inventory))
+	api.public("GET /api/v1/warehouses/{wid}/variants/{vid}/stock", inventory.GetStockBalanceHandler(s.inventory))
+	api.admin("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/receive", inventory.ReceiveStockHandler(s.inventory))
+	api.admin("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/adjust", inventory.AdjustStockHandler(s.inventory))
+	api.admin("POST /api/v1/admin/inventory/reserve", inventory.ReserveForOrderHandler(s.inventory))
+	api.admin("DELETE /api/v1/admin/inventory/reservations/{id}", inventory.ReleaseReservationHandler(s.inventory))
+	api.admin("POST /api/v1/admin/inventory/reservations/{id}/convert", inventory.ConvertReservationHandler(s.inventory))
+	api.admin("GET /api/v1/admin/warehouses/{wid}/variants/{vid}/movements", inventory.ListMovementsHandler(s.inventory))
+
+	// ── fulfillment (P5e) ──
+	api.admin("POST /api/v1/admin/fulfillment-orders", fulfillment.CreateFulfillmentOrderHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/confirm", fulfillment.ConfirmFulfillmentHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/processing", fulfillment.StartProcessingHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/ready", fulfillment.MarkReadyHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/shipped", fulfillment.MarkShippedHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/delivered", fulfillment.MarkDeliveredHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/cancel", fulfillment.CancelFulfillmentHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/reject", fulfillment.RejectFulfillmentHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/fulfillment-orders/{id}/shipments", fulfillment.CreateShipmentHandler(s.fulfillment))
+	api.admin("POST /api/v1/admin/shipments/{id}/transition", fulfillment.TransitionShipmentHandler(s.fulfillment))
+	api.public("GET /api/v1/shipments/{id}/events", fulfillment.ListShipmentEventsHandler(s.fulfillment))
+	api.public("GET /api/v1/orders/{id}/fulfillment", fulfillment.ListFulfillmentOrdersByOrderHandler(s.fulfillment))
+	api.public("GET /api/v1/fulfillment-orders/{id}/shipments", fulfillment.ListShipmentsByFulfillmentHandler(s.fulfillment))
+
+	// ── media (P5f) ──
+	api.admin("POST /api/v1/admin/media", media.UploadHandler(s.media))
+	api.public("GET /api/v1/media/{id}", media.GetAssetHandler(s.media))
+	api.public("GET /api/v1/media/{id}/content", media.GetContentHandler(s.media))
+	api.admin("DELETE /api/v1/admin/media/{id}", media.DeleteHandler(s.media))
+
+	// ── content / magazine (P4) ──
+	api.public("GET /api/v1/topics", content.ListTopicsHandler(s.content))
+	api.admin("POST /api/v1/admin/topics", content.CreateTopicHandler(s.content))
+	api.public("GET /api/v1/articles", content.ListPublishedArticlesHandler(s.content))
+	api.public("GET /api/v1/articles/{slug}", content.GetArticleBySlugHandler(s.content))
+	api.public("GET /api/v1/articles/{id}/sources", content.ListArticleSourcesHandler(s.content))
+	api.public("GET /api/v1/articles/{id}/products", content.ListRelationsForArticleHandler(s.content))
+	api.admin("POST /api/v1/admin/articles", content.CreateArticleHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/submit", content.SubmitForReviewHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/approve", content.ApproveArticleHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/schedule", content.ScheduleArticleHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/publish", content.PublishArticleHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/unpublish", content.UnpublishArticleHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/archive", content.ArchiveArticleHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/reject", content.RejectToDraftHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/sources", content.AddArticleSourceHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/topics", content.LinkArticleTopicHandler(s.content))
+	api.admin("POST /api/v1/admin/articles/{id}/products", content.AddProductRelationHandler(s.content))
+
+	// ── ecosystem (P7) ──
+	api.public("GET /api/v1/search", ecosystem.SearchHandler(s.ecosystem))
+	api.public("GET /api/v1/navigation", ecosystem.NavigationHandler())
 }

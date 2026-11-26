@@ -69,6 +69,18 @@ func (m *memRefundStore) SumSucceededAttempts(_ context.Context, orderID string)
 	return m.attempts[orderID], nil
 }
 
+// SuccessfulAttemptID returns a synthetic attempt id when the order has a succeeded
+// attempt (attempts[orderID] > 0), mirroring the DB rule that a refund must reference
+// the payment it reverses.
+func (m *memRefundStore) SuccessfulAttemptID(_ context.Context, orderID string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.attempts[orderID] <= 0 {
+		return "", nil
+	}
+	return "pa-" + orderID, nil
+}
+
 // ── tests ──────────────────────────────────────────────────────────────────────
 
 func TestCreateRefund_PartialRefund(t *testing.T) {
@@ -91,16 +103,17 @@ func TestCreateRefund_PartialRefund(t *testing.T) {
 	if id == "" {
 		t.Fatal("empty refund id")
 	}
-	// Order should now be PARTIALLY_REFUNDED (30k of 100k).
-	if store.lastStatus != OrderPartiallyRefunded {
-		t.Fatalf("status=%s want PARTIALLY_REFUNDED", store.lastStatus)
+	// A partial refund leaves the order status untouched (DB v2 §10.3 has no
+	// PARTIALLY_REFUNDED status) but accumulates refunded_total.
+	if store.lastStatus != OrderPaid {
+		t.Fatalf("status=%s want %s (partial refund must not change order status)", store.lastStatus, OrderPaid)
 	}
 	if store.lastRefundedTotal != 30000 {
 		t.Fatalf("refunded_total=%d want 30000", store.lastRefundedTotal)
 	}
 }
 
-func TestCreateRefund_FullRefundTransitionsToRefunded(t *testing.T) {
+func TestCreateRefund_FullRefundClosesOrder(t *testing.T) {
 	store := newMemRefundStore()
 	store.attempts["o-1"] = 100000
 	svc := NewService(nil, nil)
@@ -115,8 +128,11 @@ func TestCreateRefund_FullRefundTransitionsToRefunded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("full refund: %v", err)
 	}
-	if store.lastStatus != OrderRefunded {
-		t.Fatalf("status=%s want REFUNDED", store.lastStatus)
+	if store.lastStatus != OrderClosed {
+		t.Fatalf("status=%s want %s (full refund closes the order)", store.lastStatus, OrderClosed)
+	}
+	if store.lastRefundedTotal != 100000 {
+		t.Fatalf("refunded_total=%d want 100000", store.lastRefundedTotal)
 	}
 }
 
@@ -179,16 +195,20 @@ func TestReconcileTransaction_Reconciled(t *testing.T) {
 	svc := NewService(nil, nil)
 	svc.SetRefundStore(store)
 	stubStore := &stubOrderStore{orders: map[string]*Order{
-		"o-1": {ID: "o-1", Status: OrderPaid, PaidTotal: 80000, RefundedTotal: 20000},
+		"o-1": {ID: "o-1", Status: OrderPaid, PaidTotal: 100000, RefundedTotal: 20000},
 	}}
 	svc.store = stubStore
-	// Expected = 100000 − 20000 = 80000 = PaidTotal → reconciled.
+	// paid_total equals the captured payments (100000) → reconciled; refunds are a
+	// separate accumulator, reported as NetPaid.
 	res, err := svc.ReconcileTransaction(context.Background(), "o-1")
 	if err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 	if !res.Reconciled {
-		t.Fatalf("expected reconciled: paid=%d expected=%d", res.PaidTotal, res.ExpectedPaidAfterRefund)
+		t.Fatalf("expected reconciled: paid=%d succeeded=%d", res.PaidTotal, res.SucceededAttempts)
+	}
+	if res.NetPaid != 80000 {
+		t.Fatalf("net_paid=%d want 80000", res.NetPaid)
 	}
 }
 
@@ -201,7 +221,7 @@ func TestReconcileTransaction_NotReconciled(t *testing.T) {
 		"o-1": {ID: "o-1", Status: OrderPaid, PaidTotal: 70000, RefundedTotal: 20000},
 	}}
 	svc.store = stubStore
-	// Expected = 100000 − 20000 = 80000 ≠ 70000 → NOT reconciled (money missing).
+	// paid_total (70000) ≠ captured payments (100000) → NOT reconciled (money missing).
 	res, _ := svc.ReconcileTransaction(context.Background(), "o-1")
 	if res.Reconciled {
 		t.Fatal("expected NOT reconciled")

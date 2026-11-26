@@ -218,7 +218,8 @@ type EventEnqueuer interface {
 type Service struct {
 	store   Store
 	queue   EventEnqueuer
-	refunds RefundStore // optional; wired via SetRefundStore (nil → refund methods error)
+	refunds RefundStore   // optional; wired via SetRefundStore (nil → refund methods error)
+	auditor AuditRecorder // optional; wired via SetAuditor (nil → no audit writes)
 	now     func() time.Time
 }
 

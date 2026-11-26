@@ -5,6 +5,7 @@ package commerce
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -275,23 +276,28 @@ var (
 var _ = time.Now
 
 // ── RefundStore implementation ────────────────────────────────────────────────
-//
-// The refunds table would be created by a future migration; for now these
-// methods query a `refunds` table schema that matches the Refund struct. The
-// Service interface is stable — adding the table later doesn't change callers.
+// Column set follows migration 000006 (DB v2 §10.6): a refund references the
+// SUCCEEDED payment attempt it reverses and stores who approved it. There is no
+// currency column — an order is single-currency.
 
 func (s *DBStore) CreateRefund(ctx context.Context, r Refund) (string, error) {
 	var id string
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO refunds (order_id, amount, currency, reason, status)
-		 VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-		r.OrderID, r.Amount, r.Currency, r.Reason, r.Status).Scan(&id)
+		`INSERT INTO refunds (order_id, payment_attempt_id, order_item_id, amount, reason,
+		                      status, provider_reference, approved_by, completed_at)
+		 VALUES ($1,$2,NULLIF($3,'')::uuid,$4,$5,$6,NULLIF($7,''),NULLIF($8,'')::uuid,$9)
+		 RETURNING id`,
+		r.OrderID, r.PaymentAttemptID, r.OrderItemID, r.Amount, r.Reason,
+		r.Status, r.ProviderReference, r.ApprovedBy, r.CompletedAt).Scan(&id)
 	return id, err
 }
 
 func (s *DBStore) ListRefunds(ctx context.Context, orderID string) ([]Refund, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, order_id, amount, currency, reason, status, created_at, processed_at
+		`SELECT id, order_id, payment_attempt_id,
+		        coalesce(order_item_id::text,''), amount, reason, status,
+		        coalesce(provider_reference,''), coalesce(approved_by::text,''),
+		        created_at, completed_at
 		   FROM refunds WHERE order_id = $1 ORDER BY created_at`, orderID)
 	if err != nil {
 		return nil, err
@@ -300,18 +306,36 @@ func (s *DBStore) ListRefunds(ctx context.Context, orderID string) ([]Refund, er
 	var out []Refund
 	for rows.Next() {
 		var r Refund
-		var processedAt pgtype.Timestamptz
-		if err := rows.Scan(&r.ID, &r.OrderID, &r.Amount, &r.Currency, &r.Reason,
-			&r.Status, &r.CreatedAt, &processedAt); err != nil {
+		var completedAt pgtype.Timestamptz
+		if err := rows.Scan(&r.ID, &r.OrderID, &r.PaymentAttemptID, &r.OrderItemID,
+			&r.Amount, &r.Reason, &r.Status, &r.ProviderReference, &r.ApprovedBy,
+			&r.CreatedAt, &completedAt); err != nil {
 			return nil, err
 		}
-		if processedAt.Valid {
-			t := processedAt.Time
-			r.ProcessedAt = &t
+		if completedAt.Valid {
+			t := completedAt.Time
+			r.CompletedAt = &t
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// SuccessfulAttemptID returns the SUCCEEDED payment attempt of an order ("" when the
+// order was never paid).
+func (s *DBStore) SuccessfulAttemptID(ctx context.Context, orderID string) (string, error) {
+	var id string
+	err := s.pool.QueryRow(ctx,
+		`SELECT pa.id
+		   FROM payment_attempts pa
+		   JOIN payment_intents pi ON pi.id = pa.payment_intent_id
+		  WHERE pi.order_id = $1 AND pa.status = 'SUCCEEDED'
+		  ORDER BY pa.completed_at DESC NULLS LAST, pa.created_at DESC
+		  LIMIT 1`, orderID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
 }
 
 func (s *DBStore) UpdateOrderRefunded(ctx context.Context, id string, refundedTotal int64, status string) error {
