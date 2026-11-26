@@ -32,8 +32,11 @@ export type Article = {
   summary?: string
   body?: string
   language?: string
+  source_type?: string
   status: string
   published_at?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export type Topic = { id: string; name: string; slug: string; sort_order: number }
@@ -150,6 +153,12 @@ export async function getOrderByNumber(number: string) {
 }
 
 // ── magazine ──
+export async function listArticlesByTopic(topicId: string, page = 1, pageSize = 20) {
+  return request<{ data: Article[]; total: number }>(
+    `/articles?topic=${encodeURIComponent(topicId)}&page=${page}&page_size=${pageSize}`,
+  )
+}
+
 export async function listArticles(page = 1, pageSize = 20) {
   return request<{ data: Article[]; total: number }>(`/articles?page=${page}&page_size=${pageSize}`)
 }

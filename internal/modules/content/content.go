@@ -85,44 +85,44 @@ var (
 
 // Topic mirrors topics (DB v2 §۱۲.۱). A topic tree via parent_id.
 type Topic struct {
-	ID        string
-	Name      string
-	Slug      string
-	ParentID  string
-	SortOrder int
-	Status    string
-	CreatedAt time.Time
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Slug      string    `json:"slug"`
+	ParentID  string    `json:"parent_id,omitempty"`
+	SortOrder int       `json:"sort_order"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Article mirrors articles (DB v2 §۱۲.۱). The editorial workflow status is the
 // core state; published_at is set on first PUBLISHED transition.
 type Article struct {
-	ID              string
-	Title           string
-	Slug            string
-	Summary         string
-	Body            string
-	Language        string
-	SourceType      string
-	SourceURL       string
-	ParentArticleID string // set for translations (SAD §۷.۲)
-	AuthorID        string
-	EditorID        string
-	Status          string
-	PublishedAt     *time.Time
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID              string     `json:"id"`
+	Title           string     `json:"title"`
+	Slug            string     `json:"slug"`
+	Summary         string     `json:"summary"`
+	Body            string     `json:"body"`
+	Language        string     `json:"language"`
+	SourceType      string     `json:"source_type"`
+	SourceURL       string     `json:"source_url,omitempty"`
+	ParentArticleID string     // set for translations (SAD §۷.۲) `json:"parent_article_id,omitempty"`
+	AuthorID        string     `json:"author_id,omitempty"`
+	EditorID        string     `json:"editor_id,omitempty"`
+	Status          string     `json:"status"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // ArticleSource mirrors article_sources (ADR-CONTENT-001). An article must have
 // ≥1 source to be publishable.
 type ArticleSource struct {
-	ID         string
-	ArticleID  string
-	SourceType string // JOURNAL/BOOK/GUIDELINE/EXPERT/OTHER
-	Citation   string
-	URL        string
-	CreatedAt  time.Time
+	ID         string    `json:"id"`
+	ArticleID  string    `json:"article_id"`
+	SourceType string    // JOURNAL/BOOK/GUIDELINE/EXPERT/OTHER `json:"source_type"`
+	Citation   string    `json:"citation"`
+	URL        string    `json:"url,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // ProductArticleRelation mirrors product_article_relations (§12.3). The

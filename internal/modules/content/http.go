@@ -54,7 +54,16 @@ func ListPublishedArticlesHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 		pageSize := parsePositiveInt(r.URL.Query().Get("page_size"), 20)
-		arts, total, err := svc.ListPublishedArticles(r.Context(), page, pageSize)
+		// ?topic=<topic id> narrows the list to one topic (magazine topic pages).
+		topicID := r.URL.Query().Get("topic")
+		var arts []Article
+		var total int
+		var err error
+		if topicID != "" {
+			arts, total, err = svc.ListArticlesByTopic(r.Context(), topicID, page, pageSize)
+		} else {
+			arts, total, err = svc.ListPublishedArticles(r.Context(), page, pageSize)
+		}
 		if err != nil {
 			writeContentSvcErr(w, err)
 			return
