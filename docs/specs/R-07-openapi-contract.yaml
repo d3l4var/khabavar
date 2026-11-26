@@ -1,0 +1,2208 @@
+openapi: 3.1.0
+info:
+  title: KHABAVAR Platform API
+  version: 1.1.0
+  description: |
+    قرارداد API پلتفرم خواب‌آور — KH-API-001 نسخه ۱.۱
+
+    مبنای هم‌سویی:
+    - SAD v2.0 مصوب: Monolith Modular با مرزهای ۹ ماژول، Backend API واحد روی دامنه اصلی
+    - CIAM v1.0: OIDC Auth Code + PKCE، نشست مستقل به ازای هر سرویس، OTP با هش
+    - DB Migrations مرحله ۳ (۵۲ جدول): وضعیت‌ها و شناسه‌ها عیناً هم‌سو
+    - IAM مصوب: Scope هر سرویس + RBAC نقش‌محور در پنل مدیریت
+
+    تغییرات نسخه ۱.۱.۰ (تصمیمات مالک 2026-11-25 — سجل کامل: KH-INDEX-001 v1.1 §۷):
+    - افزودن POST /orders/{orderNumber}/return-requests — مرجوعی پس‌تحویل مشتری (PRD SH-M09)
+    - CartItem.availability شش وضعیت مشتری‌روی — بازگشت SUPPLIER_AVAILABLE و PRE_ORDER و PENDING_VERIFICATION
+    - چرخه عمر تأمین‌کننده: ۸ وضعیت مصوب + PROBATION نگه‌داری‌شده در این نسخه با قابلیت حذف؛ RETIRED حذف (≈ INACTIVE)
+    - یادداشت SupplyType: MIXED استراتژی سطح محصول است؛ منبع Fulfillment به‌ازای هر سفارش تصمیم‌گیری می‌شود
+    - ماتریس RBAC اکنون ۱۰ نقش است (بازگشت SUPPLIER_OPERATOR از CIAM §۶)
+
+    قواعد عمومی قرارداد:
+    - همه مبالغ: عدد صحیح ریال (BIGINT) — تبدیل به تومان فقط در لایه نمایش (ADR-DATA-001)
+    - شناسه تجاری سفارش: KHA-ORD-YYYY-NNNNNN — مستقل از UUID داخلی
+    - هدر Idempotency-Key روی تمام POSTهای مالی الزامی است (ADR-ARCH-008)
+    - صفحه‌بندی: page و page_size (پیش‌فرض ۲۰، حداکثر ۱۰۰)
+    - پاکت خطای یکسان با کد ماشین‌خوان (schema: Error)
+    - زمان: ISO 8601 با UTC؛ نمایش کلاینت با Asia/Tehran (DB v2 §۴.۳)
+    - فارسی‌سازی پیام‌های کاربرنما مسئولیت لایه BFF است؛ کدهای خطا ثابت و انگلیسی‌اند
+
+servers:
+  - url: https://api.khabavar.ir/v1
+    description: Production
+  - url: https://api-staging.khabavar.ir/v1
+    description: Staging
+  - url: http://localhost:8080/v1
+    description: Development
+
+tags:
+  - name: identity
+    description: Central Identity — OTP، جریان OIDC، پروفایل و نشست‌ها (CIAM)
+  - name: catalog
+    description: مرور عمومی محصولات و دسته‌بندی‌ها (مخصوص فروشگاه و وب‌سایت اصلی)
+  - name: cart
+    description: سبد خرید مشتری و مهمان (MA-8)
+  - name: checkout
+    description: تسویه، پرداخت و بازگشت از درگاه (Commerce v1.0)
+  - name: orders
+    description: سفارش‌ها و پیگیری (مشتری و مهمان)
+  - name: magazine
+    description: مجله تخصصی — مقالات، موضوعات، ارتباط با محصولات
+  - name: admin-products
+    description: پنل مدیریت — کاتالوگ و چرخه انتشار (QC-05)
+  - name: admin-supply
+    description: پنل مدیریت — تأمین‌کنندگان، ارزیابی، موجودی و رزرو
+  - name: admin-pricing
+    description: پنل مدیریت — هزینه تمام‌شده و قیمت فروش با تأیید نقش مجاز
+  - name: admin-orders
+    description: پنل مدیریت — سفارش‌ها، Fulfillment، مرسوله، بازپرداخت، لغو
+  - name: admin-content
+    description: پنل مدیریت — گردش کار تحریریه مجله (ADR-CONTENT-001)
+  - name: admin-system
+    description: پنل مدیریت — کاربران، نقش‌ها، Audit Log
+
+security:
+  - oauth2:
+      - customer.basic
+
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: |
+        Central Identity به‌عنوان سرور احراز هویت — جریان Authorization Code + PKCE.
+        نشست هر سرویس مستقل است؛ Access Token عمر کوتاه دارد و ابطال سمت سرور فعال است (CIAM §۵).
+        پنل مدیریت فقط با scope «staff» کار می‌کند؛ مجوز ریزدانه هر عملیات در سرور طبق
+        ماتریس نقش‌های مصوب (۱۰ نقش) کنترل می‌شود.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://id.khabavar.ir/oauth/authorize
+          tokenUrl: https://id.khabavar.ir/oauth/token
+          refreshUrl: https://id.khabavar.ir/oauth/token
+          scopes:
+            openid: ورود OIDC استاندارد
+            profile: دسترسی به نام و اطلاعات پایه کاربر
+            customer.basic: سرویس اصلی — پروفایل و آدرس‌ها
+            customer.commerce: فروشگاه — سبد، تسویه، سفارش‌ها
+            customer.content: مجله — مطالعه و تنظیمات محتوا
+            staff: پنل مدیریت — مبتنی بر نقش و مجوز ریزدانه
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: شماره صفحه (از ۱)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeParam:
+      name: page_size
+      in: query
+      description: تعداد آیتم هر صفحه
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      description: زبان پاسخ — نسخه اول فقط fa-IR
+      schema:
+        type: string
+        default: fa-IR
+        enum: [fa-IR]
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        کلید یکتای عملیات (UUID پیشنهادی) — درخواست تکراری با همان کلید همان نتیجه قبلی را
+        برمی‌گرداند و اثر تکراری ندارد (ADR-ARCH-008). نگهداری حداقل ۲۴ ساعت سمت سرور.
+      schema:
+        type: string
+        maxLength: 100
+    OrderNumberPath:
+      name: orderNumber
+      in: path
+      required: true
+      description: شناسه تجاری سفارش — قالب KHA-ORD-YYYY-NNNNNN
+      schema:
+        type: string
+        pattern: "^KHA-ORD-[0-9]{4}-[0-9]{6}$"
+        example: KHA-ORD-2026-000001
+
+  responses:
+    BadRequest:
+      description: درخواست نامعتبر — خطاهای اعتبارسنجی فیلدبه‌فیلد
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            code: VALIDATION_FAILED
+            message: درخواست معتبر نیست
+            details: [{ field: phone, message: شماره موبایل معتبر نیست }]
+    Unauthorized:
+      description: احراز هویت لازم است یا نشست منقضی/ابطال شده
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: UNAUTHENTICATED, message: "ورود لازم است" }
+    Forbidden:
+      description: مجوز کافی ندارد (نقش/مجوز ریزدانه در پنل مدیریت)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: FORBIDDEN, message: "دسترسی مجاز نیست" }
+    NotFound:
+      description: منبع یافت نشد
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: NOT_FOUND, message: "منبع یافت نشد" }
+    Conflict:
+      description: تعارض وضعیت — مثل تلاش پرداخت روی سفارش بسته‌شده
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: STATE_CONFLICT, message: "وضعیت فعلی این عملیات را نمی‌پذیرد" }
+    RateLimited:
+      description: سقف نرخ ارسال (مثل OTP) — با هدر Retry-After
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: ثانیه تا اجازه تلاش بعدی
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: RATE_LIMITED, message: "تعداد تلاش بیش از حد مجاز" }
+    ServerError:
+      description: خطای داخلی — جزئیات فنی لاگ می‌شود و افشا نمی‌شود
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: INTERNAL, message: "خطای غیرمنتظره؛ بعداً تلاش کنید" }
+  schemas:
+    Error:
+      type: object
+      description: پاکت خطای یکسان همه Endpointها
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: کد ماشین‌خوان ثابت — مثل VALIDATION_FAILED, RATE_LIMITED, STATE_CONFLICT, PAYMENT_UNVERIFIED
+        message:
+          type: string
+          description: پیام قابل نمایش به کاربر (فارسی)
+        details:
+          type: array
+          description: جزئیات اختیاری — فیلدهای خطادار یا اطلاعات تکمیلی
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+
+    Money:
+      type: integer
+      format: int64
+      description: مبلغ به ریال — هرگز اعشاری نیست؛ نمایش تومان فقط در لایه Presentation
+
+    PageInfo:
+      type: object
+      required: [page, page_size, total, total_pages]
+      properties:
+        page: { type: integer, example: 1 }
+        page_size: { type: integer, example: 20 }
+        total: { type: integer, description: تعداد کل رکوردها }
+        total_pages: { type: integer }
+
+    AddressInput:
+      type: object
+      description: آدرس گیرنده — هنگام ثبت سفارش به‌صورت Snapshot ذخیره می‌شود (DB §5.2)
+      required: [province, city, address_line, recipient_name, recipient_phone]
+      properties:
+        province: { type: string, maxLength: 100, example: تهران }
+        city: { type: string, maxLength: 100, example: تهران }
+        postal_code: { type: string, maxLength: 20, example: "1456789432" }
+        address_line: { type: string, maxLength: 500 }
+        plaque: { type: string, maxLength: 20 }
+        unit: { type: string, maxLength: 20 }
+        recipient_name: { type: string, maxLength: 200 }
+        recipient_phone: { type: string, maxLength: 20 }
+
+    AddressSnapshot:
+      allOf:
+        - $ref: "#/components/schemas/AddressInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            is_default: { type: boolean }
+
+    CustomerProfile:
+      type: object
+      description: پروفایل تجاری مشتری — اطلاعات حساس اضافه جمع نمی‌شود (CIAM §۹)
+      properties:
+        id: { type: string, format: uuid }
+        phone: { type: string, maxLength: 20 }
+        email: { type: string }
+        full_name: { type: string }
+        phone_verified_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    OtpRequestInput:
+      type: object
+      required: [phone, purpose]
+      properties:
+        phone: { type: string, maxLength: 20, description: شماره موبایل با قالب استاندارد داخلی }
+        purpose:
+          type: string
+          enum: [LOGIN, VERIFY_PHONE, ADMIN_LOGIN]
+          description: هدف کد — پنل مدیریت با ADMIN_LOGIN و scope جدا
+
+    OtpRequestResult:
+      type: object
+      properties:
+        challenge_id: { type: string, format: uuid }
+        expires_in: { type: integer, description: ثانیه تا انقضای کد — سیاست مصوب ۱۲۰ ثانیه }
+        resend_after: { type: integer, description: ثانیه تا اجازه ارسال مجدد }
+
+    OtpVerifyInput:
+      type: object
+      required: [challenge_id, code]
+      properties:
+        challenge_id: { type: string, format: uuid }
+        code: { type: string, minLength: 6, maxLength: 6, description: کد شش‌رقمی — هرگز ذخیره خام نمی‌شود }
+
+    OtpVerifyResult:
+      type: object
+      description: |
+        تأیید موفق کد؛ خروجی بسته به context:
+        - جریان OIDC: continuation_token برای تکمیل authorize
+        - تأیید شماره پروفایل: status فقط
+      properties:
+        status:
+          type: string
+          enum: [VERIFIED, INVALID_CODE, EXPIRED, TOO_MANY_ATTEMPTS]
+        continuation_token:
+          type: string
+          description: فقط در LOGIN/ADMIN_LOGIN — برای پیوند با جریان authorize (عمر کوتاه، یک‌بارمصرف)
+        customer:
+          $ref: "#/components/schemas/CustomerProfile"
+
+    TokenRequest:
+      type: object
+      required: [grant_type, client_id]
+      properties:
+        grant_type:
+          type: string
+          enum: [authorization_code, refresh_token]
+        client_id: { type: string, description: کلاینت سرویس — khabavar-main|shop|magazine|admin }
+        code: { type: string, description: کد یک‌بارمصرف authorize }
+        redirect_uri: { type: string }
+        code_verifier: { type: string, description: PKCE S256 }
+        refresh_token: { type: string }
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, description: ثانیه — عمر کوتاه }
+        refresh_token: { type: string, description: چرخش در هر استفاده (CIAM §۵) }
+        id_token: { type: string, description: فقط با scope openid }
+        scope: { type: string }
+
+    SessionInfo:
+      type: object
+      description: نشست فعال این سرویس — نشست هر سرویس مستقل و قابل ابطال جداگانه است
+      properties:
+        session_id: { type: string, format: uuid }
+        service_code: { type: string, enum: [main, shop, magazine, admin] }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    CategoryNode:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        parent_id: { type: [string, "null"] }
+        name: { type: string, example: بالش }
+        slug: { type: string }
+        children:
+          type: array
+          items: { $ref: "#/components/schemas/CategoryNode" }
+
+    Variant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string }
+        attributes: { type: object, additionalProperties: true, description: مشخصات انعطاف‌پذیر غیرهسته‌ای (DB §6.3) }
+        dimensions:
+          type: object
+          properties:
+            weight_grams: { type: integer, minimum: 0 }
+            length_mm: { type: integer, minimum: 0 }
+            width_mm: { type: integer, minimum: 0 }
+            height_mm: { type: integer, minimum: 0 }
+        price:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          description: قیمت فروش معتبر روز — منبع محصول_PRICE_RECORDS تأییدشده
+        compare_at_price:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          description: قیمت قبل از تخفیف برای نمایش؛ صفر/غایب = بدون تخفیف
+        in_stock: { type: boolean, description: Available = OnHand − Reserved (DB §8.2) }
+        media:
+          type: array
+          items:
+            type: object
+            properties:
+              storage_key: { type: string }
+              alt_text: { type: string }
+              sort_order: { type: integer }
+
+    ProductSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        title: { type: string }
+        brand: { type: string }
+        short_description: { type: string }
+        price_from:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          description: کمینه قیمت Variantهای فعال
+        primary_image:
+          type: string
+          description: کلید فایل تصویر اصلی در Object Storage
+        rating_summary:
+          type: object
+          description: نسخه اول — محاسبه از داده‌های موجود؛ حداکثر عرضه محتاطانه
+          properties:
+            average: { type: number }
+            count: { type: integer }
+
+    ProductDetail:
+      allOf:
+        - $ref: "#/components/schemas/ProductSummary"
+        - type: object
+          properties:
+            description: { type: string }
+            manufacturer: { type: string }
+            country_of_origin: { type: string }
+            spec_source: { type: string, description: MA-6 — منبع مشخصات، در صفحه محصول شفاف نمایش داده می‌شود }
+            sleep_relevance: { type: string, description: MA-1 — توجیه ارتباط واقعی با خواب }
+            categories:
+              type: array
+              items: { $ref: "#/components/schemas/CategoryNode" }
+            variants:
+              type: array
+              items: { $ref: "#/components/schemas/Variant" }
+            related_articles:
+              type: array
+              items: { $ref: "#/components/schemas/ArticleSummary" }
+              description: ارتباط مقاله-محصول با دلیل ثبت‌شده (MA-5) — EDUCATIONAL/PRODUCT_GUIDE
+
+    ProductSummaryList:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ProductSummary" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+
+    Cart:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CartItem" }
+        subtotal:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          description: مجموع قیمت‌های معتبر روز — قیمت قدیمی سبد تضمین نمی‌شود (DB §10.2)
+        currency: { type: string, enum: [IRR] }
+        expires_at: { type: string, format: date-time }
+
+    CartItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        variant_id: { type: string, format: uuid }
+        sku: { type: string }
+        product_title: { type: string }
+        variant_attributes: { type: object, additionalProperties: true }
+        unit_price:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+        quantity: { type: integer, minimum: 1 }
+        line_total:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+        availability:
+          type: string
+          enum: [AVAILABLE, LOW_STOCK, OUT_OF_STOCK, SUPPLIER_AVAILABLE, PRE_ORDER, PENDING_VERIFICATION]
+          description: |
+            شش وضعیت مشتری‌روی فروشگاه (Catalog §8.2 — بازگردانده با تصمیم مالک 2026-11-25).
+            SUPPLIER_AVAILABLE و PRE_ORDER همراه با ETA تأمین پیش از پرداخت نمایش داده می‌شوند (MA-4، BR-03، SH-M02).
+            PENDING_VERIFICATION یعنی موجودی تأمین‌کننده ثبت شده ولی هنوز اعتبارسنجی نشده و نهایی نیست (BR-03).
+            DISCONTINUED وضعیت چرخه عمر محصول است (AdminProductStatus) و در وضعیت موجودی نمی‌آید.
+
+    AddCartItemInput:
+      type: object
+      required: [variant_id, quantity]
+      properties:
+        variant_id: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 10 }
+
+    UpdateCartItemInput:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: { type: integer, minimum: 0, maximum: 10, description: صفر = حذف آیتم }
+
+    MergeCartInput:
+      type: object
+      description: ادغام سبد مهمان در سبد مشتری پس از ورود (MA-8)
+      properties:
+        guest_cart_token: { type: string, description: شناسه سبد مهمان از کوکی }
+
+    CheckoutInput:
+      type: object
+      required: [items, shipping_address, payment_provider]
+      properties:
+        cart_id: { type: string, format: uuid, description: اختیاری — با اگر خالی، items مستقیم ارزیابی می‌شوند }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [variant_id, quantity]
+            properties:
+              variant_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1 }
+        shipping_address: { $ref: "#/components/schemas/AddressInput" }
+        guest_phone: { type: string, description: الزامی برای خرید مهمان (MA-8) }
+        payment_provider: { type: string, description: درگاه فعال نسخه اول — پس از انتخاب تأمین‌کننده نهایی می‌شود (SAD §۸) }
+        marketing_consent: { type: boolean, default: false, description: رضایت جداگانه بازاریابی (CIAM §۹) }
+
+    CheckoutResult:
+      type: object
+      description: |
+        نتیجه Checkout موفق — سفارش با وضعیت PENDING_PAYMENT ایجاد شده و
+        Payment Intent صادر شده است (DB §14.1 ترتیب عملیات).
+      properties:
+        order:
+          $ref: "#/components/schemas/Order"
+        payment:
+          type: object
+          properties:
+            intent_id: { type: string, format: uuid }
+            amount:
+              allOf: [{ $ref: "#/components/schemas/Money" }]
+            redirect_url: { type: string, description: آدرس هدایت به درگاه }
+
+    OrderStatus:
+      type: string
+      enum: [PENDING_PAYMENT, PAID, IN_FULFILLMENT, PARTIALLY_SHIPPED, SHIPPED, DELIVERED, COMPLETED, CANCELLED, CLOSED]
+      description: واژگان مصوب مرحله ۳ — هم‌سو با CHECK ستون orders.status
+
+    OrderItem:
+      type: object
+      description: قلم سفارش — همه مقادیر Snapshot هستند و با تغییر کاتالوگ نمی‌شکنند (DB §10.4)
+      properties:
+        id: { type: string, format: uuid }
+        product_slug: { type: string }
+        sku_snapshot: { type: string }
+        title_snapshot: { type: string }
+        attributes_snapshot: { type: object, additionalProperties: true }
+        quantity: { type: integer }
+        unit_price: { $ref: "#/components/schemas/Money" }
+        discount_amount: { $ref: "#/components/schemas/Money" }
+        tax_amount: { $ref: "#/components/schemas/Money" }
+        line_total: { $ref: "#/components/schemas/Money" }
+        supply_type: { $ref: "#/components/schemas/SupplyType" }
+        fulfillments:
+          type: array
+          items: { $ref: "#/components/schemas/FulfillmentView" }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        order_number: { type: string, example: KHA-ORD-2026-000001 }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        is_guest: { type: boolean }
+        currency: { type: string, enum: [IRR] }
+        subtotal: { $ref: "#/components/schemas/Money" }
+        discount_total: { $ref: "#/components/schemas/Money" }
+        shipping_total: { $ref: "#/components/schemas/Money" }
+        tax_total: { $ref: "#/components/schemas/Money" }
+        grand_total: { $ref: "#/components/schemas/Money" }
+        paid_total: { $ref: "#/components/schemas/Money" }
+        refunded_total: { $ref: "#/components/schemas/Money" }
+        shipping_address_snapshot: { $ref: "#/components/schemas/AddressSnapshot" }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OrderItem" }
+        payment_summary:
+          type: object
+          properties:
+            intent_status: { $ref: "#/components/schemas/PaymentIntentStatus" }
+            last_attempt_status: { $ref: "#/components/schemas/PaymentAttemptStatus" }
+            failure_code: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    OrderList:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Order" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+
+    CancelInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, maxLength: 500 }
+        item_ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: خالی = لغو کل سفارش (PRD O-3 — لغو پیش از آماده‌سازی)
+
+    ReturnRequestInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [order_item_id]
+            properties:
+              order_item_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1, description: پیش‌فرض کل مقدار قلم }
+              reason: { type: string, maxLength: 500 }
+        note: { type: string, maxLength: 1000 }
+
+    ReturnRequestStatus:
+      type: string
+      enum: [REQUESTED, UNDER_REVIEW, APPROVED, REJECTED, COMPLETED]
+      description: بازپرداخت پس از APPROVED از طریق جریان ادمین اجرا می‌شود (order.refund.approve — سقف BR-05)
+
+    ReturnRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        order_number: { type: string, example: "KHA-ORD-2026-000123" }
+        status: { $ref: "#/components/schemas/ReturnRequestStatus" }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ReturnRequestItem" }
+        created_at: { type: string, format: date-time }
+
+    ReturnRequestItem:
+      type: object
+      properties:
+        order_item_id: { type: string, format: uuid }
+        quantity: { type: integer }
+        reason: { type: string }
+
+    SupplyType:
+      type: string
+      enum: [OWNED_INVENTORY, SUPPLIER_SOURCED]
+      description: |
+        DB §11.1 عیناً — در سطح Variant همیشه دقیقاً یکی از دو مقدار.
+        MIXED یک استراتژی تأمین در سطح محصول است (Catalog §8.1) نه ویژگی Variant؛
+        منبع Fulfillment به‌ازای هر سفارش بر اساس موجودی لحظه‌ای تصمیم‌گیری می‌شود
+        (تصمیم مالک 2026-11-25 — INDEX priority 5).
+
+    PaymentIntentStatus:
+      type: string
+      enum: [REQUIRES_PAYMENT, PROCESSING, SUCCEEDED, FAILED, EXPIRED, CANCELLED]
+
+    PaymentAttemptStatus:
+      type: string
+      enum: [INITIATED, REDIRECTED, UNKNOWN, SUCCEEDED, FAILED]
+      description: UNKNOWN = پاسخ نامشخص درگاه — سفارش بدون استعلام دوباره پرداخت نمی‌شود (DB §14.1)
+
+    RefundStatus:
+      type: string
+      enum: [REQUESTED, APPROVED, PROCESSING, COMPLETED, REJECTED, FAILED]
+
+    FulfillmentStatus:
+      type: string
+      enum: [PENDING, CONFIRMED, PROCESSING, READY, SHIPPED, DELIVERED, CANCELLED, REJECTED]
+
+    ShipmentStatus:
+      type: string
+      enum: [LABEL_CREATED, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED, RETURNED]
+
+    ArticleStatus:
+      type: string
+      enum: [DRAFT, IN_REVIEW, APPROVED, SCHEDULED, PUBLISHED, UNPUBLISHED, ARCHIVED]
+      description: گردش کار SAD §7.2 — پیش‌نویس، بازبینی، انتشار
+
+    RelationType:
+      type: string
+      enum: [RELATED, EDUCATIONAL, PRODUCT_GUIDE, COMPARISON]
+      description: DB §12.3 عیناً
+
+    ReservationStatus:
+      type: string
+      enum: [ACTIVE, CONVERTED, RELEASED, EXPIRED]
+
+    MovementType:
+      type: string
+      enum: [RECEIPT, SALE, RESERVATION, RELEASE, RETURN, ADJUSTMENT, DAMAGE, TRANSFER]
+      description: DB §8.3 عیناً
+
+    ArticleSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        topics:
+          type: array
+          items: { type: string }
+        published_at: { type: string, format: date-time }
+        reading_minutes: { type: integer }
+
+    ArticleDetail:
+      allOf:
+        - $ref: "#/components/schemas/ArticleSummary"
+        - type: object
+          properties:
+            body: { type: string, description: HTML ایمن‌سازی‌شده از تحریریه }
+            language: { type: string, default: fa-IR }
+            source_type: { type: string, enum: [ORIGINAL, TRANSLATION, CURATED] }
+            sources:
+              type: array
+              items:
+                type: object
+                description: منابع علمی — ADR-CONTENT-001 (انتشار فقط با ≥۱ منبع)
+                properties:
+                  source_type: { type: string, enum: [JOURNAL, BOOK, GUIDELINE, EXPERT, OTHER] }
+                  citation: { type: string }
+                  url: { type: string }
+            related_products:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_slug: { type: string }
+                  product_title: { type: string }
+                  relation_type: { $ref: "#/components/schemas/RelationType" }
+            parent_article:
+              type: object
+              properties:
+                slug: { type: string, description: مقاله مبدأ در جریان ترجمه (SAD §7.2) }
+
+    ArticleSummaryList:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ArticleSummary" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+
+    Topic:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: علوم خواب }
+        slug: { type: string, example: sleep-science }
+
+    FulfillmentView:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        source_type: { $ref: "#/components/schemas/SupplyType" }
+        status: { $ref: "#/components/schemas/FulfillmentStatus" }
+        estimated_delivery_at: { type: string, format: date-time }
+        shipments:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              carrier: { type: string }
+              tracking_number: { type: string }
+              status: { $ref: "#/components/schemas/ShipmentStatus" }
+              shipped_at: { type: string, format: date-time }
+              delivered_at: { type: string, format: date-time }
+              events:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    event_code: { type: string }
+                    description: { type: string }
+                    occurred_at: { type: string, format: date-time }
+
+    AdminProductUpsert:
+      type: object
+      required: [title, slug]
+      properties:
+        title: { type: string, maxLength: 255 }
+        slug: { type: string, maxLength: 255 }
+        brand_id: { type: [string, "null"] }
+        short_description: { type: string }
+        description: { type: string }
+        manufacturer: { type: string, maxLength: 255 }
+        country_of_origin: { type: string, maxLength: 100 }
+        sleep_relevance: { type: string, description: MA-1 }
+        spec_source: { type: string, description: MA-6 }
+        category_ids:
+          type: array
+          items: { type: string, format: uuid }
+        variants:
+          type: array
+          items:
+            type: object
+            required: [sku]
+            properties:
+              sku: { type: string, maxLength: 100 }
+              barcode: { type: string, maxLength: 100 }
+              attributes: { type: object, additionalProperties: true }
+              weight_grams: { type: integer, minimum: 0 }
+              length_mm: { type: integer, minimum: 0 }
+              width_mm: { type: integer, minimum: 0 }
+              height_mm: { type: integer, minimum: 0 }
+        media:
+          type: array
+          items:
+            type: object
+            required: [storage_key]
+            properties:
+              media_type: { type: string, enum: [IMAGE, VIDEO, DOCUMENT] }
+              storage_key: { type: string }
+              alt_text: { type: string }
+              sort_order: { type: integer, default: 0 }
+
+    AdminProductStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [DRAFT, DATA_REVIEW, APPROVED, PUBLISHED, PAUSED, DISCONTINUED]
+        note: { type: string }
+
+    SupplierInput:
+      type: object
+      required: [name, supplier_type]
+      properties:
+        name: { type: string, maxLength: 200 }
+        supplier_type: { type: string, description: واژگان ثبت‌شده در Seed مرحله ۳ }
+        registration_number: { type: string }
+        contact_name: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        address: { type: string }
+        website: { type: string }
+
+    SupplierEvaluationInput:
+      type: object
+      description: ارزیابی وزنی — همه امتیازهای صفر تا صد؛ وزن‌ها با weights_version قفل می‌شوند
+      required: [quality_score, pricing_score, availability_score, warranty_score, documentation_score, flexibility_score, logistics_score, communication_score, weights_version]
+      properties:
+        quality_score: { type: integer, minimum: 0, maximum: 100 }
+        pricing_score: { type: integer, minimum: 0, maximum: 100 }
+        availability_score: { type: integer, minimum: 0, maximum: 100 }
+        warranty_score: { type: integer, minimum: 0, maximum: 100 }
+        documentation_score: { type: integer, minimum: 0, maximum: 100 }
+        flexibility_score: { type: integer, minimum: 0, maximum: 100 }
+        logistics_score: { type: integer, minimum: 0, maximum: 100 }
+        communication_score: { type: integer, minimum: 0, maximum: 100 }
+        weights_version: { type: string, example: "2026.11" }
+        notes: { type: string }
+
+    StockBalanceView:
+      type: object
+      description: موجودی انبار خواب‌آور — کاملاً مستقل از موجودی تأمین‌کننده (DB §7.3)
+      properties:
+        variant_id: { type: string, format: uuid }
+        sku: { type: string }
+        warehouse_code: { type: string }
+        on_hand_quantity: { type: integer, minimum: 0 }
+        reserved_quantity: { type: integer, minimum: 0 }
+        available_quantity: { type: integer, minimum: 0, description: OnHand − Reserved }
+        updated_at: { type: string, format: date-time }
+
+    StockBalanceList:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/StockBalanceView" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+
+    StockMovementInput:
+      type: object
+      description: اصلاح موجودی فقط با ثبت حرکت — رکوردهای قبلی هرگز دستکاری نمی‌شوند (DB §8.3)
+      required: [warehouse_id, variant_id, movement_type, quantity]
+      properties:
+        warehouse_id: { type: string, format: uuid }
+        variant_id: { type: string, format: uuid }
+        movement_type: { $ref: "#/components/schemas/MovementType" }
+        quantity: { type: integer, description: غیرصفر — علامت جهت حرکت }
+        reference_type: { type: string, example: MANUAL }
+        note: { type: string }
+
+    ReservationView:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        order_number: { type: string }
+        variant_id: { type: string, format: uuid }
+        source:
+          type: string
+          enum: [WAREHOUSE, SUPPLIER]
+          description: رزرو با منبع مشخص — DB §8.4
+        quantity: { type: integer }
+        status: { $ref: "#/components/schemas/ReservationStatus" }
+        expires_at: { type: string, format: date-time }
+
+    ReservationList:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ReservationView" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+
+    CostRecordInput:
+      type: object
+      description: هزینه تمام‌شده — تاریخچه‌ای؛ رکورد جدید با بازه اعتبار (DB §9.1)
+      required: [supply_type, purchase_cost, valid_from]
+      properties:
+        supply_type: { $ref: "#/components/schemas/SupplyType" }
+        supplier_id: { type: string, format: uuid, description: الزامی برای SUPPLIER_SOURCED }
+        purchase_cost: { $ref: "#/components/schemas/Money" }
+        inbound_freight: { $ref: "#/components/schemas/Money" }
+        inspection_cost: { $ref: "#/components/schemas/Money" }
+        packaging_cost: { $ref: "#/components/schemas/Money" }
+        fulfillment_cost: { $ref: "#/components/schemas/Money" }
+        estimated_payment_fee: { $ref: "#/components/schemas/Money" }
+        estimated_shipping_subsidy: { $ref: "#/components/schemas/Money" }
+        expected_return_cost: { $ref: "#/components/schemas/Money" }
+        valid_from: { type: string, format: date-time }
+
+    PriceRecordInput:
+      type: object
+      description: قیمت فروش — پس از ثبت، نیازمند تأیید نقش مجاز است (STORE_MANAGER/FINANCE)
+      required: [selling_price, valid_from]
+      properties:
+        selling_price: { $ref: "#/components/schemas/Money" }
+        discount_policy: { type: object, additionalProperties: true }
+        target_contribution_rate: { type: number, minimum: 0, maximum: 1, description: درصد سود مشارکت هدف — مثل 0.25 }
+        valid_from: { type: string, format: date-time }
+
+    ApproveInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT] }
+        note: { type: string }
+
+    FulfillmentInput:
+      type: object
+      description: تفکیک سفارش به یک یا چند Fulfillment — تخصیص در تراکنش با قفل ردیفی (DB §11.2)
+      required: [items]
+      properties:
+        source_type: { $ref: "#/components/schemas/SupplyType" }
+        warehouse_id: { type: string, format: uuid, description: برای OWNED_INVENTORY }
+        supplier_id: { type: string, format: uuid, description: برای SUPPLIER_SOURCED — درخواست تأیید تأمین ثبت می‌شود (DB §14.1) }
+        estimated_ready_at: { type: string, format: date-time }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [order_item_id, quantity]
+            properties:
+              order_item_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1 }
+
+    ShipmentInput:
+      type: object
+      required: [carrier]
+      properties:
+        carrier: { type: string }
+        service_type: { type: string }
+        tracking_number: { type: string, maxLength: 100 }
+        shipping_cost: { $ref: "#/components/schemas/Money" }
+        items:
+          type: array
+          description: اجازه ارسال یک قلم در چند بسته (DB §11.4)
+          items:
+            type: object
+            required: [fulfillment_item_id, quantity]
+            properties:
+              fulfillment_item_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1 }
+
+    ShipmentEventInput:
+      type: object
+      required: [event_code, occurred_at]
+      properties:
+        event_code: { type: string, example: IN_TRANSIT }
+        description: { type: string }
+        occurred_at: { type: string, format: date-time }
+        source: { type: string, enum: [MANUAL, CARRIER_API, WEBHOOK], default: MANUAL }
+        external_reference: { type: string }
+
+    RefundInput:
+      type: object
+      description: بازپرداخت جزئی — فقط FINANCE؛ متصل به تراکنش موفق اصلی (DB §10.6 / BR-05)
+      required: [amount, reason]
+      properties:
+        payment_attempt_id: { type: string, format: uuid, description: تراکنش موفق مبدأ }
+        order_item_id: { type: string, format: uuid, description: خالی = بازپرداخت سطح سفارش }
+        amount: { $ref: "#/components/schemas/Money" }
+        reason: { type: string, maxLength: 500 }
+
+    AdminArticleUpsert:
+      type: object
+      required: [title, body, language]
+      properties:
+        title: { type: string, maxLength: 300 }
+        slug: { type: string, maxLength: 255 }
+        summary: { type: string }
+        body: { type: string }
+        language: { type: string, default: fa-IR }
+        source_type: { type: string, enum: [ORIGINAL, TRANSLATION, CURATED] }
+        source_url: { type: string }
+        parent_article_id: { type: string, format: uuid, description: برای TRANSLATION — مقاله مبدأ }
+        topic_ids:
+          type: array
+          items: { type: string, format: uuid }
+        sources:
+          type: array
+          description: منابع علمی — شرط انتشار (ADR-CONTENT-001)
+          items:
+            type: object
+            required: [source_type, citation]
+            properties:
+              source_type: { type: string, enum: [JOURNAL, BOOK, GUIDELINE, EXPERT, OTHER] }
+              citation: { type: string }
+              url: { type: string }
+
+    ReviewInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, REQUEST_CHANGES] }
+        note: { type: string, description: یادداشت بازبین — برای REQUEST_CHANGES مفید }
+
+    RelationInput:
+      type: object
+      description: رابطه مقاله-محصول با دلیل ثبت‌شده (MA-5)
+      required: [product_id, relation_type, relation_reason]
+      properties:
+        product_id: { type: string, format: uuid }
+        relation_type: { $ref: "#/components/schemas/RelationType" }
+        relation_reason: { type: string, maxLength: 500 }
+
+    AuditLogView:
+      type: object
+      description: "فقط خواندنی — عملیات حساس: قیمت، هزینه خرید، تأیید تأمین، موجودی، بازپرداخت، وضعیت سفارش، شرایط ارسال (DB §13.1)"
+      properties:
+        id: { type: string, format: uuid }
+        actor_id: { type: [string, "null"] }
+        actor_type: { type: string, enum: [CUSTOMER, ADMIN, SYSTEM] }
+        action: { type: string, example: price.record.approve }
+        entity_type: { type: string, example: product_price_records }
+        entity_id: { type: string, format: uuid }
+        old_values: { type: object, additionalProperties: true }
+        new_values: { type: object, additionalProperties: true }
+        ip_address: { type: string }
+        created_at: { type: string, format: date-time }
+
+    AuditLogList:
+      type: object
+      required: [items, page]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AuditLogView" }
+        page: { $ref: "#/components/schemas/PageInfo" }
+
+    AdminUserInput:
+      type: object
+      required: [email, full_name, role_codes]
+      properties:
+        email: { type: string }
+        full_name: { type: string, maxLength: 200 }
+        role_codes:
+          type: array
+          items: { type: string }
+          description: از ماتریس نقش‌های مصوب — SUPER_ADMIN فقط توسط SUPER_ADMIN قابل واگذاری است
+
+    AdminUsersPatchInput:
+      type: object
+      properties:
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DEACTIVATED] }
+        role_codes:
+          type: array
+          items: { type: string }
+
+    RoleView:
+      type: object
+      properties:
+        code: { type: string, example: FINANCE }
+        name: { type: string, example: مالی }
+        permissions:
+          type: array
+          items: { type: string }
+
+    PermissionView:
+      type: object
+      properties:
+        code: { type: string, example: order.refund.approve }
+        resource: { type: string }
+        action: { type: string }
+        description: { type: string }
+paths:
+  # ───────────────────────── identity — CIAM ─────────────────────────
+  /auth/otp/request:
+    post:
+      tags: [identity]
+      summary: درخواست کد OTP
+      description: ارسال کد شش‌رقمی — سقف ۵ ارسال در ساعت به هر شماره و قفل پس از تلاش‌های ناموفق (سیاست مصوب مرحله ۳). کد خام هرگز ذخیره نمی‌شود.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OtpRequestInput" }
+      responses:
+        "200":
+          description: کد ارسال شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtpRequestResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /auth/otp/verify:
+    post:
+      tags: [identity]
+      summary: تأیید کد OTP
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OtpVerifyInput" }
+      responses:
+        "200":
+          description: نتیجه تأیید
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtpVerifyResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /oauth/authorize:
+    get:
+      tags: [identity]
+      summary: شروع جریان OIDC Authorization Code + PKCE
+      description: |
+        Endpoint انطباق با OIDC — سرویس‌ها کاربر را به این آدرس هدایت می‌کنند.
+        Redirect URI باید عیناً در whitelist کلاینت باشد (CIAM §۳).
+      security: []
+      parameters:
+        - { name: client_id, in: query, required: true, schema: { type: string } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string } }
+        - { name: response_type, in: query, required: true, schema: { type: string, enum: [code] } }
+        - { name: scope, in: query, required: true, schema: { type: string, example: "openid profile customer.commerce" } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code_challenge, in: query, required: true, schema: { type: string } }
+        - { name: code_challenge_method, in: query, schema: { type: string, enum: [S256], default: S256 } }
+        - { name: continuation_token, in: query, schema: { type: string }, description: پیوند تأیید OTP با این درخواست }
+      responses:
+        "302":
+          description: هدایت به redirect_uri با code و state — یا صفحه ورود OTP در صورت نبود نشست
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /oauth/token:
+    post:
+      tags: [identity]
+      summary: تبادل کد با توکن
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+      responses:
+        "200":
+          description: توکن صادر شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /oauth/logout:
+    post:
+      tags: [identity]
+      summary: ابطال نشست فعلی این سرویس
+      description: نشست‌های سرویس‌های دیگر دست‌نخورده می‌مانند — نشست‌ها مستقل‌اند (CIAM §۵).
+      security:
+        - oauth2: [customer.basic]
+      responses:
+        "204": { description: نشست باطل شد }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /me:
+    get:
+      tags: [identity]
+      summary: پروفایل کاربر جاری
+      security:
+        - oauth2: [customer.basic]
+      responses:
+        "200":
+          description: پروفایل
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerProfile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /me/addresses:
+    get:
+      tags: [identity]
+      summary: فهرست آدرس‌های من
+      security:
+        - oauth2: [customer.basic]
+      responses:
+        "200":
+          description: آدرس‌ها
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AddressSnapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [identity]
+      summary: افزودن آدرس
+      security:
+        - oauth2: [customer.basic]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddressInput" }
+      responses:
+        "201":
+          description: آدرس ثبت شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddressSnapshot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /me/addresses/{addressId}:
+    patch:
+      tags: [identity]
+      summary: ویرایش آدرس یا تنظیم پیش‌فرض
+      security:
+        - oauth2: [customer.basic]
+      parameters:
+        - { name: addressId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddressInput" }
+      responses:
+        "200":
+          description: به‌روزرسانی شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddressSnapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [identity]
+      summary: حذف آدرس
+      security:
+        - oauth2: [customer.basic]
+      parameters:
+        - { name: addressId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: حذف شد }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ───────────────────────── catalog — مرور عمومی ─────────────────────────
+  /catalog/categories:
+    get:
+      tags: [catalog]
+      summary: درخت دسته‌بندی‌ها
+      security: []
+      responses:
+        "200":
+          description: ریشه‌ها با فرزندان
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CategoryNode" }
+
+  /catalog/products:
+    get:
+      tags: [catalog]
+      summary: جست‌وجو و فهرست محصولات
+      description: جست‌وجوی فارسی با نرمال‌سازی ی/ک عربی و نیم‌فاصله (DB §۱۵)؛ فیلتر ویژگی‌ها به‌صورت attribute.<code>=<option>
+      security: []
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: عبارت جست‌وجوی فارسی }
+        - { name: category_slug, in: query, schema: { type: string } }
+        - { name: brand_slug, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [newest, price_asc, price_desc, relevance], default: relevance } }
+        - { name: attribute.height, in: query, schema: { type: string }, description: نمونه فیلتر ویژگی — بقیه مشابه }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: فهرست محصولات منتشرشده
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductSummaryList" }
+
+  /catalog/products/{slug}:
+    get:
+      tags: [catalog]
+      summary: جزئیات محصول
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: محصول منتشرشده با Variantهای فعال
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ───────────────────────── cart — سبد ─────────────────────────
+  /cart:
+    get:
+      tags: [cart]
+      summary: سبد جاری (مشتری یا مهمان)
+      description: مهمان با هدر X-Guest-Cart-Token شناسایی می‌شود؛ مشتری با توکن.
+      security: []
+      parameters:
+        - { name: X-Guest-Cart-Token, in: header, schema: { type: string }, description: فقط برای سبد مهمان }
+      responses:
+        "200":
+          description: سبد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+
+  /cart/items:
+    post:
+      tags: [cart]
+      summary: افزودن Variant به سبد
+      security: []
+      parameters:
+        - { name: X-Guest-Cart-Token, in: header, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddCartItemInput" }
+      responses:
+        "200":
+          description: سبد به‌روز شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /cart/items/{cartItemId}:
+    patch:
+      tags: [cart]
+      summary: تغییر تعداد
+      security: []
+      parameters:
+        - { name: cartItemId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: X-Guest-Cart-Token, in: header, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCartItemInput" }
+      responses:
+        "200":
+          description: سبد به‌روز شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+    delete:
+      tags: [cart]
+      summary: حذف آیتم
+      security: []
+      parameters:
+        - { name: cartItemId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: X-Guest-Cart-Token, in: header, schema: { type: string } }
+      responses:
+        "204": { description: حذف شد }
+
+  /cart/merge:
+    post:
+      tags: [cart]
+      summary: ادغام سبد مهمان پس از ورود
+      security:
+        - oauth2: [customer.commerce]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MergeCartInput" }
+      responses:
+        "200":
+          description: سبد ادغام‌شده مشتری
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ───────────────────────── checkout — تسویه و پرداخت ─────────────────────────
+  /checkout:
+    post:
+      tags: [checkout]
+      summary: ثبت سفارش و شروع پرداخت
+      description: |
+        ترتیب سمت سرور طبق DB §14.1: اعتبارسنجی سبد/قیمت‌ها/Variant → کنترل تأمین →
+        محاسبه ارسال → ایجاد Order و اقلام (Snapshot) → Payment Intent.
+        رزرو قطعی موجودی پس از تأیید پرداخت انجام می‌شود (PRD O-4).
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: X-Guest-Cart-Token, in: header, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CheckoutInput" }
+      responses:
+        "201":
+          description: سفارش PENDING_PAYMENT + آدرس هدایت به درگاه
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckoutResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422":
+          description: موجودی یا قیمت در فاصله بازخوانی تغییر کرده — جزئیات اقلام متأثر
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /payments/webhook:
+    post:
+      tags: [checkout]
+      summary: اعلان سرویس‌به‌سرویس درگاه (Notify)
+      description: |
+        تأیید تراکنش سمت سرور با استعلام مجدد از درگاه — اعتماد به پیام خام ممنوع.
+        تأیید پرداخت و ثبت رویداد OrderConfirmed در Outbox در یک تراکنش (DB §14.3).
+        پاسخ نامشخص → وضعیت UNKNOWN و سفارش بدون استعلام دوباره پرداخت نمی‌شود.
+      security: []
+      parameters:
+        - { name: X-Provider-Signature, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, provider_reference, amount]
+              properties:
+                provider: { type: string }
+                provider_reference: { type: string, description: شناسه تراکنش درگاه }
+                amount: { $ref: "#/components/schemas/Money" }
+                status: { type: string, description: وضعیت ادعایی درگاه — فقط راهنما }
+      responses:
+        "200": { description: دریافت شد — نتیجه پس از استعلام اعمال می‌شود }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /payments/return:
+    get:
+      tags: [checkout]
+      summary: بازگشت مرورگر از درگاه
+      description: سرور وضعیت تراکنش را استعلام می‌کند (Idempotent) و کاربر را به صفحه نتیجه سفارش هدایت می‌کند.
+      security: []
+      parameters:
+        - { name: order_number, in: query, required: true, schema: { type: string, pattern: "^KHA-ORD-[0-9]{4}-[0-9]{6}$" } }
+        - { name: authority, in: query, schema: { type: string }, description: شناسه بازگشتی درگاه }
+      responses:
+        "302":
+          description: هدایت به صفحه وضعیت سفارش یا صفحه تلاش مجدد پرداخت
+
+  # ───────────────────────── orders — سفارش‌ها ─────────────────────────
+  /orders/{orderNumber}:
+    get:
+      tags: [orders]
+      summary: مشاهده سفارش
+      description: مشتری با توکن؛ مهمان با phone مطابق سفارش (پیگیری UJ-01). پاسخ شامل وضعیت، اقلام، Fulfillmentها و رویدادهای مرسوله است.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/OrderNumberPath"
+        - { name: phone, in: query, schema: { type: string }, description: برای سفارش مهمان — باید با guest_phone سفارش برابر باشد }
+      responses:
+        "200":
+          description: سفارش
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /me/orders:
+    get:
+      tags: [orders]
+      summary: سفارش‌های من
+      security:
+        - oauth2: [customer.commerce]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/OrderStatus" } }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: فهرست سفارش‌ها
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /orders/{orderNumber}/cancel:
+    post:
+      tags: [orders]
+      summary: درخواست لغو سفارش یا قلم
+      description: فقط تا پیش از آماده‌سازی فیزیکی (PRD O-3)؛ رزروها آزاد و در صورت پرداخت موفق، بازپرداخت آغاز می‌شود.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/OrderNumberPath"
+        - { name: phone, in: query, schema: { type: string }, description: برای سفارش مهمان }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelInput" }
+      responses:
+        "202":
+          description: درخواست ثبت شد — وضعیت سفارش CANCELLED یا در انتظار تأیید عملیاتی
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /orders/{orderNumber}/return-requests:
+    post:
+      tags: [orders]
+      summary: ثبت درخواست مرجوعی قلم‌ها پس از تحویل
+      description: |
+        مستقل از لغو پیش‌تحویل — پس از تحویل مرسوله، مشتری برای قلم‌های مشخص درخواست مرجوعی ثبت می‌کند
+        (Commerce §9 + PRD SH-M09 Must — افزودن با تصمیم مالک 2026-11-25).
+        در نسخه نهایی مسیر در سطح سفارش است و قلم‌ها در بدنه می‌آیند (به‌جای مسیر سطح‌قلم پیشنهادی Commerce §9).
+        درخواست پس از تأیید عملیاتی از جریان بازپرداخت ادمین اجرا می‌شود؛ هدر Idempotency-Key برای جلوگیری از ثبت تکراری الزامی است.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/OrderNumberPath"
+        - { name: phone, in: query, schema: { type: string }, description: برای سفارش مهمان }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReturnRequestInput" }
+      responses:
+        "202":
+          description: درخواست مرجوعی ثبت شد — وضعیت REQUESTED تا بازبینی عملیاتی
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReturnRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ───────────────────────── magazine — مجله ─────────────────────────
+  /magazine/articles:
+    get:
+      tags: [magazine]
+      summary: فهرست مقالات منتشرشده
+      security: []
+      parameters:
+        - { name: topic_slug, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: مقالات
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleSummaryList" }
+
+  /magazine/articles/{slug}:
+    get:
+      tags: [magazine]
+      summary: متن کامل مقاله
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: مقاله با منابع علمی و محصولات مرتبط
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /magazine/topics:
+    get:
+      tags: [magazine]
+      summary: موضوعات مجله
+      security: []
+      responses:
+        "200":
+          description: موضوعات فعال (۱۱ موضوع مصوب Seed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Topic" }
+
+  /catalog/products/{slug}/articles:
+    get:
+      tags: [magazine]
+      summary: مقالات مرتبط با محصول
+      description: فقط ارتباط‌های EDUCATIONAL و PRODUCT_GUIDE با دلیل ثبت‌شده (MA-5) — بدون دستکاری تجاری محتوای علمی.
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: مقالات مرتبط
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleSummaryList" }
+
+  # ───────────────────────── admin — کاتالوگ ─────────────────────────
+  /admin/products:
+    post:
+      tags: [admin-products]
+      summary: ایجاد محصول و Variantها
+      security:
+        - oauth2: [staff]
+      description: مجوز لازم — catalog.product.edit (STORE_MANAGER)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminProductUpsert" }
+      responses:
+        "201":
+          description: محصول با وضعیت DRAFT ایجاد شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/products/{productId}:
+    patch:
+      tags: [admin-products]
+      summary: ویرایش محصول
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminProductUpsert" }
+      responses:
+        "200":
+          description: به‌روزرسانی شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/products/{productId}/status:
+    post:
+      tags: [admin-products]
+      summary: تغییر وضعیت محصول در چرخه QC
+      description: گذارهای مجاز — DRAFT→DATA_REVIEW→APPROVED→PUBLISHED؛ وضعیت‌های PAUSED/DISCONTINUED هم از PUBLISHED.
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminProductStatusInput" }
+      responses:
+        "200":
+          description: وضعیت تغییر کرد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "409":
+          description: گذار از وضعیت فعلی مجاز نیست
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/products/{productId}/publish:
+    post:
+      tags: [admin-products]
+      summary: انتشار محصول — دروازه QC-05
+      description: |
+        سرور دروازه‌ها را کنترل می‌کند و رد شدنی را دور می‌زند:
+        sleep_relevance (MA-1)، spec_source و spec_last_reviewed_at (MA-6)،
+        حداقل یک تصویر، یک Variant فعال با قیمت تأییدشده.
+        در CHECK دیتابیس هم تضمین شده (chk_products_publish_gates).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: منتشر شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "409":
+          description: PUBLISH_GATE_FAILED — فهرست کمبودها در details
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # ───────────────────────── admin — تأمین و موجودی ─────────────────────────
+  /admin/suppliers:
+    post:
+      tags: [admin-supply]
+      summary: ثبت تأمین‌کننده
+      description: مجوز supplier.manage — ثبت/تأیید تأمین‌کننده در Audit Log حساس ثبت می‌شود (DB §13.1).
+      security:
+        - oauth2: [staff]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SupplierInput" }
+      responses:
+        "201":
+          description: ثبت شد
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/suppliers/{supplierId}:
+    patch:
+      tags: [admin-supply]
+      summary: ویرایش یا تغییر وضعیت تأمین‌کننده
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/SupplierInput"
+                - type: object
+                  properties:
+                    status:
+                      type: string
+                      enum: [PROSPECT, DOCUMENTS_PENDING, UNDER_REVIEW, APPROVED, ACTIVE, PROBATION, SUSPENDED, REJECTED, INACTIVE]
+                      description: |
+                        چرخه عمر تأمین‌کننده — هشت وضعیت مصوب Supplier Eval §7 + PROBATION.
+                        PROBATION با تصمیم مالک 2026-11-25 در این نسخه نگه‌داری شده و در نسخه بعدی قابل حذف است.
+                        RETIRED نسخه قبل حذف شد (معادل INACTIVE). وضعیت‌های پیش‌تأیید خط لوله onboarding را می‌سازند (AD-M03).
+      responses:
+        "200": { description: به‌روزرسانی شد }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/suppliers/{supplierId}/evaluations:
+    post:
+      tags: [admin-supply]
+      summary: ثبت ارزیابی وزنی تأمین‌کننده
+      description: مجوز supplier.evaluate — نسخه وزن‌ها در رکورد قفل می‌شود (DB §7.4).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SupplierEvaluationInput" }
+      responses:
+        "201": { description: ارزیابی ثبت شد }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /admin/stock:
+    get:
+      tags: [admin-supply]
+      summary: موجودی انبارها
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: warehouse_id, in: query, schema: { type: string, format: uuid } }
+        - { name: q, in: query, schema: { type: string }, description: جست‌وجو بر اساس SKU یا عنوان }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: موجودی‌ها با available محاسبه‌شده
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockBalanceList" }
+
+  /admin/stock/movements:
+    post:
+      tags: [admin-supply]
+      summary: ثبت حرکت موجودی
+      description: مجوز inventory.adjust — اصلاح فقط با حرکت؛ رزرو/آزادسازی با قفل ردیفی در تراکنش (DB §14.2).
+      security:
+        - oauth2: [staff]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StockMovementInput" }
+      responses:
+        "201":
+          description: حرکت ثبت و موجودی به‌روز شد
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: موجودی منفی نمی‌شود (DB §8.2)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/reservations:
+    get:
+      tags: [admin-supply]
+      summary: رزروهای موجودی
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ReservationStatus" } }
+        - { name: expires_before, in: query, schema: { type: string, format: date-time } }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: رزروها
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReservationList" }
+
+  # ───────────────────────── admin — قیمت‌گذاری ─────────────────────────
+  /admin/variants/{variantId}/cost-records:
+    post:
+      tags: [admin-pricing]
+      summary: ثبت هزینه تمام‌شده
+      description: مجوز pricing.cost.manage (STORE_MANAGER/FINANCE) — ثبت در Audit Log حساس.
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CostRecordInput" }
+      responses:
+        "201": { description: رکورد هزینه ثبت شد }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /admin/variants/{variantId}/price-records:
+    post:
+      tags: [admin-pricing]
+      summary: پیشنهاد قیمت فروش
+      description: رکورد با وضعیت در انتظار تأیید ثبت می‌شود — تأیید نقش مجاز الزامی است (DB §9.2).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PriceRecordInput" }
+      responses:
+        "201": { description: ثبت شد — در انتظار تأیید }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /admin/price-records/{priceRecordId}/approve:
+    post:
+      tags: [admin-pricing]
+      summary: تأیید یا رد قیمت فروش
+      description: مجوز pricing.price.approve — STORE_MANAGER یا FINANCE.
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: priceRecordId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApproveInput" }
+      responses:
+        "200": { description: تصمیم ثبت شد — قیمت معتبر با valid_from فعال می‌شود }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ───────────────────────── admin — سفارش‌ها ─────────────────────────
+  /admin/orders:
+    get:
+      tags: [admin-orders]
+      summary: فهرست سفارش‌ها
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/OrderStatus" } }
+        - { name: q, in: query, schema: { type: string }, description: شماره سفارش، تلفن یا نام گیرنده }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: سفارش‌ها
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderList" }
+
+  /admin/orders/{orderNumber}/fulfillments:
+    post:
+      tags: [admin-orders]
+      summary: ایجاد Fulfillment (تفکیک منبع تأمین)
+      description: مجوز order.manage — مجموع تخصیص هر قلم در تراکنش کنترل می‌شود (DB §11.2).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - $ref: "#/components/parameters/OrderNumberPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FulfillmentInput" }
+      responses:
+        "201": { description: Fulfillment ایجاد شد؛ برای SUPPLIER_SOURCED درخواست تأیید تأمین ثبت می‌شود }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: مجموع تخصیص از تعداد قلم بیشتر نمی‌شود
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/fulfillments/{fulfillmentId}/shipments:
+    post:
+      tags: [admin-orders]
+      summary: ثبت مرسوله برای Fulfillment
+      description: هر Fulfillment می‌تواند چند Shipment داشته باشد (DB §11.3 / ADR-COM-001).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: fulfillmentId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShipmentInput" }
+      responses:
+        "201": { description: مرسوله ثبت شد }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /admin/shipments/{shipmentId}/events:
+    post:
+      tags: [admin-orders]
+      summary: ثبت رویداد رهگیری
+      description: ثبت ترتیب زمانی — از MANUAL یا Webhook بار (DB §11.5)؛ تغییر وضعیت سفارش در Audit ثبت می‌شود.
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: shipmentId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShipmentEventInput" }
+      responses:
+        "201": { description: رویداد ثبت شد }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /admin/orders/{orderNumber}/refunds:
+    post:
+      tags: [admin-orders]
+      summary: ثبت بازپرداخت جزئی
+      description: فقط FINANCE (order.refund.approve) — متصل به تراکنش موفق اصلی؛ سقف بازپرداخت سرور کنترل می‌شود (BR-05).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - $ref: "#/components/parameters/OrderNumberPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefundInput" }
+      responses:
+        "201": { description: بازپرداخت در گردش پردازش }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: سقف بازپرداخت این سفارش/قلم گذشت
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/orders/{orderNumber}/cancel:
+    post:
+      tags: [admin-orders]
+      summary: تأیید لغو سفارش (عملیاتی)
+      description: مجوز order.cancel.approve — آزادسازی رزروها و شروع بازپرداخت در صورت پرداخت موفق.
+      security:
+        - oauth2: [staff]
+      parameters:
+        - $ref: "#/components/parameters/OrderNumberPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelInput" }
+      responses:
+        "200":
+          description: سفارش لغو شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ───────────────────────── admin — مجله ─────────────────────────
+  /admin/articles:
+    post:
+      tags: [admin-content]
+      summary: ایجاد مقاله
+      description: مجوز content.article.edit (EDITOR/CONTENT_MANAGER)
+      security:
+        - oauth2: [staff]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminArticleUpsert" }
+      responses:
+        "201":
+          description: مقاله با وضعیت DRAFT
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /admin/articles/{articleId}:
+    patch:
+      tags: [admin-content]
+      summary: ویرایش مقاله
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: articleId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminArticleUpsert" }
+      responses:
+        "200": { description: ذخیره شد }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{articleId}/review:
+    post:
+      tags: [admin-content]
+      summary: بازبینی محتوایی و سلامت محتوا
+      description: مجوز content.article.review (CONTENT_REVIEWER) — نتیجه دروازه تحریریه (SAD §7.2).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: articleId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewInput" }
+      responses:
+        "200": { description: تصمیم بازبینی ثبت شد }
+        "409":
+          description: مقاله در وضعیت بازبینی‌پذیر نیست
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/articles/{articleId}/publish:
+    post:
+      tags: [admin-content]
+      summary: انتشار مقاله
+      description: مجوز content.article.publish (CONTENT_MANAGER) — شرط انتشار حداقل یک منبع معتبر (ADR-CONTENT-001).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: articleId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: منتشر شد }
+        "409":
+          description: PUBLISH_GATE_FAILED — مقاله بدون منبع معتبر یا بدون بازبینی تأییدشده
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/articles/{articleId}/relations:
+    post:
+      tags: [admin-content]
+      summary: ثبت رابطه مقاله-محصول
+      description: مجوز content.relation.manage — با دلیل ارتباط (MA-5).
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: articleId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RelationInput" }
+      responses:
+        "201": { description: رابطه ثبت شد }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  # ───────────────────────── admin — سیستم ─────────────────────────
+  /admin/audit-logs:
+    get:
+      tags: [admin-system]
+      summary: جست‌وجوی Audit Log
+      description: مجوز audit.read — فقط خواندنی؛ SUPER_ADMIN و FINANCE.
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: actor_id, in: query, schema: { type: string, format: uuid } }
+        - { name: entity_type, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: رکوردهای ممیزی
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditLogList" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/roles:
+    get:
+      tags: [admin-system]
+      summary: نقش‌ها و مجوزهای هر نقش
+      description: مجوز identity.user.manage — ماتریس نقش‌های مصوب مرحله ۳.
+      security:
+        - oauth2: [staff]
+      responses:
+        "200":
+          description: نقش‌ها
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/RoleView" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/permissions:
+    get:
+      tags: [admin-system]
+      summary: فهرست مجوزها
+      security:
+        - oauth2: [staff]
+      responses:
+        "200":
+          description: مجوزها
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/PermissionView" }
+
+  /admin/users:
+    post:
+      tags: [admin-system]
+      summary: ایجاد کاربر پرسنل
+      description: مجوز identity.user.manage — فقط SUPER_ADMIN.
+      security:
+        - oauth2: [staff]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminUserInput" }
+      responses:
+        "201": { description: کاربر ایجاد شد — دعوت‌نامه ورود OTP ایمیل/پیامک می‌شود }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/users/{userId}:
+    patch:
+      tags: [admin-system]
+      summary: تغییر وضعیت یا نقش‌های کاربر پرسنل
+      security:
+        - oauth2: [staff]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminUsersPatchInput" }
+      responses:
+        "200": { description: به‌روزرسانی شد }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
