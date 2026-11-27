@@ -90,27 +90,10 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 	mux := http.NewServeMux()
 	hh := health.New(pool)
 	hh.Mount(mux)
-	mux.HandleFunc("POST /api/v1/auth/otp/start", identity.OTPStartHandler(svc, mockSmsDeliver(logger)))
-	// Contract alias (R-07 names it /auth/otp/request).
-	mux.HandleFunc("POST /api/v1/auth/otp/request", identity.OTPStartHandler(svc, mockSmsDeliver(logger)))
-	mux.HandleFunc("POST /api/v1/auth/otp/verify", identity.OTPVerifyHandler(svc))
-	// Browser login page the authorize redirect points at (closes the dead end).
-	mux.HandleFunc("GET /api/v1/auth/otp/login", identity.OTPLoginPageHandler())
-	mux.HandleFunc("POST /api/v1/auth/otp/login", identity.OTPLoginSubmitHandler(svc, oidcSvc))
-	// Staff login for the panel (email + password → opaque session token).
-	// Staff login is throttled per IP and per email, and every failure is recorded: a lockout
-	// without a trail cannot be investigated.
-	mux.HandleFunc("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(svc,
-		identity.NewDBAdminLoginStore(pool.Pool),
-		identity.WithAdminLoginGuard(identity.NewAdminLoginGuard(10, 5, 15*time.Minute),
-			audit.NewRecorder(pool.Pool))))
-	mux.HandleFunc("GET /api/v1/auth/admin/login", identity.AdminLoginPageHandler())
-	mux.HandleFunc("POST /api/v1/auth/admin/login", identity.AdminLoginSubmitHandler(svc,
-		oidcSvc, identity.NewDBAdminLoginStore(pool.Pool),
-		identity.WithAdminLoginGuard(identity.NewAdminLoginGuard(10, 5, 15*time.Minute),
-			audit.NewRecorder(pool.Pool))))
-	mux.HandleFunc("GET /oauth/authorize", identity.AuthorizeHandler(oidcSvc))
-	mux.HandleFunc("POST /oauth/token", identity.TokenHandler(oidcSvc))
+	// The whole identity table lives in one place, so a pattern cannot be registered twice —
+	// which is what stopped this unit from booting.
+	mountIdentityRoutes(mux, svc, oidcSvc, identity.NewDBAdminLoginStore(pool.Pool),
+		identity.NewAdminLoginGuard(10, 5, 15*time.Minute), audit.NewRecorder(pool.Pool), logger)
 	hh.SetReady(true)
 	serve(ctx, cfg.HTTPAddr, mux, logger)
 }
@@ -311,6 +294,11 @@ func serve(ctx context.Context, addr string, mux *http.ServeMux, logger *slog.Lo
 // The raw code is never logged in production (CIAM §۳-۴) — only its length here.
 func mockSmsDeliver(logger *slog.Logger) func(phone, code string) {
 	return func(phone, code string) {
+		// A nil logger used to panic here, which killed the request and left the client with
+		// no response at all. A mock SMS sink must never be able to do that.
+		if logger == nil {
+			return
+		}
 		logger.Debug("sms mock deliver", "phone", phone, "code_len", len(code))
 	}
 }

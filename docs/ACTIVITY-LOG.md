@@ -3338,6 +3338,50 @@ GET /me                     401   (توکن کارمند به سطح مشتری 
 
 ---
 
+### ۴.۱۱۹ سه نقش، سه آزمون — واحد identity اصلاً بالا نمی‌آمد — کامیت `fix(identity-boot)`
+
+تا امروز فقط `KH_ROLE=api` اجرا شده بود. دو نقش دیگر هرگز آزمون نشده بودند — و همان الگویی
+بود که سه بار قبلاً ضربه زده بود.
+
+**`KH_ROLE=worker` — سالم.** `/healthz` ۲۰۰، فرایند پایدار، `domain_events` را تخلیه کرد
+(۱۶ رخداد). خروج تمیز روی SIGTERM.
+
+**`KH_ROLE=identity` — با panic در startup می‌مرد.**
+
+```
+panic: pattern "POST /api/v1/auth/otp/start" conflicts with pattern
+       "POST /api/v1/auth/otp/start"
+```
+
+**علت، باگ خودم:** در §۴.۱۱۶ مسیر `POST /auth/admin/login` را برای جریان OIDC اضافه کردم و
+ثبت قبلی را حذف نکردم. دو ثبت یک الگو → `ServeMux` panic می‌کند. **کل واحد identity از کار
+افتاده بود.**
+
+**اصلاح ساختاری، نه وصله:** کل جدول مسیرهای identity به `mountIdentityRoutes` منتقل شد — یک
+جدول، یک حلقه. دیگر دو جای جدا نمی‌تواند یک الگو را ثبت کند.
+
+**باگ دوم که همان‌جا پیدا شد:** `mockSmsDeliver(nil)` هنگام refactor — `logger.Debug` روی
+`slog.Logger` تهی **panic** می‌کند و درخواست را می‌کشد (کلاینت `000` می‌گرفت، نه خطا).
+`mockSmsDeliver` حالا nil-safe است و logger واقعی به آن پاس داده می‌شود.
+
+**تستِ گیت، با قرمزِ عمدی اثبات شد:** `TestIdentityRoutesRegister` با تزریق یک الگوی تکراری
+`FAIL` می‌دهد و پیام دقیق می‌دهد؛ پس از بازگردانی سبز. تستی که فقط سبز می‌شود، گیت نیست.
+
+**واحد identity پس از اصلاح:**
+```
+/healthz                 200
+POST /auth/otp/request   202
+POST /auth/otp/verify    401  (کد غلط)
+GET  /auth/otp/login     200
+GET  /auth/admin/login   200
+POST /auth/admin/login   200  توکن ۶۴ کاراکتری
+GET  /oauth/authorize    302
+POST /oauth/token        400
+GET  /products/search    404  ← جداسازی درست: فروشگاه روی identity نیست
+```
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
