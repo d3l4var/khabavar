@@ -369,6 +369,12 @@ func (s *Service) transition(ctx context.Context, id, to string, allowedFrom []s
 	if !statusInList(a.Status, allowedFrom) {
 		return fmt.Errorf("%w: %s → %s", ErrInvalidStatus, a.Status, to)
 	}
+	// The caller's list and the state machine must agree. Keeping both means a new transition
+	// has to be declared in allowedTransitions, so the map is the authority rather than
+	// decoration that drifts from the code.
+	if !statusInList(to, allowedTransitions[a.Status]) {
+		return fmt.Errorf("%w: %s → %s is not in the state machine", ErrInvalidStatus, a.Status, to)
+	}
 	return s.store.UpdateArticleStatus(ctx, id, to, nil, s.now())
 }
 

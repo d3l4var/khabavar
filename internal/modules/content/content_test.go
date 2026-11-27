@@ -443,7 +443,8 @@ func TestCreateArticle_RequiresFields(t *testing.T) {
 		t.Fatalf("title: %v", err)
 	}
 	if _, err := svc.CreateArticle(context.Background(), Article{Title: "t", Body: "b"}); !errors.Is(err, ErrSlugRequired) {
-		// ^ Title+Body, slug missing
+		// ^ Title+Body, slug missing. This branch used to be empty, so the case never failed.
+		t.Fatalf("slug: %v, want ErrSlugRequired", err)
 	}
 	if _, err := svc.CreateArticle(context.Background(), Article{Title: "t", Slug: "x"}); !errors.Is(err, ErrBodyRequired) {
 		t.Fatalf("body: %v", err)

@@ -64,7 +64,8 @@ func TestSearchProducts_WithSearchStore(t *testing.T) {
 	}
 
 	// Filter by sleep_relevance=SLEEP_AID → 2 results (p1, p2).
-	results, total, _ = svc.SearchProducts(context.Background(), SearchFilter{
+	// The count is what this case asserts; the rows were checked above.
+	_, total, _ = svc.SearchProducts(context.Background(), SearchFilter{
 		SleepRelevance: SleepRelevanceSleepAid, Page: 1, PageSize: 10,
 	})
 	if total != 2 {

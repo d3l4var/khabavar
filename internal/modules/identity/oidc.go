@@ -530,7 +530,8 @@ func TokenHandler(svc *OIDCService) http.HandlerFunc {
 }
 
 func writeOIDCErr(w http.ResponseWriter, err error) {
-	code, desc := http.StatusBadRequest, "invalid_request"
+	var code int
+	var desc string
 	switch {
 	// A malformed authorize request (missing code_challenge, wrong response_type, a
 	// cookie-authenticated call without state) is the client's fault: 400, not 500.

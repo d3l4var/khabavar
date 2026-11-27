@@ -3,7 +3,6 @@ package identity
 import (
 	"context"
 	"errors"
-	"net/http"
 	"strings"
 	"time"
 
@@ -79,14 +78,4 @@ func auditLoginFailure(ctx context.Context, aud AdminLoginAuditor, email, ip, wh
 	}
 	_ = aud.Record(ctx, "ADMIN", "", "auth.admin_login_failed", "admin_user", "",
 		nil, map[string]string{"email": strings.ToLower(strings.TrimSpace(email)), "ip": ip, "reason": why}, ip)
-}
-
-// withLoginGuard is the handler-level wrapper: throttle first, then authenticate, then record
-// the outcome.
-func withLoginGuard(g *AdminLoginGuard, aud AdminLoginAuditor, email, ip string) (bool, int, string) {
-	if !g.Allow(ip, email) {
-		auditLoginFailure(context.Background(), aud, email, ip, "throttled")
-		return false, http.StatusTooManyRequests, "too_many_attempts"
-	}
-	return true, 0, ""
 }

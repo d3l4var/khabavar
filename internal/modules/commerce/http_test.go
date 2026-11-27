@@ -2,6 +2,7 @@ package commerce
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -61,7 +62,7 @@ func TestHTTP_CreateOrder_RejectsEmptyItems(t *testing.T) {
 
 func TestHTTP_GetOrder_Returns200(t *testing.T) {
 	svc, _, _ := testService(t)
-	oid, _ := svc.CreateOrder(nil, validOrderInput())
+	oid, _ := svc.CreateOrder(context.TODO(), validOrderInput())
 	// The order belongs to cust-1, so the read must come from that customer — the gate is
 	// part of the contract (a bare order id is not enough).
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+oid, nil)
@@ -99,7 +100,7 @@ func TestHTTP_GetOrder_NotFoundReturns404(t *testing.T) {
 
 func TestHTTP_GetOrderByNumber_Returns200(t *testing.T) {
 	svc, _, _ := testService(t)
-	svc.CreateOrder(nil, validOrderInput())
+	svc.CreateOrder(context.TODO(), validOrderInput())
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/by-number/kha-ord-2026-000001", nil)
 	req.SetPathValue("number", "kha-ord-2026-000001")
 	rec := httptest.NewRecorder()
@@ -113,8 +114,8 @@ func TestHTTP_GetOrderByNumber_Returns200(t *testing.T) {
 
 func TestHTTP_ConfirmPayment_ReturnsPaid(t *testing.T) {
 	svc, _, _ := testService(t)
-	oid, _ := svc.CreateOrder(nil, validOrderInput())
-	svc.CreatePaymentIntent(nil, oid)
+	oid, _ := svc.CreateOrder(context.TODO(), validOrderInput())
+	svc.CreatePaymentIntent(context.TODO(), oid)
 
 	req := signedRequest(http.MethodPost, "/api/v1/orders/"+oid+"/confirm-payment", "")
 	req.SetPathValue("id", oid)
@@ -132,8 +133,8 @@ func TestHTTP_ConfirmPayment_ReturnsPaid(t *testing.T) {
 
 func TestHTTP_ConfirmPayment_IdempotentOnSecondCall(t *testing.T) {
 	svc, _, _ := testService(t)
-	oid, _ := svc.CreateOrder(nil, validOrderInput())
-	svc.CreatePaymentIntent(nil, oid)
+	oid, _ := svc.CreateOrder(context.TODO(), validOrderInput())
+	svc.CreatePaymentIntent(context.TODO(), oid)
 
 	// First call: paid.
 	req1 := signedRequest(http.MethodPost, "/api/v1/orders/"+oid+"/confirm-payment", "")
@@ -163,7 +164,7 @@ func TestHTTP_ConfirmPayment_IdempotentOnSecondCall(t *testing.T) {
 
 func TestHTTP_CancelOrder_ReturnsCancelled(t *testing.T) {
 	svc, _, _ := testService(t)
-	oid, _ := svc.CreateOrder(nil, validOrderInput())
+	oid, _ := svc.CreateOrder(context.TODO(), validOrderInput())
 	body, _ := json.Marshal(map[string]string{"reason": "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+oid+"/cancel", bytes.NewReader(body))
 	req.SetPathValue("id", oid)
@@ -176,9 +177,9 @@ func TestHTTP_CancelOrder_ReturnsCancelled(t *testing.T) {
 
 func TestHTTP_CancelOrder_PaidOrderReturns400(t *testing.T) {
 	svc, _, _ := testService(t)
-	oid, _ := svc.CreateOrder(nil, validOrderInput())
-	svc.CreatePaymentIntent(nil, oid)
-	svc.ConfirmPaymentForOrder(nil, oid)
+	oid, _ := svc.CreateOrder(context.TODO(), validOrderInput())
+	svc.CreatePaymentIntent(context.TODO(), oid)
+	svc.ConfirmPaymentForOrder(context.TODO(), oid)
 
 	body, _ := json.Marshal(map[string]string{"reason": "test"})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+oid+"/cancel", bytes.NewReader(body))
@@ -194,7 +195,7 @@ func TestHTTP_CancelOrder_PaidOrderReturns400(t *testing.T) {
 
 func TestHTTP_CreatePaymentIntent_Returns201(t *testing.T) {
 	svc, _, _ := testService(t)
-	oid, _ := svc.CreateOrder(nil, validOrderInput())
+	oid, _ := svc.CreateOrder(context.TODO(), validOrderInput())
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+oid+"/payment-intents", nil)
 	req.SetPathValue("id", oid)
 	rec := httptest.NewRecorder()
@@ -206,8 +207,8 @@ func TestHTTP_CreatePaymentIntent_Returns201(t *testing.T) {
 
 func TestHTTP_CreatePaymentIntent_DuplicateReturns400(t *testing.T) {
 	svc, _, _ := testService(t)
-	oid, _ := svc.CreateOrder(nil, validOrderInput())
-	svc.CreatePaymentIntent(nil, oid)
+	oid, _ := svc.CreateOrder(context.TODO(), validOrderInput())
+	svc.CreatePaymentIntent(context.TODO(), oid)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+oid+"/payment-intents", nil)
 	req.SetPathValue("id", oid)

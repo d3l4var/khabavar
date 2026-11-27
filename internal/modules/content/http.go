@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -143,7 +144,10 @@ func ApproveArticleHandler(svc *Service) http.HandlerFunc {
 		var req struct {
 			EditorID string `json:"editor_id"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json", "code": "invalid_body"})
+			return
+		}
 		if err := svc.Approve(r.Context(), id, req.EditorID); err != nil {
 			writeContentSvcErr(w, err)
 			return

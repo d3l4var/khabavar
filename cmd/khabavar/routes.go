@@ -226,7 +226,6 @@ type services struct {
 	media           *media.Service
 	content         *content.Service
 	ecosystem       *ecosystem.Service
-	resolve         authorization.SubjectResolver
 	customer        identity.CustomerStore
 	identity        *identity.Service
 	adminLoginStore identity.AdminLoginStore

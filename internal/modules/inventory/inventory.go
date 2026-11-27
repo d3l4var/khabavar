@@ -321,8 +321,10 @@ func (s *Service) ReserveForOrder(ctx context.Context, r Reservation) (string, e
 		if err := s.store.ReserveStock(ctx, r.WarehouseID, r.VariantID, r.Quantity, now); err != nil {
 			return "", err
 		}
-		// Post the RESERVATION movement (signed: positive reserved count).
-		s.store.RecordMovement(ctx, Movement{
+		// Post the RESERVATION movement (signed: positive reserved count). If this write fails
+		// the stock is reserved with no trail, which breaks reconciliation — so it is an error,
+		// not a log line.
+		if _, err := s.store.RecordMovement(ctx, Movement{
 			WarehouseID:   r.WarehouseID,
 			VariantID:     r.VariantID,
 			MovementType:  MovementReservation,
@@ -330,7 +332,9 @@ func (s *Service) ReserveForOrder(ctx context.Context, r Reservation) (string, e
 			ReferenceType: "ORDER",
 			ReferenceID:   r.OrderItemID,
 			CreatedAt:     now,
-		})
+		}); err != nil {
+			return "", err
+		}
 	}
 	// Supplier-sourced reservation → no live stock to reserve (the supplier's
 	// availability is tracked in suppliers.supplier_variants.available_quantity,
@@ -361,7 +365,7 @@ func (s *Service) ReleaseReservation(ctx context.Context, id string) error {
 		if err := s.store.ReleaseStock(ctx, r.WarehouseID, r.VariantID, r.Quantity, now); err != nil {
 			return err
 		}
-		s.store.RecordMovement(ctx, Movement{
+		if _, err := s.store.RecordMovement(ctx, Movement{
 			WarehouseID:   r.WarehouseID,
 			VariantID:     r.VariantID,
 			MovementType:  MovementRelease,
@@ -369,7 +373,9 @@ func (s *Service) ReleaseReservation(ctx context.Context, id string) error {
 			ReferenceType: "ORDER",
 			ReferenceID:   r.OrderItemID,
 			CreatedAt:     now,
-		})
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -403,8 +409,9 @@ func (s *Service) ConvertReservation(ctx context.Context, id string) error {
 		if err := s.store.ReleaseStock(ctx, r.WarehouseID, r.VariantID, r.Quantity, now); err != nil {
 			return fmt.Errorf("release reserved on convert: %w", err)
 		}
-		// Post SALE movement (signed: negative, goods out).
-		s.store.RecordMovement(ctx, Movement{
+		// Post SALE movement (signed: negative, goods out). A missing trail here breaks
+		// reconciliation just like the reservation path.
+		if _, err := s.store.RecordMovement(ctx, Movement{
 			WarehouseID:   r.WarehouseID,
 			VariantID:     r.VariantID,
 			MovementType:  MovementSale,
@@ -412,7 +419,9 @@ func (s *Service) ConvertReservation(ctx context.Context, id string) error {
 			ReferenceType: "ORDER",
 			ReferenceID:   r.OrderItemID,
 			CreatedAt:     now,
-		})
+		}); err != nil {
+			return fmt.Errorf("record sale movement: %w", err)
+		}
 	}
 	return nil
 }
@@ -436,8 +445,12 @@ func (s *Service) ExpireReservations(ctx context.Context, limit int) (int, error
 			continue // best-effort; a partial sweep is acceptable
 		}
 		if r.WarehouseID != "" {
-			s.store.ReleaseStock(ctx, r.WarehouseID, r.VariantID, r.Quantity, now)
-			s.store.RecordMovement(ctx, Movement{
+			// The sweep is best-effort by design, but the returned count must be truthful:
+			// a reservation whose stock could not be released is not swept.
+			if err := s.store.ReleaseStock(ctx, r.WarehouseID, r.VariantID, r.Quantity, now); err != nil {
+				continue
+			}
+			if _, err := s.store.RecordMovement(ctx, Movement{
 				WarehouseID:   r.WarehouseID,
 				VariantID:     r.VariantID,
 				MovementType:  MovementRelease,
@@ -445,7 +458,9 @@ func (s *Service) ExpireReservations(ctx context.Context, limit int) (int, error
 				ReferenceType: "ORDER",
 				ReferenceID:   r.OrderItemID,
 				CreatedAt:     now,
-			})
+			}); err != nil {
+				continue
+			}
 		}
 		count++
 	}

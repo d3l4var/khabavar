@@ -1,0 +1,44 @@
+# golangci-lint configuration.
+#
+# Why this file exists: the gate was advisory because `version: latest` resolved to a build
+# whose typechecker could not read this toolchain's export data ("export data version 4 is
+# greater than maximum supported version 2"), and every finding it produced was downstream of
+# that breakage. Pinning the version and declaring the exclusions below makes the gate
+# meaningful, so it can be blocking.
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - errcheck
+    - ineffassign
+    - staticcheck
+    - unused
+  settings:
+    errcheck:
+      # Rollback and Close errors are conventionally ignored: a rollback after a failed
+      # transaction cannot be acted on, and a Close error on a read-only file carries no
+      # recovery path. Checking them would mean writing `_ =` everywhere for no benefit.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*database/sql.Tx).Rollback
+        - (github.com/jackc/pgx/v5.Tx).Rollback
+    staticcheck:
+      checks:
+        # SA* are real defects and stay on. QF* (quickfix) and ST* (style) are taste, not
+        # correctness, and would force churn without changing behaviour.
+        - all
+        # QF* (quickfix) and ST* (style, mostly "add a package comment") are taste, not
+        # correctness. They would force churn without changing behaviour, and bury the SA*
+        # findings that are real defects.
+        - -QF*
+        - -ST*
+
+  exclusions:
+    # Test helpers routinely ignore setup errors that a later t.Fatalf covers; flagging them
+    # buries the production findings that matter.
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck

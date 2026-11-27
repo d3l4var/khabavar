@@ -52,12 +52,15 @@ jobs:
           if [ -n "$out" ]; then
             echo "gofmt needed on:"; echo "$out"; exit 1
           fi
+      # Pinned, not "latest": the unpinned build could not read this toolchain's export data
+      # ("export data version 4 is greater than maximum supported version 2") and every
+      # finding it produced was downstream of that breakage. v2.15.0 is built with go1.27 and
+      # reports 0 issues against this tree, so the gate is blocking.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v2.15.0
           args: --timeout=5m
-        continue-on-error: true # advisory until the baseline is clean
       # The four apps share one workspace (web/package.json), so deps install once at
       # web/ and the design system in web/shared resolves react from the hoisted store.
       - name: web typecheck
@@ -93,8 +96,13 @@ jobs:
           node-version: "20"
       - name: install lightpanda
         run: |
-          curl -fsSL https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-x86_64-linux -o /usr/local/bin/lightpanda
+          # Direct GitHub works (verified: 76 MB, exit 0). The mirror is a fallback for a
+          # runner that cannot reach github.com, not the primary path.
+          URL=https://github.com/lightpanda-io/browser/releases/latest/download/lightpanda-x86_64-linux
+          curl -fsSL --max-time 600 "$URL" -o /usr/local/bin/lightpanda \
+            || curl -fsSL --max-time 600 "https://ghproxy.net/$URL" -o /usr/local/bin/lightpanda
           chmod +x /usr/local/bin/lightpanda
+          lightpanda version
       - name: build the apps
         run: |
           cd web && npm ci --no-audit --no-fund

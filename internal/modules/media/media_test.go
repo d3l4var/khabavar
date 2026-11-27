@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -357,7 +358,7 @@ func TestLocalStorage_PathTraversalBlocked(t *testing.T) {
 	}
 	// /etc/passwd should NOT have been touched (it's owned by root; we just
 	// verify our file is under rootDir).
-	if !filepath.HasPrefix(path, ls.rootDir) {
+	if !strings.HasPrefix(path, filepath.Clean(ls.rootDir)+string(os.PathSeparator)) {
 		t.Fatalf("path %s escaped rootDir %s", path, ls.rootDir)
 	}
 }
