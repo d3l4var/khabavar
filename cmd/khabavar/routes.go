@@ -203,24 +203,26 @@ func withActor(next http.Handler) http.Handler {
 // struct lets mountRoutes be exercised by a test with zero values, which is how the
 // route table is checked for ServeMux pattern conflicts before a deploy does it.
 type services struct {
-	catalog     *catalog.Service
-	pricing     *pricing.Service
-	commerce    *commerce.Service
-	suppliers   *suppliers.Service
-	inventory   *inventory.Service
-	fulfillment *fulfillment.Service
-	media       *media.Service
-	content     *content.Service
-	ecosystem   *ecosystem.Service
-	resolve     authorization.SubjectResolver
-	customer    identity.CustomerStore
-	cfg         config.Config
-	catList     *catalog.AdminListStore
-	idem        commerce.IdempotencyStore
-	invAdmin    *inventory.AdminStore
-	iamAdmin    *identity.AdminStore
-	auditList   *audit.ListStore
-	orderList   *commerce.OrderListStore
+	catalog         *catalog.Service
+	pricing         *pricing.Service
+	commerce        *commerce.Service
+	suppliers       *suppliers.Service
+	inventory       *inventory.Service
+	fulfillment     *fulfillment.Service
+	media           *media.Service
+	content         *content.Service
+	ecosystem       *ecosystem.Service
+	resolve         authorization.SubjectResolver
+	customer        identity.CustomerStore
+	identity        *identity.Service
+	adminLoginStore identity.AdminLoginStore
+	cfg             config.Config
+	catList         *catalog.AdminListStore
+	idem            commerce.IdempotencyStore
+	invAdmin        *inventory.AdminStore
+	iamAdmin        *identity.AdminStore
+	auditList       *audit.ListStore
+	orderList       *commerce.OrderListStore
 }
 
 // mountRoutes registers every api-unit route. Handlers are closures over the
@@ -265,6 +267,9 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/cart", commerce.CartHandler(s.commerce))
 	// Checkout is money-touching, so a retry must not create a second order
 	// (ADR-ARCH-008). The wrapper enforces the Idempotency-Key header.
+	// Staff login on the API origin (the identity unit has its own copy; the panel talks
+	// to whichever host serves /api/v1).
+	api.public("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(s.identity, s.adminLoginStore))
 	api.public("POST /api/v1/oauth/logout", identity.LogoutHandler())
 	api.public("POST /api/v1/payments/webhook", commerce.PaymentWebhookHandler(s.commerce, commerce.PaymentWebhookSecret(s.cfg.PaymentWebhookSecret)))
 	api.public("GET /api/v1/payments/return", commerce.PaymentReturnHandler(s.cfg.StorefrontBaseURL))

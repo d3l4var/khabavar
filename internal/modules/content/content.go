@@ -105,7 +105,7 @@ type Article struct {
 	Language        string     `json:"language"`
 	SourceType      string     `json:"source_type"`
 	SourceURL       string     `json:"source_url,omitempty"`
-	ParentArticleID string     // set for translations (SAD §۷.۲) `json:"parent_article_id,omitempty"`
+	ParentArticleID string     `json:"parent_article_id,omitempty"` // set for translations (SAD §۷.۲)
 	AuthorID        string     `json:"author_id,omitempty"`
 	EditorID        string     `json:"editor_id,omitempty"`
 	Status          string     `json:"status"`
@@ -119,7 +119,7 @@ type Article struct {
 type ArticleSource struct {
 	ID         string    `json:"id"`
 	ArticleID  string    `json:"article_id"`
-	SourceType string    // JOURNAL/BOOK/GUIDELINE/EXPERT/OTHER `json:"source_type"`
+	SourceType string    `json:"source_type"` // JOURNAL/BOOK/GUIDELINE/EXPERT/OTHER
 	Citation   string    `json:"citation"`
 	URL        string    `json:"url,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -128,12 +128,12 @@ type ArticleSource struct {
 // ProductArticleRelation mirrors product_article_relations (§12.3). The
 // relation_reason is mandatory (MA-5).
 type ProductArticleRelation struct {
-	ID             string
-	ProductID      string
-	ArticleID      string
-	RelationType   string // RELATED/EDUCATIONAL/PRODUCT_GUIDE/COMPARISON
-	RelationReason string
-	CreatedAt      time.Time
+	ID             string    `json:"id"`
+	ProductID      string    `json:"product_id"`
+	ArticleID      string    `json:"article_id"`
+	RelationType   string    `json:"relation_type"` // RELATED/EDUCATIONAL/PRODUCT_GUIDE/COMPARISON
+	RelationReason string    `json:"relation_reason"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // Store is the persistence boundary for content. The DB implementation uses

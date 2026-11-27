@@ -87,16 +87,16 @@ var (
 // FulfillmentOrder mirrors fulfillment_orders. One order may have multiple
 // fulfillment orders (e.g. one OWNED_INVENTORY + one SUPPLIER_SOURCED).
 type FulfillmentOrder struct {
-	ID                  string
-	OrderID             string
-	SourceType          string
-	WarehouseID         string // set iff source_type = OWNED_INVENTORY
-	SupplierID          string // set iff source_type = SUPPLIER_SOURCED
-	Status              string
-	EstimatedReadyAt    *time.Time
-	EstimatedDeliveryAt *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	ID                  string     `json:"id"`
+	OrderID             string     `json:"order_id"`
+	SourceType          string     `json:"source_type"`
+	WarehouseID         string     `json:"warehouse_id"` // set iff source_type = OWNED_INVENTORY
+	SupplierID          string     `json:"supplier_id"`  // set iff source_type = SUPPLIER_SOURCED
+	Status              string     `json:"status"`
+	EstimatedReadyAt    *time.Time `json:"estimated_ready_at"`
+	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
 // FulfillmentItem mirrors fulfillment_items. The allocation invariant (§11.2)
@@ -113,16 +113,16 @@ type FulfillmentItem struct {
 // Shipment mirrors shipments. A fulfillment order may have multiple shipments
 // (e.g. partial shipments, split across packages — §11.3).
 type Shipment struct {
-	ID                 string
-	FulfillmentOrderID string
-	Carrier            string
-	ServiceType        string
-	TrackingNumber     string
-	ShippingCost       int64 // IRR
-	Status             string
-	ShippedAt          *time.Time
-	DeliveredAt        *time.Time
-	CreatedAt          time.Time
+	ID                 string     `json:"id"`
+	FulfillmentOrderID string     `json:"fulfillment_order_id"`
+	Carrier            string     `json:"carrier"`
+	ServiceType        string     `json:"service_type"`
+	TrackingNumber     string     `json:"tracking_number"`
+	ShippingCost       int64      `json:"shipping_cost"` // IRR
+	Status             string     `json:"status"`
+	ShippedAt          *time.Time `json:"shipped_at"`
+	DeliveredAt        *time.Time `json:"delivered_at"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 // ShipmentItem mirrors shipment_items — a fulfillment_item split across packages (§11.4).

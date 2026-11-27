@@ -30,17 +30,17 @@ import (
 // Refund mirrors the `refunds` table (migration 000006, DB v2 §10.6). There is no
 // currency column: an order is single-currency, so the refund inherits it.
 type Refund struct {
-	ID                string
-	OrderID           string
-	PaymentAttemptID  string
-	OrderItemID       string // empty = order-level refund
-	Amount            int64
-	Reason            string
-	Status            string
-	ProviderReference string
-	ApprovedBy        string // admin_user_id (IAM §۷)
-	CreatedAt         time.Time
-	CompletedAt       *time.Time
+	ID                string     `json:"id"`
+	OrderID           string     `json:"order_id"`
+	PaymentAttemptID  string     `json:"payment_attempt_id"`
+	OrderItemID       string     `json:"order_item_id"` // empty = order-level refund
+	Amount            int64      `json:"amount"`
+	Reason            string     `json:"reason"`
+	Status            string     `json:"status"`
+	ProviderReference string     `json:"provider_reference"`
+	ApprovedBy        string     `json:"approved_by"` // admin_user_id (IAM §۷)
+	CreatedAt         time.Time  `json:"created_at"`
+	CompletedAt       *time.Time `json:"completed_at"`
 }
 
 // Refund status constants — exactly the values allowed by chk_refunds_status.

@@ -72,18 +72,18 @@ var (
 
 // Supplier mirrors suppliers.
 type Supplier struct {
-	ID                 string
-	Name               string
-	SupplierType       string
-	RegistrationNumber string
-	ContactName        string
-	Phone              string
-	Email              string
-	Address            string
-	Website            string
-	Status             string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	SupplierType       string    `json:"supplier_type"`
+	RegistrationNumber string    `json:"registration_number"`
+	ContactName        string    `json:"contact_name"`
+	Phone              string    `json:"phone"`
+	Email              string    `json:"email"`
+	Address            string    `json:"address"`
+	Website            string    `json:"website"`
+	Status             string    `json:"status"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 // SupplierProduct mirrors supplier_products (a supplier→product link).
@@ -127,21 +127,21 @@ type PriceHistoryEntry struct {
 // Evaluation mirrors supplier_evaluations. Each criterion score is 0-100;
 // total_score is the weighted sum (R-05 §۳).
 type Evaluation struct {
-	ID                 string
-	SupplierID         string
-	QualityScore       int
-	PricingScore       int
-	AvailabilityScore  int
-	WarrantyScore      int
-	DocumentationScore int
-	FlexibilityScore   int
-	LogisticsScore     int
-	CommunicationScore int
-	TotalScore         float64
-	EvaluationDate     time.Time
-	ReviewerID         string
-	WeightsVersion     string
-	Notes              string
+	ID                 string    `json:"id"`
+	SupplierID         string    `json:"supplier_id"`
+	QualityScore       int       `json:"quality_score"`
+	PricingScore       int       `json:"pricing_score"`
+	AvailabilityScore  int       `json:"availability_score"`
+	WarrantyScore      int       `json:"warranty_score"`
+	DocumentationScore int       `json:"documentation_score"`
+	FlexibilityScore   int       `json:"flexibility_score"`
+	LogisticsScore     int       `json:"logistics_score"`
+	CommunicationScore int       `json:"communication_score"`
+	TotalScore         float64   `json:"total_score"`
+	EvaluationDate     time.Time `json:"evaluation_date"`
+	ReviewerID         string    `json:"reviewer_id"`
+	WeightsVersion     string    `json:"weights_version"`
+	Notes              string    `json:"notes"`
 }
 
 // Store is the persistence boundary for suppliers. The DB implementation uses

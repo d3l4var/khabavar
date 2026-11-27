@@ -92,12 +92,12 @@ var (
 
 // Cart mirrors carts.
 type Cart struct {
-	ID           string
-	CustomerID   string
-	SessionToken string
-	Status       string
-	Currency     string
-	ExpiresAt    *time.Time
+	ID           string     `json:"id"`
+	CustomerID   string     `json:"customer_id"`
+	SessionToken string     `json:"session_token"`
+	Status       string     `json:"status"`
+	Currency     string     `json:"currency"`
+	ExpiresAt    *time.Time `json:"expires_at"`
 }
 
 // CartItem mirrors cart_items.

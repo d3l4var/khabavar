@@ -1670,6 +1670,37 @@ intent ناشناخته و رشتهٔ خالی → `ErrPaymentIntentNotFound` (�
 
 ---
 
+### ۴.۶۵ بررسی ریز: ورود کارمند روی origin API + کلیدهای PascalCase — کامیت `fix(api-origin)`
+
+بررسی سیستماتیک با اسکریپت (نه چشم) سه یافته داد:
+
+**۱) ورود کارمند روی واحد API وجود نداشت.** `POST /api/v1/auth/admin/login` فقط در
+`runIdentity` (پورت جدا) ثبت شده بود؛ پنل اما از همان origin که `/api/v1` را سرو می‌کند
+لاگین می‌کند. نتیجه: **در استقرار تک‌واحدی API، ورود پنل ۴۰۴ می‌داد** — و این را
+`audit-routes.py` نمی‌دید، چون مسیر در قرارداد نیست (فقط handler بود).
+
+رفع: `identity.Service` در واحد API ساخته شد و مسیر با `api.public` mount شد.
+**شاهد:** `POST /auth/admin/login → ۲۰۰`، توکن ۶۴ کاراکتری، و `/admin/orders` و
+`/admin/stock` با همان توکن **۲۰۰**.
+
+**۲) نشت کلیدهای PascalCase در ۱۰ ساختار پاسخ.** ساختارهایی که JSON tag نداشتند
+(`Movement`, `Reservation`, `Warehouse`, `Supplier`, `Evaluation`, `Shipment`,
+`FulfillmentOrder`, `Refund`, `Cart`, `ProductArticleRelation`) کلید Go-style
+برمی‌گرداندند. **شاهد زنده قبل از رفع:**
+`{"data":[{"ID":…,"WarehouseID":…,"MovementType":…}]}` — و بعد از رفع:
+`{"id":…,"warehouse_id":…,"movement_type":…,"quantity":1,…}`.
+
+**۳) یک باگ در ابزار خودم:** اسکریپت tag‌گذاری، tag را **بعد از کامنت انتهای خط**
+گذاشت، پس tag داخل کامنت افتاد و بی‌اثر بود (`Quantity int // … `json:"quantity"``).
+۱۱ خط اصلاح شد و یک بررسی `grep '//.*\`json:"'` به صفر رسید.
+
+**جاروب‌های دیگر:** ۶ sentinel تعریف‌شده ولی هرگز برگردانده‌نشده (`ErrCannotPublish`,
+`ErrNegativeReserved`, `ErrStorageKeyReq`, …) — بی‌خطر ولی مرده؛ و ۳ handler بدون
+mount که بررسی شد: `ArticleTransitionHandler` و `transitionHandler` **builder داخلی**
+هستند (نه مرده)، `GetOrderByNumberHandler` واقعاً بی‌استفاده است.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

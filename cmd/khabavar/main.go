@@ -118,6 +118,14 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	hh := health.New(pool)
 	hh.Mount(mux)
 
+	// Staff login must be reachable on the API origin: the panel is served from the same
+	// host as /api/v1, and the identity unit listens on its own port. Without this, a
+	// deployment that exposes only the API unit answers 404 on POST /auth/admin/login.
+	apiIdentitySvc := identity.NewService(identity.NewDBStore(pool.Pool), cfg.TokenSigningKey,
+		time.Duration(cfg.OTPTTLSeconds)*time.Second,
+		time.Duration(cfg.AccessTokenTTL)*time.Second,
+		5, ratelimit.New(cfg.OTPMaxPerHour, time.Hour))
+
 	// RBAC wiring: token → admin identity → seeded permission matrix (IAM §۱/§۴).
 	resolver := identity.DBSubjectResolver(pool.Pool, cfg.TokenSigningKey)
 	resolve := func(ctx context.Context, bearer string) (string, string, bool) {
@@ -157,23 +165,25 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	fulSvc.SetAuditor(auditor)
 
 	svcs := services{
-		catalog:     catSvc,
-		pricing:     pricingSvc,
-		commerce:    comSvc,
-		suppliers:   supSvc,
-		inventory:   invSvc,
-		fulfillment: fulSvc,
-		media:       mediaSvc,
-		content:     contentSvc,
-		ecosystem:   ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc}),
-		customer:    identity.NewDBCustomerStore(pool.Pool),
-		cfg:         cfg,
-		catList:     catalog.NewAdminListStore(pool.Pool),
-		idem:        commerce.NewDBStore(pool.Pool),
-		invAdmin:    inventory.NewAdminStore(pool.Pool),
-		iamAdmin:    identity.NewAdminStore(pool.Pool),
-		auditList:   audit.NewListStore(pool.Pool),
-		orderList:   commerce.NewOrderListStore(pool.Pool),
+		catalog:         catSvc,
+		pricing:         pricingSvc,
+		commerce:        comSvc,
+		suppliers:       supSvc,
+		inventory:       invSvc,
+		fulfillment:     fulSvc,
+		media:           mediaSvc,
+		content:         contentSvc,
+		ecosystem:       ecosystem.NewService(catalogSearch{catSvc}, articleSearch{contentSvc}),
+		customer:        identity.NewDBCustomerStore(pool.Pool),
+		cfg:             cfg,
+		identity:        apiIdentitySvc,
+		adminLoginStore: identity.NewDBAdminLoginStore(pool.Pool),
+		catList:         catalog.NewAdminListStore(pool.Pool),
+		idem:            commerce.NewDBStore(pool.Pool),
+		invAdmin:        inventory.NewAdminStore(pool.Pool),
+		iamAdmin:        identity.NewAdminStore(pool.Pool),
+		auditList:       audit.NewListStore(pool.Pool),
+		orderList:       commerce.NewOrderListStore(pool.Pool),
 	}
 	mountRoutes(api, svcs)
 

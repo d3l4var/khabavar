@@ -65,12 +65,12 @@ var (
 
 // Warehouse mirrors warehouses.
 type Warehouse struct {
-	ID            string
-	Name          string
-	WarehouseCode string
-	Address       string
-	Status        string
-	CreatedAt     time.Time
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	WarehouseCode string    `json:"warehouse_code"`
+	Address       string    `json:"address"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // StockBalance mirrors stock_balances. Sellable = OnHand - Reserved (computed).
@@ -91,28 +91,28 @@ func (b StockBalance) Sellable() int { return b.OnHandQuantity - b.ReservedQuant
 
 // Movement mirrors a stock_movements row (append-only ledger, §۸.۳).
 type Movement struct {
-	ID            string
-	WarehouseID   string
-	VariantID     string
-	MovementType  string
-	Quantity      int // signed: positive in, negative out
-	ReferenceType string
-	ReferenceID   string
-	CreatedAt     time.Time
-	CreatedBy     string
+	ID            string    `json:"id"`
+	WarehouseID   string    `json:"warehouse_id"`
+	VariantID     string    `json:"variant_id"`
+	MovementType  string    `json:"movement_type"`
+	Quantity      int       `json:"quantity"` // signed: positive in, negative out
+	ReferenceType string    `json:"reference_type"`
+	ReferenceID   string    `json:"reference_id"`
+	CreatedAt     time.Time `json:"created_at"`
+	CreatedBy     string    `json:"created_by"`
 }
 
 // Reservation mirrors inventory_reservations (§۸.۴ — source-explicit).
 type Reservation struct {
-	ID          string
-	OrderItemID string
-	VariantID   string
-	WarehouseID string // set iff source = warehouse
-	SupplierID  string // set iff source = supplier
-	Quantity    int
-	Status      string
-	ExpiresAt   time.Time
-	CreatedAt   time.Time
+	ID          string    `json:"id"`
+	OrderItemID string    `json:"order_item_id"`
+	VariantID   string    `json:"variant_id"`
+	WarehouseID string    `json:"warehouse_id"` // set iff source = warehouse
+	SupplierID  string    `json:"supplier_id"`  // set iff source = supplier
+	Quantity    int       `json:"quantity"`
+	Status      string    `json:"status"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // Store is the persistence boundary for inventory. The DB implementation uses pgx;
