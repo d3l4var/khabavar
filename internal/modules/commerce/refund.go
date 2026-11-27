@@ -101,6 +101,9 @@ func (s *Service) SetAuditor(a AuditRecorder) { s.auditor = a }
 // provider call is synchronous and cannot fail in the mock, so there is no async
 // settlement step to wait for. A real adapter will insert REQUESTED and settle later.
 func (s *Service) CreateRefund(ctx context.Context, orderID string, amount int64, reason string) (string, error) {
+	if s.refunds == nil {
+		return "", ErrRefundStoreNotWired
+	}
 	if amount <= 0 {
 		return "", ErrRefundAmountInvalid
 	}
@@ -173,10 +176,16 @@ func (s *Service) CreateRefund(ctx context.Context, orderID string, amount int64
 	return id, nil
 }
 
+// ErrRefundStoreNotWired is returned when a refund method is called before SetRefundStore.
+var ErrRefundStoreNotWired = errors.New("commerce: refund store not wired")
+
 // ListRefunds returns the refund history for an order (admin view).
 func (s *Service) ListRefunds(ctx context.Context, orderID string) ([]Refund, error) {
 	if orderID == "" {
 		return nil, ErrOrderNotFound
+	}
+	if s.refunds == nil {
+		return nil, ErrRefundStoreNotWired
 	}
 	return s.refunds.ListRefunds(ctx, orderID)
 }
@@ -200,6 +209,9 @@ type ReconciliationResult struct {
 // a nightly job). A mismatch means money was recorded without a captured payment, or
 // the reverse.
 func (s *Service) ReconcileTransaction(ctx context.Context, orderID string) (*ReconciliationResult, error) {
+	if s.refunds == nil {
+		return nil, ErrRefundStoreNotWired
+	}
 	o, err := s.store.GetOrder(ctx, orderID)
 	if err != nil {
 		return nil, err

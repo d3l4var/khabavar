@@ -65,6 +65,7 @@ func (s *DBStore) GetOrCreateCart(ctx context.Context, customerID, sessionToken 
 			`SELECT id, customer_id::text, session_token, status, currency, expires_at
 			   FROM carts
 			  WHERE status = 'ACTIVE'
+			    AND (expires_at IS NULL OR expires_at > now())
 			    AND (($1 <> '' AND customer_id = $1::uuid) OR ($1 = '' AND session_token = $2))
 			  ORDER BY created_at DESC LIMIT 1`, customerID, sessionToken).
 			Scan(&c.ID, &custID, &sess, &c.Status, &c.Currency, &expires)

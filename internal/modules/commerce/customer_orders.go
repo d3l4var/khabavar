@@ -57,7 +57,10 @@ func (s *DBStore) FindCartBySession(ctx context.Context, sessionToken string) (*
 	var c Cart
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, COALESCE(customer_id::text,''), COALESCE(session_token,''), status, currency
-		   FROM carts WHERE session_token = $1 AND status = 'ACTIVE' LIMIT 1`, sessionToken).
+		   FROM carts
+		  WHERE session_token = $1 AND status = 'ACTIVE'
+		    AND (expires_at IS NULL OR expires_at > now())
+		  LIMIT 1`, sessionToken).
 		Scan(&c.ID, &c.CustomerID, &c.SessionToken, &c.Status, &c.Currency)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

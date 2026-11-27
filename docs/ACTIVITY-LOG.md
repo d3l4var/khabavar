@@ -1971,6 +1971,28 @@ content 46.8 · ecosystem 40.0 · audit 0.0 · shared 0.0   (advisory)
 
 ---
 
+### ۴.۷۶ دو باگ در سبد و بازپرداخت — کامیت `fix(cart-expiry-refund-guard)`
+
+**۱) سبد منقضی هنوز ACTIVE برگردانده می‌شد.** `FindCartBySession` و `GetOrCreateCart` هر
+دو `expires_at` را نادیده می‌گرفتند، پس سبد ۳۰ روزهٔ منقضی همچنان استفاده و **ادغام**
+می‌شد — یعنی اقلام کهنه به سبد مشتری می‌رفتند. هر دو کوئری حالا
+`(expires_at IS NULL OR expires_at > now())` دارند.
+
+**۲) `Service.ListRefunds` روی `s.refunds` تهی panic می‌کرد.** کامنت فیلد می‌گفت
+«nil → refund methods error»، ولی سه متد بدون گارد dereference می‌کردند. گارد
+`ErrRefundStoreNotWired` به `ListRefunds`، `CreateRefund` و `ReconcileTransaction` اضافه شد.
+
+**تست‌ها:**
+- `TestPG_MergeCartsEdgeCases` — ادغام با واریانت مشترک (جمع تعداد: ۱+۲=۳)، واریانت تازه،
+  ادغام سبد در خودش (no-op)، سبد مهمان خالی، **سبد منقضی** (no-op)، و ادغام بدون مشتری.
+- `TestPG_CommerceStoreFailuresAreServerErrors` — با `failingStore` (embedding + override)
+  شاخه‌های خطای `ListRefunds`, `Reconcile`, `GetOrder`, `CreateRefund`: خرابی store باید
+  ۵xx بدهد، نه ۲۰۰ با لیست خالی.
+
+**پوشش commerce: ۸۳.۰٪ → ۸۳.۶٪.**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
