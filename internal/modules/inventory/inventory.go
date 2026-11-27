@@ -56,6 +56,7 @@ var (
 	ErrReservationExpiryReq   = errors.New("inventory: reservation expires_at required")
 	ErrReservationNotActive   = errors.New("inventory: reservation is not active")
 	ErrZeroQuantity           = errors.New("inventory: movement quantity must be non-zero")
+	ErrOrderItemRequired      = errors.New("inventory: order_item_id is required")
 	ErrWarehouseCodeReq       = errors.New("inventory: warehouse_code required")
 	ErrWarehouseNameReq       = errors.New("inventory: warehouse name required")
 	ErrDuplicateWarehouseCode = errors.New("inventory: warehouse_code already exists")
@@ -218,7 +219,7 @@ func (s *Service) GetStockBalance(ctx context.Context, warehouseID, variantID st
 // failing first means no orphan movement is written).
 func (s *Service) ReceiveStock(ctx context.Context, warehouseID, variantID string, qty int, referenceType, referenceID, createdBy string) error {
 	if qty <= 0 {
-		return fmt.Errorf("inventory: receive qty must be > 0")
+		return fmt.Errorf("%w: receive qty must be > 0", ErrZeroQuantity)
 	}
 	// An unknown warehouse would otherwise surface as a foreign-key 500.
 	if w, err := s.store.GetWarehouse(ctx, warehouseID); err != nil {
@@ -296,7 +297,7 @@ func (s *Service) AdjustStock(ctx context.Context, warehouseID, variantID string
 // ErrInsufficientStock and no reservation is created.
 func (s *Service) ReserveForOrder(ctx context.Context, r Reservation) (string, error) {
 	if r.OrderItemID == "" {
-		return "", fmt.Errorf("inventory: order_item_id required")
+		return "", ErrOrderItemRequired
 	}
 	if r.VariantID == "" {
 		return "", ErrStockBalanceNotFound
@@ -306,7 +307,7 @@ func (s *Service) ReserveForOrder(ctx context.Context, r Reservation) (string, e
 		return "", ErrReservationSource
 	}
 	if r.Quantity <= 0 {
-		return "", fmt.Errorf("inventory: reservation quantity must be > 0")
+		return "", fmt.Errorf("%w: reservation quantity must be > 0", ErrZeroQuantity)
 	}
 	if r.ExpiresAt.IsZero() {
 		return "", ErrReservationExpiryReq

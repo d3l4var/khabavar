@@ -204,6 +204,8 @@ func writeInvSvcErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "insufficient stock", "code": "insufficient_stock"})
 	case errors.Is(err, ErrReservationNotActive):
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "reservation not active", "code": "reservation_not_active"})
+	case errors.Is(err, ErrOrderItemRequired):
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "order_item_id is required", "code": "order_item_required"})
 	case errors.Is(err, ErrReservationExpiryReq):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "reservation expires_at required"})
 	case errors.Is(err, ErrZeroQuantity):

@@ -2505,6 +2505,45 @@ conformance: exit 0
 
 ---
 
+### ۴.۹۵ inventory: چهار handler نوشتن — کامیت `test(inventory-write-handlers)`
+
+**`TestPG_WriteHandlers`:**
+- **ساخت انبار:** بدنهٔ خراب و نام غایب → ۴۰۰؛ ساخت → ۲۰۱ و **وضعیت به ACTIVE پیش‌فرض شد**
+  (از پایگاه داده تأیید شد)؛ کد تکراری → 4xx
+- **دریافت موجودی — گارد actor (IAM §۷):** بدون actor → **۴۰۱** و **هیچ موجودی جابه‌جا
+  نشد**؛ با actor → ۲۰۰ و حرکت **همان actor را ثبت کرد**؛ مقدار صفر → ۴۰۰
+- **تعدیل:** بدون actor → ۴۰۱؛ `delta:-2` → ۲۰۰ و `on_hand` ۱۲ → ۱۰؛ `delta:0` → ۴۰۰
+- **تبدیل رزرو:** ۲۰۰ و `on_hand` ۱۰ → ۷؛ تبدیل دوم → ۴۰۹؛ id ناشناخته → ۴۰۴
+- **`parsePositiveInt`** با `""`, `abc`, `0`, `-5`, `7` — همه ۲۰۰
+
+**باگ پیدا شده — سه خطای کلاینت که ۵۰۰ می‌گرفتند:**
+
+```go
+return fmt.Errorf("inventory: receive qty must be > 0")            // → 500
+return "", fmt.Errorf("inventory: order_item_id required")         // → 500
+return "", fmt.Errorf("inventory: reservation quantity must be > 0") // → 500
+```
+
+هر سه خطای **ورودی** بودند ولی sentinel نداشتند، پس `writeInvSvcErr` به شاخهٔ default
+می‌افتاد. `ErrZeroQuantity` از قبل وجود داشت و نگاشت شده بود — فقط برنگردانده می‌شد.
+`ErrOrderItemRequired` تازه اضافه شد (**sentinel جداگانه**، نه استفادهٔ دوباره از
+`ErrReservationExpiryReq` — همان اشتباهی که در suppliers اصلاح کردم).
+
+**`TestPG_ReserveHandlerAndAdminReads`:**
+- رزرو بدون `order_item_id` → ۴۰۰ (قبلاً ۵۰۰)
+- **رزرو بیش از موجودی → ۴۰۹** (ناوردای sellable)
+- `expires_at` نامعتبر نادیده گرفته می‌شود، نه ۵۰۰
+- فهرست رزرو ادمین: `expires_before` نامعتبر → ۴۰۰ با کد `invalid_request`
+- خواندن موجودی: `on_hand=5`, `reserved=2` — واقعی
+
+**یک واقعیت schema:** `stock_movements.created_by` **FK به `admin_users`** است — actor
+باید کاربر واقعی باشد، نه رشتهٔ دلخواه.
+
+**پوشش: inventory ۸۲.۳٪ → ۸۵.۸٪ → ۸۷.۲٪** — **آستانهٔ ۹۰٪ هنوز نه.** شکاف باقی‌مانده:
+`ReserveStock` ۶۹.۶٪، `ConvertReservation` ۷۸.۹٪، `writeMovementErr` ۵۰٪.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
