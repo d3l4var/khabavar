@@ -12,6 +12,18 @@ import (
 )
 
 // CreateSupplierHandler serves POST /api/v1/admin/suppliers — create a new supplier (R-05 §۳).
+// pathID reads the path parameter whatever the route table calls it. The evaluation routes
+// declare {supplierId} and the cost/price routes {variantId}, but these handlers read
+// PathValue("id") and got "" — every one answered 404 on a real id.
+func pathID(r *http.Request, names ...string) string {
+	for _, n := range names {
+		if v := r.PathValue(n); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func CreateSupplierHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -53,7 +65,7 @@ func CreateSupplierHandler(svc *Service) http.HandlerFunc {
 // UpdateSupplierStatusHandler serves PATCH /api/v1/admin/suppliers/{id}/status.
 func UpdateSupplierStatusHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+		id := pathID(r, "supplierId", "variantId", "id")
 		var req struct {
 			Status string `json:"status"`
 		}
@@ -73,7 +85,7 @@ func UpdateSupplierStatusHandler(svc *Service) http.HandlerFunc {
 // storefront reads which suppliers can fulfil a variant (R-05 §۲ multi-source).
 func ListSupplierVariantsHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		variantID := r.PathValue("id")
+		variantID := pathID(r, "supplierId", "variantId", "id")
 		if variantID == "" {
 			writeSupErr(w, http.StatusBadRequest, "variant id required")
 			return
@@ -90,7 +102,7 @@ func ListSupplierVariantsHandler(svc *Service) http.HandlerFunc {
 // ListPriceHistoryHandler serves GET /api/v1/admin/supplier-variants/{id}/price-history.
 func ListPriceHistoryHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		svID := r.PathValue("id")
+		svID := pathID(r, "supplierId", "variantId", "id")
 		if svID == "" {
 			writeSupErr(w, http.StatusBadRequest, "supplier-variant id required")
 			return
@@ -108,7 +120,7 @@ func ListPriceHistoryHandler(svc *Service) http.HandlerFunc {
 // record a weighted supplier evaluation (R-05 §۳). Scores are 0-100 per dimension.
 func CreateEvaluationHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		supplierID := r.PathValue("id")
+		supplierID := pathID(r, "supplierId", "variantId", "id")
 		var req struct {
 			QualityScore       int `json:"quality_score"`
 			PricingScore       int `json:"pricing_score"`
@@ -147,7 +159,7 @@ func CreateEvaluationHandler(svc *Service) http.HandlerFunc {
 // ListEvaluationsHandler serves GET /api/v1/admin/suppliers/{id}/evaluations.
 func ListEvaluationsHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		supplierID := r.PathValue("id")
+		supplierID := pathID(r, "supplierId", "variantId", "id")
 		if supplierID == "" {
 			writeSupErr(w, http.StatusBadRequest, "supplier id required")
 			return
@@ -210,7 +222,7 @@ func UpdateSupplierHandler(svc *Service) http.HandlerFunc {
 			writeSupErr(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		sup, err := svc.UpdateSupplier(r.Context(), r.PathValue("id"), SupplierPatch{
+		sup, err := svc.UpdateSupplier(r.Context(), pathID(r, "supplierId", "variantId", "id"), SupplierPatch{
 			Name: req.Name, ContactName: req.ContactName, Phone: req.Phone,
 			Email: req.Email, Address: req.Address, Website: req.Website,
 		})

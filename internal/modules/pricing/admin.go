@@ -36,9 +36,21 @@ type costRequest struct {
 }
 
 // CreateCostRecordHandler serves POST /api/v1/admin/variants/{id}/cost-records.
+// pathID reads the path parameter whatever the route table calls it. The cost and price routes
+// declare {variantId}, but these handlers read PathValue("id") and got "" — every one answered
+// 404 on a real variant, so the whole cost and pricing subsystem was unreachable from the panel.
+func pathID(r *http.Request, names ...string) string {
+	for _, n := range names {
+		if v := r.PathValue(n); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func CreateCostRecordHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		variantID := r.PathValue("id")
+		variantID := pathID(r, "variantId", "id")
 		var req costRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			// A malformed body is the client's mistake: answer 400 here rather than routing
@@ -93,7 +105,7 @@ func CreateCostRecordHandler(svc *Service) http.HandlerFunc {
 // ListCostRecordsHandler serves GET /api/v1/admin/variants/{id}/cost-records.
 func ListCostRecordsHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		records, err := svc.ListCostHistory(r.Context(), r.PathValue("id"))
+		records, err := svc.ListCostHistory(r.Context(), pathID(r, "variantId", "id"))
 		if err != nil {
 			writePricingErr(w, err)
 			return
@@ -118,7 +130,7 @@ type priceRequest struct {
 // returned as a warning, not a rejection.
 func CreatePriceRecordHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		variantID := r.PathValue("id")
+		variantID := pathID(r, "variantId", "id")
 		var req priceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			// A malformed body is the client's mistake: answer 400 here rather than routing
@@ -169,7 +181,7 @@ func CreatePriceRecordHandler(svc *Service) http.HandlerFunc {
 // ListPriceRecordsHandler serves GET /api/v1/admin/variants/{id}/price-records.
 func ListPriceRecordsHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		records, err := svc.ListPriceHistory(r.Context(), r.PathValue("id"))
+		records, err := svc.ListPriceHistory(r.Context(), pathID(r, "variantId", "id"))
 		if err != nil {
 			writePricingErr(w, err)
 			return
@@ -182,7 +194,7 @@ func ListPriceRecordsHandler(svc *Service) http.HandlerFunc {
 // The approver is the authenticated admin (R-05 §۹.۲), not a body field.
 func ApprovePriceRecordHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+		id := pathID(r, "variantId", "id")
 		approver := shared.ActorID(r.Context())
 		if approver == "" {
 			// Defence in depth: the route is behind Authenticate, so this cannot happen
@@ -209,7 +221,7 @@ func ApprovePriceRecordHandler(svc *Service) http.HandlerFunc {
 // UnitEconomicsHandler serves GET /api/v1/admin/variants/{id}/economics.
 func UnitEconomicsHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ue, err := svc.UnitEconomics(r.Context(), r.PathValue("id"))
+		ue, err := svc.UnitEconomics(r.Context(), pathID(r, "variantId", "id"))
 		if err != nil {
 			writePricingErr(w, err)
 			return

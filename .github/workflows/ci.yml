@@ -136,6 +136,9 @@ jobs:
         run: python3 scripts/audit-env.py --fail-on-missing
       - name: routes vs contract (both directions, blocking)
         run: python3 scripts/audit-routes.py --fail --fail-undocumented
+      - name: path params (route vs handler)
+        run: python3 scripts/audit-pathparams.py --fail
+
       - name: contract conformance (declared query params must be read)
         run: python3 scripts/audit-contract-conformance.py --fail
       - name: coverage thresholds (enforced set only)

@@ -3571,6 +3571,35 @@ duplicate key value violates unique constraint "products_slug_key"
 
 ---
 
+### ۴.۱۲۷ بازبینی سیستماتیک مسیرهای `{param}` — شش باگ دیگر — کامیت `fix(path-param-audit)`
+
+باگ مسیر بازپرداخت و چهار handler کاتالوگ تصادفی نبودند. یک ابزار نوشتم که **همهٔ** ۸۰ مسیر
+پارامتری را با handlerهایشان مقایسه می‌کند.
+
+`scripts/audit-pathparams.py`: هر `a.admin("PATTERN", handler)` را می‌خواند، handler را به
+تابع منبعش حل می‌کند، `{param}`های مسیر را با `PathValue(...)`های handler مقایسه می‌کند —
+و یک سطح واسطه را هم دنبال می‌کند (`Idempotent(...)`، `decideReturnHandler`، `pathID`).
+
+**شش باگ واقعی پیدا شد — همه ۴۰۴ روی شناسهٔ درست:**
+
+```
+POST /admin/suppliers/{supplierId}/evaluations   → PathValue("id")
+GET  /admin/suppliers/{supplierId}/evaluations   → PathValue("id")
+POST /admin/variants/{variantId}/cost-records    → PathValue("id")
+GET  /admin/variants/{variantId}/cost-records    → PathValue("id")
+POST /admin/variants/{variantId}/price-records   → PathValue("id")
+GET  /admin/variants/{variantId}/price-records   → PathValue("id")
+```
+
+یعنی **کل زیرسیستم قیمت و بهای تمام‌شده از پنل غیرقابل دسترس بود** — نه یک صفحه، شش endpoint.
+
+**گیت با قرمزِ عمدی آزموده شد:** برگرداندن `pathID(r, "variantId", "id")` به
+`pathID(r, "id")` → `red_exit=1`؛ بازگردانی → `green_exit=0`. مرحله در CI **blocking** شد.
+
+`TestCostAndPriceRoutesReadVariantID` الگوهای واقعی مسیر را روی `ServeMux` ثبت می‌کند.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
