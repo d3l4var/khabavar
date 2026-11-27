@@ -9,20 +9,23 @@ import (
 )
 
 type Config struct {
-	Role                 string // identity | api | worker (ADR-DB-002)
-	DBURL                string
-	DBMaxOpenConns       int
-	OTPTTLSeconds        int
-	OTPMaxPerHour        int
-	TokenSigningKey      string
-	AccessTokenTTL       int // seconds
-	RefreshTokenTTL      int // seconds
-	HTTPAddr             string
-	LogLevel             string
-	AuthCodeTTLSeconds   int    // OIDC authorization-code TTL (seconds, default 600)
-	OIDCIssuer           string // id_token.iss (e.g. https://id.khabavar.ir)
-	WorkerInterval       int    // outbox poll interval, seconds (default 5)
-	WorkerBatchSize      int    // outbox claim batch size (default 100)
+	Role               string // identity | api | worker (ADR-DB-002)
+	DBURL              string
+	DBMaxOpenConns     int
+	OTPTTLSeconds      int
+	OTPMaxPerHour      int
+	TokenSigningKey    string
+	AccessTokenTTL     int // seconds
+	RefreshTokenTTL    int // seconds
+	HTTPAddr           string
+	LogLevel           string
+	AuthCodeTTLSeconds int    // OIDC authorization-code TTL (seconds, default 600)
+	OIDCIssuer         string // id_token.iss (e.g. https://id.khabavar.ir)
+	// CORSExtraOrigins adds origins to the production CORS policy (comma-separated).
+	// Local dev servers need it; production leaves it empty.
+	CORSExtraOrigins     string
+	WorkerInterval       int // outbox poll interval, seconds (default 5)
+	WorkerBatchSize      int // outbox claim batch size (default 100)
 	PaymentAdapter       string
 	PaymentWebhookSecret string // HMAC key for gateway notifications (empty disables it)
 	StorefrontBaseURL    string // where /payments/return sends the browser
@@ -50,6 +53,7 @@ func Load() (Config, error) {
 		LogLevel:             getenv("KH_LOG_LEVEL", "info"),
 		AuthCodeTTLSeconds:   getenvInt("KH_AUTH_CODE_TTL_SECONDS", 600),
 		OIDCIssuer:           getenv("KH_OIDC_ISSUER", "https://id.khabavar.ir"),
+		CORSExtraOrigins:     getenv("KH_CORS_EXTRA_ORIGINS", ""),
 		WorkerInterval:       getenvInt("KH_WORKER_INTERVAL_SECONDS", 5),
 		WorkerBatchSize:      getenvInt("KH_WORKER_BATCH_SIZE", 100),
 		PaymentAdapter:       getenv("KH_PAYMENT_ADAPTER", "mock"),

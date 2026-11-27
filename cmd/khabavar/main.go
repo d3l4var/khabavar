@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -95,7 +96,7 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 	mountIdentityRoutes(mux, svc, oidcSvc, identity.NewDBAdminLoginStore(pool.Pool),
 		identity.NewAdminLoginGuard(10, 5, 15*time.Minute), audit.NewRecorder(pool.Pool), logger)
 	hh.SetReady(true)
-	serve(ctx, cfg.HTTPAddr, mux, logger)
+	serve(ctx, cfg.HTTPAddr, mux, logger, corsConfig(cfg))
 }
 
 // runAPI mounts the storefront read endpoints and the staff (admin) endpoints.
@@ -205,7 +206,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	mountRoutes(api, svcs)
 
 	hh.SetReady(true)
-	serve(ctx, cfg.HTTPAddr, mux, logger)
+	serve(ctx, cfg.HTTPAddr, mux, logger, corsConfig(cfg))
 }
 
 // runWorker polls the domain_events outbox (ADR-ARCH-007), dispatches each event to
@@ -217,7 +218,7 @@ func runWorker(ctx context.Context, cfg config.Config, logger *slog.Logger, pool
 	hh := health.New(pool)
 	hh.Mount(mux)
 	hh.SetReady(true)
-	go serve(ctx, cfg.HTTPAddr, mux, logger)
+	go serve(ctx, cfg.HTTPAddr, mux, logger, corsConfig(cfg))
 	runOutboxDispatcher(ctx, cfg, logger, pool)
 }
 
@@ -267,12 +268,24 @@ func notifyHandler(n *notifications.Dispatcher, logger *slog.Logger) worker.Hand
 	}
 }
 
-func serve(ctx context.Context, addr string, mux *http.ServeMux, logger *slog.Logger) {
+// corsConfig adds any extra origins from KH_CORS_EXTRA_ORIGINS (comma-separated) to the
+// production policy, so a local dev server can talk to the API without weakening production.
+func corsConfig(cfg config.Config) security.CORSConfig {
+	c := security.DefaultCORSConfig()
+	for _, o := range strings.Split(cfg.CORSExtraOrigins, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			c.AllowedOrigins = append(c.AllowedOrigins, o)
+		}
+	}
+	return c
+}
+
+func serve(ctx context.Context, addr string, mux *http.ServeMux, logger *slog.Logger, cors security.CORSConfig) {
 	// Wrap the mux with security headers + CORS (R-19 P9). SecurityHeaders adds
 	// HSTS, X-Content-Type-Options, CSP, Cache-Control. CORS allows the four
 	// khabavar subdomains to make authenticated cross-origin requests.
 	handler := security.Chain(jsonErrors(mux),
-		security.CORS(security.DefaultCORSConfig()),
+		security.CORS(cors),
 		security.SecurityHeaders,
 	)
 	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}

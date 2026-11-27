@@ -156,9 +156,13 @@ export async function createOrder(input: OrderInput) {
   return request<{ id: string }>('/orders', { method: 'POST', body: JSON.stringify(input) })
 }
 
-export async function getOrderByNumber(number: string) {
+// A guest order is readable only by the phone that placed it (commerce.mayReadOrder). Without
+// it the confirmation page answered 403 order_forbidden, so every guest checkout ended on a raw
+// English error after the order had already been created.
+export async function getOrderByNumber(number: string, phone = '') {
+  const qs = phone ? `?phone=${encodeURIComponent(phone)}` : ''
   return request<{ id: string; order_number: string; status: string; grand_total: number; paid_total: number }>(
-    `/orders/${encodeURIComponent(number)}`,
+    `/orders/${encodeURIComponent(number)}${qs}`,
   )
 }
 

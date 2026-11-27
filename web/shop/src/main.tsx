@@ -282,6 +282,9 @@ function CheckoutScreen({ cart }: { cart: ReturnType<typeof useCart> }) {
         tax_total: 0,
       })
       cart.clear()
+      // Remember the phone so the confirmation can read the guest order it just created: a
+      // guest order is readable only by the phone that placed it.
+      try { localStorage.setItem('kh.lastPhone', phone) } catch { /* private mode */ }
       window.location.hash = `#/order/${encodeURIComponent(created.id)}`
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ثبت سفارش ناموفق بود.')
@@ -319,7 +322,9 @@ function CheckoutScreen({ cart }: { cart: ReturnType<typeof useCart> }) {
 }
 
 function OrderScreen({ id }: { id: string }) {
-  const order = useAsync(() => getOrderByNumber(id), [id])
+  // A guest order is readable only with the phone that placed it (commerce.mayReadOrder).
+  const phone = (() => { try { return localStorage.getItem('kh.lastPhone') || '' } catch { return '' } })()
+  const order = useAsync(() => getOrderByNumber(id, phone), [id, phone])
   if (order.loading) return <Container><StateBlock kind="loading" /></Container>
   if (order.error) return <Container><StateBlock kind="error" message={order.error} onRetry={order.retry} /></Container>
   if (!order.data) return <Container><StateBlock kind="empty" /></Container>

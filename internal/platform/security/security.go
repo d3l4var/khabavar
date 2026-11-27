@@ -54,7 +54,10 @@ func DefaultCORSConfig() CORSConfig {
 			"https://admin.khabavar.ir",
 		},
 		AllowedMethods: []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type", "Authorization", "X-Idempotency-Key"},
+		// The server reads `Idempotency-Key`, not `X-Idempotency-Key`. Allowing only the X-
+		// form meant a browser preflight rejected the header the client actually sends, so
+		// checkout could not work cross-origin at all.
+		AllowedHeaders: []string{"Content-Type", "Authorization", "Idempotency-Key", "X-Idempotency-Key"},
 	}
 }
 
