@@ -139,6 +139,18 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	mux.HandleFunc("POST /api/v1/auth/otp/verify", identity.OTPVerifyHandler(apiIdentitySvc))
 	mux.HandleFunc("GET /api/v1/auth/otp/login", identity.OTPLoginPageHandler())
 
+	// The panel's login screen starts an OIDC authorize redirect on the same origin it is
+	// served from. Those routes existed only in the identity unit, so a single-unit deployment
+	// answered 404 on /oauth/authorize and the panel could not log in at all — the third
+	// instance of "mounted in one unit only" (after staff login and OTP).
+	apiOIDCSvc := identity.NewOIDCService(identity.NewDBOIDCStore(pool.Pool),
+		identity.DBSubjectResolver(pool.Pool, cfg.TokenSigningKey), cfg.TokenSigningKey, cfg.OIDCIssuer,
+		time.Duration(cfg.AuthCodeTTLSeconds)*time.Second,
+		time.Duration(cfg.AccessTokenTTL)*time.Second,
+		time.Duration(cfg.RefreshTokenTTL)*time.Second)
+	mux.HandleFunc("GET /oauth/authorize", identity.AuthorizeHandler(apiOIDCSvc))
+	mux.HandleFunc("POST /oauth/token", identity.TokenHandler(apiOIDCSvc))
+
 	// RBAC wiring: token → admin identity → seeded permission matrix (IAM §۱/§۴).
 	resolver := identity.DBSubjectResolver(pool.Pool, cfg.TokenSigningKey)
 	resolve := func(ctx context.Context, bearer string) (string, string, bool) {

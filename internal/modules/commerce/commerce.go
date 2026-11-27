@@ -77,6 +77,9 @@ var (
 	ErrShippingAddressReq    = errors.New("commerce: shipping_address is required")
 	ErrGuestPhoneRequired    = errors.New("commerce: guest_phone is required for a guest checkout (MA-8)")
 	ErrIdempotencyKeyMissing = errors.New("commerce: Idempotency-Key header is required")
+	// ErrIdempotencyKeyTooLong guards the varchar(100) column: an over-long key used to reach
+	// the database and surface as a 500 for what is a bad request.
+	ErrIdempotencyKeyTooLong = errors.New("commerce: Idempotency-Key is longer than 100 characters")
 	ErrIdempotencyConflict   = errors.New("commerce: Idempotency-Key reused with a different body")
 	ErrIdempotencyInFlight   = errors.New("commerce: the same Idempotency-Key is still in flight")
 	ErrCartQuantityInvalid   = errors.New("commerce: quantity must be between 1 and 10")

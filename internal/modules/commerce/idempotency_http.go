@@ -38,12 +38,24 @@ func (r *recorder) Write(b []byte) (int, error) {
 //   - a retry with the same key and body replays that response verbatim,
 //   - a retry with the same key but a different body is a 409,
 //   - a retry while the first is still running is a 409 (not a second order).
+//
+// maxIdempotencyKeyLen matches idempotency_keys.key varchar(100).
+const maxIdempotencyKeyLen = 100
+
 func Idempotent(store IdempotencyStore, scope string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("Idempotency-Key")
 		if key == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]any{
 				"error": ErrIdempotencyKeyMissing.Error(), "code": "idempotency_key_required",
+			})
+			return
+		}
+		// The key column is varchar(100). Without this check an over-long key reached the
+		// database and came back as a 500 "internal error" for what is plainly a bad request.
+		if len(key) > maxIdempotencyKeyLen {
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": ErrIdempotencyKeyTooLong.Error(), "code": "idempotency_key_too_long",
 			})
 			return
 		}

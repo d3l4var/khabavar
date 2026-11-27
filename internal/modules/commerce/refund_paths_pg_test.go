@@ -276,3 +276,42 @@ func TestPG_ReturnableStatuses(t *testing.T) {
 		}
 	}
 }
+
+// TestIdempotencyKeyLength pins the guard: the key column is varchar(100), so an over-long key
+// used to reach the database and answer 500 "internal error" for a plainly bad request.
+func TestIdempotencyKeyLength(t *testing.T) {
+	called := false
+	next := func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(http.StatusOK) }
+
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader("{}"))
+	r.Header.Set("Idempotency-Key", strings.Repeat("k", 101))
+	Idempotent(nil, "test", next)(rec, r)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("101-char key = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "idempotency_key_too_long") {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
+	if called {
+		t.Fatal("handler must not run for a rejected key")
+	}
+
+	// Exactly at the limit is fine, and reaches the store.
+	rec = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/x", strings.NewReader("{}"))
+	r.Header.Set("Idempotency-Key", strings.Repeat("k", 100))
+	Idempotent(&fakeIdemStore{}, "test", next)(rec, r)
+	if rec.Code != http.StatusOK || !called {
+		t.Fatalf("100-char key = %d called=%v, want 200", rec.Code, called)
+	}
+}
+
+// fakeIdemStore always claims the key, so the handler proceeds.
+type fakeIdemStore struct{}
+
+func (fakeIdemStore) Claim(context.Context, string, string, string, time.Duration) (bool, *IdempotentResult, error) {
+	return true, nil, nil
+}
+
+func (fakeIdemStore) Complete(context.Context, string, int, []byte) error { return nil }

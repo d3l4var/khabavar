@@ -100,8 +100,31 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeErr answers the same {"code","error"} envelope as every other module. It used to send
+// only {"error"}, so a client that branches on `code` — which is what the rest of the API
+// teaches it to do — got nothing from the identity endpoints.
 func writeErr(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]any{"error": msg})
+	writeJSON(w, code, map[string]any{"error": msg, "code": machineCode(msg)})
+}
+
+// machineCode turns a human message into a stable snake_case identifier:
+// "email and password required" -> "email_and_password_required".
+func machineCode(msg string) string {
+	var b strings.Builder
+	prevUnderscore := true
+	for _, r := range strings.ToLower(msg) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevUnderscore = false
+		default:
+			if !prevUnderscore {
+				b.WriteByte('_')
+				prevUnderscore = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "_")
 }
 
 func clientIP(r *http.Request) string {
