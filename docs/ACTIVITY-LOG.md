@@ -2128,6 +2128,36 @@ audit-routes.py --fail-undocumented  → exit 1   (۶۸ مسیر مستندنش�
 
 ---
 
+### ۴.۸۲ مستندسازی ۶۸ مسیر + گیت دوطرفه — کامیت `docs(contract-full)`
+
+تصمیم مالک: **گزینهٔ ۲** — مستندسازی مسیرهای کاربردی.
+
+**قرارداد از ۵۸ به ۱۲۱ مسیر رسید.** همهٔ ۶۸ مسیر مستندنشده اضافه شدند: کل `media`،
+خواندن‌های پنل (`/admin/users`, `/admin/products`, `/admin/orders/{}/refunds`,
+`/admin/variants/{}/economics|cost-records|price-records`,
+`/admin/warehouses/{}/variants/{}/movements`, ارزیابی تأمین‌کننده، تاریخچهٔ قیمت خرید،
+رزروهای موجودی)، `shipments/{}/transition|events`، و aliasهای ویترین.
+
+**پنج مسیر تکراری حذف شد و کد با قرارداد هم‌نام شد.** معلوم شد
+`/admin/products/{id}` در کد با `/admin/products/{productId}` در قرارداد **همان مسیر**
+است. کد تغییر کرد (Go نام پارامتر را نمی‌بیند) و ورودی تکراری از قرارداد حذف شد — به‌جای
+داشتن دو نام برای یک چیز.
+
+**هشت tag تازه** به فهرست global اضافه شد تا هشدار `operation-tag-defined` صفر شود.
+
+**شاهد:**
+```
+spectral:            0 errors, 4 warnings   (فقط چهار کامپوننت بی‌استفاده)
+audit-routes --fail:                 exit 0   (هیچ وعدهٔ شکسته)
+audit-routes --fail-undocumented:    exit 0   (هیچ مسیر مستندنشده)
+mounted: 126 | declared: 121
+```
+
+**گیت CI سخت شد:** `audit-routes.py --fail --fail-undocumented` از advisory به **blocking**
+تغییر کرد — هر دو جهت قرارداد اکنون CI را می‌شکنند.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

@@ -32,17 +32,17 @@ import (
 // server never checks role names (IAM §۱).
 var adminPermissions = map[string]string{
 	// ── commerce: refunds are FINANCE-exclusive, reconciliation is a finance read ──
-	"POST /api/v1/admin/orders/{id}/refunds":  "order.refund.approve",
-	"GET /api/v1/admin/orders/{id}/refunds":   "order.view",
-	"GET /api/v1/admin/orders/{id}/reconcile": "reports.financial.view",
+	"POST /api/v1/admin/orders/{orderNumber}/refunds": "order.refund.approve",
+	"GET /api/v1/admin/orders/{orderNumber}/refunds":  "order.view",
+	"GET /api/v1/admin/orders/{id}/reconcile":         "reports.financial.view",
 
 	// ── suppliers (SUPPLIER_OPERATOR) ──
 	"POST /api/v1/admin/suppliers":                           "supplier.manage",
 	"PATCH /api/v1/admin/suppliers/{id}":                     "supplier.manage",
 	"PATCH /api/v1/admin/suppliers/{id}/status":              "supplier.manage",
 	"GET /api/v1/admin/supplier-variants/{id}/price-history": "supplier.manage",
-	"POST /api/v1/admin/suppliers/{id}/evaluations":          "supplier.evaluate",
-	"GET /api/v1/admin/suppliers/{id}/evaluations":           "supplier.manage",
+	"POST /api/v1/admin/suppliers/{supplierId}/evaluations":  "supplier.evaluate",
+	"GET /api/v1/admin/suppliers/{supplierId}/evaluations":   "supplier.manage",
 
 	// ── inventory (INVENTORY_MANAGER; adjustment is the tighter code) ──
 	"POST /api/v1/admin/warehouses":                               "inventory.manage",
@@ -78,22 +78,22 @@ var adminPermissions = map[string]string{
 	"GET /api/v1/admin/reservations":     "inventory.manage",
 
 	// ── catalogue writes (QC-05, R-04) ──
-	"POST /api/v1/admin/products":              "catalog.product.edit",
-	"GET /api/v1/admin/products":               "catalog.product.view",
-	"GET /api/v1/admin/products/{id}":          "catalog.product.view",
-	"PATCH /api/v1/admin/products/{id}":        "catalog.product.edit",
-	"POST /api/v1/admin/products/{id}/publish": "catalog.product.publish",
-	"POST /api/v1/admin/products/{id}/status":  "catalog.product.publish",
-	"POST /api/v1/admin/categories":            "catalog.attribute.manage",
-	"POST /api/v1/admin/variants":              "catalog.product.edit",
+	"POST /api/v1/admin/products":                     "catalog.product.edit",
+	"GET /api/v1/admin/products":                      "catalog.product.view",
+	"GET /api/v1/admin/products/{productId}":          "catalog.product.view",
+	"PATCH /api/v1/admin/products/{productId}":        "catalog.product.edit",
+	"POST /api/v1/admin/products/{productId}/publish": "catalog.product.publish",
+	"POST /api/v1/admin/products/{productId}/status":  "catalog.product.publish",
+	"POST /api/v1/admin/categories":                   "catalog.attribute.manage",
+	"POST /api/v1/admin/variants":                     "catalog.product.edit",
 
 	// ── pricing writes (R-05) ──
-	"POST /api/v1/admin/variants/{id}/cost-records":  "pricing.cost.manage",
-	"GET /api/v1/admin/variants/{id}/cost-records":   "pricing.cost.manage",
-	"POST /api/v1/admin/variants/{id}/price-records": "pricing.price.approve",
-	"GET /api/v1/admin/variants/{id}/price-records":  "pricing.price.approve",
-	"POST /api/v1/admin/price-records/{id}/approve":  "pricing.price.approve",
-	"GET /api/v1/admin/variants/{id}/economics":      "reports.financial.view",
+	"POST /api/v1/admin/variants/{variantId}/cost-records":  "pricing.cost.manage",
+	"GET /api/v1/admin/variants/{variantId}/cost-records":   "pricing.cost.manage",
+	"POST /api/v1/admin/variants/{variantId}/price-records": "pricing.price.approve",
+	"GET /api/v1/admin/variants/{variantId}/price-records":  "pricing.price.approve",
+	"POST /api/v1/admin/price-records/{id}/approve":         "pricing.price.approve",
+	"GET /api/v1/admin/variants/{id}/economics":             "reports.financial.view",
 
 	// ── admin reads (contract: /admin/orders, /admin/audit-logs, /admin/users|roles|permissions) ──
 	"GET /api/v1/admin/orders":       "order.view",
@@ -287,8 +287,8 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("POST /api/v1/orders/{id}/payment-intents", commerce.CreatePaymentIntentHandler(s.commerce))
 	api.public("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(s.commerce))
 	api.public("POST /api/v1/orders/{id}/cancel", commerce.CancelOrderHandler(s.commerce))
-	api.admin("POST /api/v1/admin/orders/{id}/refunds", commerce.CreateRefundHandler(s.commerce))
-	api.admin("GET /api/v1/admin/orders/{id}/refunds", commerce.ListRefundsHandler(s.commerce))
+	api.admin("POST /api/v1/admin/orders/{orderNumber}/refunds", commerce.CreateRefundHandler(s.commerce))
+	api.admin("GET /api/v1/admin/orders/{orderNumber}/refunds", commerce.ListRefundsHandler(s.commerce))
 	api.admin("GET /api/v1/admin/orders/{id}/reconcile", commerce.ReconcileTransactionHandler(s.commerce))
 
 	// ── suppliers (P5c) ──
@@ -297,8 +297,8 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("PATCH /api/v1/admin/suppliers/{id}/status", suppliers.UpdateSupplierStatusHandler(s.suppliers))
 	api.public("GET /api/v1/variants/{id}/suppliers", suppliers.ListSupplierVariantsHandler(s.suppliers))
 	api.admin("GET /api/v1/admin/supplier-variants/{id}/price-history", suppliers.ListPriceHistoryHandler(s.suppliers))
-	api.admin("POST /api/v1/admin/suppliers/{id}/evaluations", suppliers.CreateEvaluationHandler(s.suppliers))
-	api.admin("GET /api/v1/admin/suppliers/{id}/evaluations", suppliers.ListEvaluationsHandler(s.suppliers))
+	api.admin("POST /api/v1/admin/suppliers/{supplierId}/evaluations", suppliers.CreateEvaluationHandler(s.suppliers))
+	api.admin("GET /api/v1/admin/suppliers/{supplierId}/evaluations", suppliers.ListEvaluationsHandler(s.suppliers))
 
 	// ── inventory (P5d) ──
 	api.admin("POST /api/v1/admin/warehouses", inventory.CreateWarehouseHandler(s.inventory))
@@ -366,18 +366,18 @@ func mountRoutes(api *apiMux, s services) {
 	// ── catalogue writes (QC-05) ──
 	api.admin("POST /api/v1/admin/products", catalog.CreateProductHandler(s.catalog))
 	api.admin("GET /api/v1/admin/products", catalog.ListProductsHandler(s.catList))
-	api.admin("GET /api/v1/admin/products/{id}", catalog.AdminProductDetailHandler(s.catalog))
-	api.admin("PATCH /api/v1/admin/products/{id}", catalog.UpdateProductHandler(s.catalog))
-	api.admin("POST /api/v1/admin/products/{id}/publish", catalog.PublishProductHandler(s.catalog))
-	api.admin("POST /api/v1/admin/products/{id}/status", catalog.ProductStatusHandler(s.catalog))
+	api.admin("GET /api/v1/admin/products/{productId}", catalog.AdminProductDetailHandler(s.catalog))
+	api.admin("PATCH /api/v1/admin/products/{productId}", catalog.UpdateProductHandler(s.catalog))
+	api.admin("POST /api/v1/admin/products/{productId}/publish", catalog.PublishProductHandler(s.catalog))
+	api.admin("POST /api/v1/admin/products/{productId}/status", catalog.ProductStatusHandler(s.catalog))
 	api.admin("POST /api/v1/admin/categories", catalog.CreateCategoryHandler(s.catalog))
 	api.admin("POST /api/v1/admin/variants", catalog.CreateVariantHandler(s.catalog))
 
 	// ── pricing writes (R-05) ──
-	api.admin("POST /api/v1/admin/variants/{id}/cost-records", pricing.CreateCostRecordHandler(s.pricing))
-	api.admin("GET /api/v1/admin/variants/{id}/cost-records", pricing.ListCostRecordsHandler(s.pricing))
-	api.admin("POST /api/v1/admin/variants/{id}/price-records", pricing.CreatePriceRecordHandler(s.pricing))
-	api.admin("GET /api/v1/admin/variants/{id}/price-records", pricing.ListPriceRecordsHandler(s.pricing))
+	api.admin("POST /api/v1/admin/variants/{variantId}/cost-records", pricing.CreateCostRecordHandler(s.pricing))
+	api.admin("GET /api/v1/admin/variants/{variantId}/cost-records", pricing.ListCostRecordsHandler(s.pricing))
+	api.admin("POST /api/v1/admin/variants/{variantId}/price-records", pricing.CreatePriceRecordHandler(s.pricing))
+	api.admin("GET /api/v1/admin/variants/{variantId}/price-records", pricing.ListPriceRecordsHandler(s.pricing))
 	api.admin("POST /api/v1/admin/price-records/{id}/approve", pricing.ApprovePriceRecordHandler(s.pricing))
 	api.admin("GET /api/v1/admin/variants/{id}/economics", pricing.UnitEconomicsHandler(s.pricing))
 

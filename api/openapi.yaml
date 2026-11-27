@@ -36,6 +36,22 @@ servers:
     description: Development
 
 tags:
+  - name: content
+    description: تحریریهٔ مجله — مقالات، موضوعات و منابع
+  - name: ecosystem
+    description: جست‌وجوی یکپارچه و ناوبری مشترک (P7)
+  - name: fulfillment
+    description: تکمیل سفارش — fulfillment، محموله و رهگیری
+  - name: inventory
+    description: موجودی، انبارها، رزروها و دفتر حرکات
+  - name: media
+    description: رسانه — آپلود، متادیتا و محتوای فایل (R-04)
+  - name: misc
+    description: عملیات متفرقه
+  - name: pricing
+    description: قیمت‌گذاری — هزینه، قیمت فروش، تأیید و اقتصاد واحد (R-05)
+  - name: suppliers
+    description: تأمین‌کنندگان، ارزیابی و تاریخچهٔ قیمت خرید
   - name: identity
     description: Central Identity — OTP، جریان OIDC، پروفایل و نشست‌ها (CIAM)
   - name: catalog
@@ -1667,6 +1683,17 @@ paths:
 
   # ───────────────────────── admin — کاتالوگ ─────────────────────────
   /admin/products:
+    get:
+      operationId: getAdminProducts
+      tags: [catalog]
+      summary: محصولات در پنل (شامل پیش‌نویس‌ها)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       operationId: postAdminProducts
       tags: [admin-products]
@@ -2253,6 +2280,17 @@ paths:
                     items: { $ref: "#/components/schemas/PermissionView" }
 
   /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [identity]
+      summary: مدیریت حساب‌های کارمند
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       operationId: postAdminUsers
       tags: [admin-system]
@@ -2287,4 +2325,886 @@ paths:
       responses:
         "200": { description: به‌روزرسانی شد }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+
+  /admin/inventory/reservations/{id}:
+    delete:
+      operationId: deleteAdminInventoryReservationsId
+      tags: [inventory]
+      summary: رزروهای موجودی
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/media/{id}:
+    delete:
+      operationId: deleteAdminMediaId
+      tags: [media]
+      summary: مدیریت رسانه — آپلود، متادیتا، محتوا و حذف
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/orders/{id}/reconcile:
+    get:
+      operationId: getAdminOrdersIdReconcile
+      tags: [orders]
+      summary: سفارش‌ها در پنل — بازپرداخت و تطبیق تراکنش
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/supplier-variants/{id}/price-history:
+    get:
+      operationId: getAdminSuppliervariantsIdPricehistory
+      tags: [suppliers]
+      summary: تاریخچهٔ قیمت خرید
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/variants/{id}/economics:
+    get:
+      operationId: getAdminVariantsIdEconomics
+      tags: [pricing]
+      summary: قیمت‌گذاری واریانت — هزینه، قیمت و اقتصاد واحد
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/warehouses/{wid}/variants/{vid}/movements:
+    get:
+      operationId: getAdminWarehousesWidVariantsVidMovements
+      tags: [inventory]
+      summary: انبار — دفتر حرکات موجودی
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: wid, in: path, required: true, schema: { type: string } }
+        - { name: vid, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /articles:
+    get:
+      operationId: getArticles
+      tags: [content]
+      summary: مقالات مجله (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /articles/{slug}:
+    get:
+      operationId: getArticlesSlug
+      tags: [content]
+      summary: مقالات مجله (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /articles/{id}/products:
+    get:
+      operationId: getArticlesIdProducts
+      tags: [content]
+      summary: مقالات مجله (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /articles/{id}/sources:
+    get:
+      operationId: getArticlesIdSources
+      tags: [content]
+      summary: مقالات مجله (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /auth/otp/login:
+    get:
+      operationId: getAuthOtpLogin
+      tags: [identity]
+      summary: احراز هویت
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      operationId: postAuthOtpLogin
+      tags: [identity]
+      summary: احراز هویت
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /categories:
+    get:
+      operationId: getCategories
+      tags: [catalog]
+      summary: دسته‌بندی‌ها (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /categories/{id}/products:
+    get:
+      operationId: getCategoriesIdProducts
+      tags: [catalog]
+      summary: دسته‌بندی‌ها (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /fulfillment-orders/{id}/shipments:
+    get:
+      operationId: getFulfillmentordersIdShipments
+      tags: [fulfillment]
+      summary: محموله‌های یک fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /media/{id}:
+    get:
+      operationId: getMediaId
+      tags: [media]
+      summary: رسانه — خواندن متادیتا و محتوای فایل
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /media/{id}/content:
+    get:
+      operationId: getMediaIdContent
+      tags: [media]
+      summary: رسانه — خواندن متادیتا و محتوای فایل
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /navigation:
+    get:
+      operationId: getNavigation
+      tags: [ecosystem]
+      summary: ناوبری مشترک
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /orders/{id}/fulfillment:
+    get:
+      operationId: getOrdersIdFulfillment
+      tags: [orders]
+      summary: سفارش — ایجاد، مشاهده و fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /products/search:
+    get:
+      operationId: getProductsSearch
+      tags: [catalog]
+      summary: محصولات (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /products/{id}:
+    get:
+      operationId: getProductsId
+      tags: [catalog]
+      summary: محصولات (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /search:
+    get:
+      operationId: getSearch
+      tags: [ecosystem]
+      summary: جست‌وجوی یکپارچهٔ محصول و مقاله
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /shipments/{id}/events:
+    get:
+      operationId: getShipmentsIdEvents
+      tags: [fulfillment]
+      summary: رویدادهای رهگیری محموله
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /topics:
+    get:
+      operationId: getTopics
+      tags: [content]
+      summary: موضوعات مجله (alias ویترین)
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /variants/{id}/price:
+    get:
+      operationId: getVariantsIdPrice
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /variants/{id}/suppliers:
+    get:
+      operationId: getVariantsIdSuppliers
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /warehouses/{wid}/variants/{vid}/stock:
+    get:
+      operationId: getWarehousesWidVariantsVidStock
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: wid, in: path, required: true, schema: { type: string } }
+        - { name: vid, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/suppliers/{id}/status:
+    patch:
+      operationId: patchAdminSuppliersIdStatus
+      tags: [suppliers]
+      summary: تأمین‌کنندگان — ارزیابی‌ها
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/approve:
+    post:
+      operationId: postAdminArticlesIdApprove
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/archive:
+    post:
+      operationId: postAdminArticlesIdArchive
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/products:
+    post:
+      operationId: postAdminArticlesIdProducts
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/reject:
+    post:
+      operationId: postAdminArticlesIdReject
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/schedule:
+    post:
+      operationId: postAdminArticlesIdSchedule
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/sources:
+    post:
+      operationId: postAdminArticlesIdSources
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/submit:
+    post:
+      operationId: postAdminArticlesIdSubmit
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/topics:
+    post:
+      operationId: postAdminArticlesIdTopics
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/articles/{id}/unpublish:
+    post:
+      operationId: postAdminArticlesIdUnpublish
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/categories:
+    post:
+      operationId: postAdminCategories
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders:
+    post:
+      operationId: postAdminFulfillmentorders
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders/{id}/cancel:
+    post:
+      operationId: postAdminFulfillmentordersIdCancel
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders/{id}/confirm:
+    post:
+      operationId: postAdminFulfillmentordersIdConfirm
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders/{id}/delivered:
+    post:
+      operationId: postAdminFulfillmentordersIdDelivered
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders/{id}/processing:
+    post:
+      operationId: postAdminFulfillmentordersIdProcessing
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders/{id}/ready:
+    post:
+      operationId: postAdminFulfillmentordersIdReady
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders/{id}/reject:
+    post:
+      operationId: postAdminFulfillmentordersIdReject
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders/{id}/shipments:
+    post:
+      operationId: postAdminFulfillmentordersIdShipments
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/fulfillment-orders/{id}/shipped:
+    post:
+      operationId: postAdminFulfillmentordersIdShipped
+      tags: [fulfillment]
+      summary: محموله‌های یک سفارش fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/inventory/reservations/{id}/convert:
+    post:
+      operationId: postAdminInventoryReservationsIdConvert
+      tags: [inventory]
+      summary: رزروهای موجودی
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/inventory/reserve:
+    post:
+      operationId: postAdminInventoryReserve
+      tags: [inventory]
+      summary: رزروهای موجودی
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/media:
+    post:
+      operationId: postAdminMedia
+      tags: [media]
+      summary: مدیریت رسانه — آپلود، متادیتا، محتوا و حذف
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/shipments/{id}/transition:
+    post:
+      operationId: postAdminShipmentsIdTransition
+      tags: [fulfillment]
+      summary: محموله — انتقال وضعیت و رویدادهای رهگیری
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/topics:
+    post:
+      operationId: postAdminTopics
+      tags: [misc]
+      summary: عملیات
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/variants:
+    post:
+      operationId: postAdminVariants
+      tags: [pricing]
+      summary: قیمت‌گذاری واریانت — هزینه، قیمت و اقتصاد واحد
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/warehouses:
+    post:
+      operationId: postAdminWarehouses
+      tags: [inventory]
+      summary: انبار — دفتر حرکات موجودی
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/warehouses/{wid}/variants/{vid}/adjust:
+    post:
+      operationId: postAdminWarehousesWidVariantsVidAdjust
+      tags: [inventory]
+      summary: انبار — دفتر حرکات موجودی
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: wid, in: path, required: true, schema: { type: string } }
+        - { name: vid, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/warehouses/{wid}/variants/{vid}/receive:
+    post:
+      operationId: postAdminWarehousesWidVariantsVidReceive
+      tags: [inventory]
+      summary: انبار — دفتر حرکات موجودی
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: wid, in: path, required: true, schema: { type: string } }
+        - { name: vid, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /auth/admin/login:
+    post:
+      operationId: postAuthAdminLogin
+      tags: [identity]
+      summary: احراز هویت
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /auth/otp/start:
+    post:
+      operationId: postAuthOtpStart
+      tags: [identity]
+      summary: احراز هویت
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /orders:
+    post:
+      operationId: postOrders
+      tags: [orders]
+      summary: سفارش — ایجاد، مشاهده و fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /orders/{id}/confirm-payment:
+    post:
+      operationId: postOrdersIdConfirmpayment
+      tags: [orders]
+      summary: سفارش — ایجاد، مشاهده و fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /orders/{id}/payment-intents:
+    post:
+      operationId: postOrdersIdPaymentintents
+      tags: [orders]
+      summary: سفارش — ایجاد، مشاهده و fulfillment
+      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }

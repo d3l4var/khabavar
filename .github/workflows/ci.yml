@@ -118,9 +118,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: env surface (.env.example vs config.Load)
         run: python3 scripts/audit-env.py --fail-on-missing
-      - name: routes vs contract (advisory until R-07 is decided)
-        continue-on-error: true
-        run: python3 scripts/audit-routes.py
+      - name: routes vs contract (both directions, blocking)
+        run: python3 scripts/audit-routes.py --fail --fail-undocumented
       - name: contract conformance (declared query params must be read)
         continue-on-error: true
         run: python3 scripts/audit-contract-conformance.py
