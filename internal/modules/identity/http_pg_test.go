@@ -24,7 +24,7 @@ func TestPG_OTPFlowThroughHandlers(t *testing.T) {
 	ctx := context.Background()
 
 	var delivered struct{ phone, code string }
-	start := OTPStartHandler(svc, func(phone, code string) { delivered.phone, delivered.code = phone, code })
+	start := OTPStartHandler(svc, captureSMS{&delivered})
 
 	post := func(h http.HandlerFunc, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(body))

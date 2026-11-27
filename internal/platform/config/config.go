@@ -27,6 +27,7 @@ type Config struct {
 	WorkerInterval       int // outbox poll interval, seconds (default 5)
 	WorkerBatchSize      int // outbox claim batch size (default 100)
 	PaymentAdapter       string
+	SMSAdapter           string
 	PaymentWebhookSecret string // HMAC key for gateway notifications (empty disables it)
 	StorefrontBaseURL    string // where /payments/return sends the browser
 	SmsAdapter           string
@@ -57,6 +58,7 @@ func Load() (Config, error) {
 		WorkerInterval:       getenvInt("KH_WORKER_INTERVAL_SECONDS", 5),
 		WorkerBatchSize:      getenvInt("KH_WORKER_BATCH_SIZE", 100),
 		PaymentAdapter:       getenv("KH_PAYMENT_ADAPTER", "mock"),
+		SMSAdapter:           getenv("KH_SMS_ADAPTER", "mock"),
 		PaymentWebhookSecret: getenv("KH_PAYMENT_WEBHOOK_SECRET", ""),
 		StorefrontBaseURL:    getenv("KH_STOREFRONT_BASE_URL", "https://shop.khabavar.ir"),
 		SmsAdapter:           getenv("KH_SMS_ADAPTER", "mock"),

@@ -21,5 +21,5 @@ func TestIdentityRoutesRegister(t *testing.T) {
 			t.Fatalf("identity routes panic on registration: %v", r)
 		}
 	}()
-	mountIdentityRoutes(mux, svc, oidc, nil, identity.NewAdminLoginGuard(10, 5, time.Minute), nil, nil)
+	mountIdentityRoutes(mux, svc, oidc, nil, identity.NewAdminLoginGuard(10, 5, time.Minute), nil, identity.MockSMS{}, nil)
 }

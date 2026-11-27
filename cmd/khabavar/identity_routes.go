@@ -14,7 +14,7 @@ import (
 // POST /api/v1/auth/admin/login, one from before the OIDC page flow existed).
 func mountIdentityRoutes(mux *http.ServeMux, svc *identity.Service, oidc *identity.OIDCService,
 	store identity.AdminLoginStore, guard *identity.AdminLoginGuard, aud authorization.Auditor,
-	logger *slog.Logger) {
+	sms identity.SMSProvider, logger *slog.Logger) {
 
 	// One table, so the patterns and the registrations cannot drift.
 	routes := []struct {
@@ -22,8 +22,8 @@ func mountIdentityRoutes(mux *http.ServeMux, svc *identity.Service, oidc *identi
 		h       http.HandlerFunc
 	}{
 		// Customer OTP login (SAD §۷; CIAM §۳-۵).
-		{"POST /api/v1/auth/otp/start", identity.OTPStartHandler(svc, mockSmsDeliver(logger))},
-		{"POST /api/v1/auth/otp/request", identity.OTPStartHandler(svc, mockSmsDeliver(logger))},
+		{"POST /api/v1/auth/otp/start", identity.OTPStartHandler(svc, sms)},
+		{"POST /api/v1/auth/otp/request", identity.OTPStartHandler(svc, sms)},
 		{"POST /api/v1/auth/otp/verify", identity.OTPVerifyHandler(svc)},
 		{"GET /api/v1/auth/otp/login", identity.OTPLoginPageHandler()},
 		{"POST /api/v1/auth/otp/login", identity.OTPLoginSubmitHandler(svc, oidc)},

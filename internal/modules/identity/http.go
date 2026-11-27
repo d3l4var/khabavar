@@ -21,7 +21,7 @@ type otpVerifyRequest struct {
 // OTPStartHandler initiates an OTP challenge (F1). The generated code is handed to
 // `deliver` (the SmsAdapter — Mock in v1, ADR-ARCH-011); it is NEVER returned to the
 // client (CIAM §۳-۴: raw code never leaves the server via response body).
-func OTPStartHandler(svc *Service, deliver func(phone, code string)) http.HandlerFunc {
+func OTPStartHandler(svc *Service, sms SMSProvider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req otpStartRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -32,7 +32,15 @@ func OTPStartHandler(svc *Service, deliver func(phone, code string)) http.Handle
 			writeErr(w, http.StatusBadRequest, "phone required")
 			return
 		}
-		code, err := svc.OTPStart(r.Context(), req.Phone, req.Purpose, clientIP(r))
+		// The purpose is a closed set (otp_challenges.purpose CHECK). Passing the raw string
+		// through meant "login" — the obvious thing for a client to send — reached an INSERT and
+		// answered 500. Validate here, default when omitted.
+		purpose, ok := normalizePurpose(req.Purpose)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "invalid_purpose")
+			return
+		}
+		code, err := svc.OTPStart(r.Context(), req.Phone, purpose, clientIP(r))
 		if err != nil {
 			if errors.Is(err, ErrRateLimited) {
 				writeErr(w, http.StatusTooManyRequests, "rate limited")
@@ -41,10 +49,34 @@ func OTPStartHandler(svc *Service, deliver func(phone, code string)) http.Handle
 			writeErr(w, http.StatusInternalServerError, "start failed")
 			return
 		}
-		if deliver != nil {
-			deliver(req.Phone, code)
+		// A code the customer never receives is not "sent". Answering 202 when delivery failed
+		// left the user waiting for an SMS that was never going to arrive, with no way to retry.
+		// The OTP row already exists either way, so an error here reveals nothing about the phone.
+		if sms != nil {
+			if err := sms.Send(r.Context(), req.Phone, code); err != nil {
+				writeErr(w, http.StatusServiceUnavailable, "sms_unavailable")
+				return
+			}
 		}
 		writeJSON(w, http.StatusAccepted, map[string]any{"status": "sent"})
+	}
+}
+
+// normalizePurpose accepts the canonical value and the lowercase spelling a client is likely to
+// send, and treats an omitted purpose as a login. Anything else is a 400, not a 500.
+// NormalizePurpose is exported for the handler tests in the external package.
+func NormalizePurpose(raw string) (string, bool) { return normalizePurpose(raw) }
+
+func normalizePurpose(raw string) (string, bool) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "", PurposeLogin:
+		return PurposeLogin, true
+	case PurposeVerifyPhone:
+		return PurposeVerifyPhone, true
+	case PurposeAdminLogin:
+		return PurposeAdminLogin, true
+	default:
+		return "", false
 	}
 }
 
@@ -61,7 +93,12 @@ func OTPVerifyHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "phone and code required")
 			return
 		}
-		customerID, err := svc.OTPVerify(r.Context(), req.Phone, req.Purpose, req.Code)
+		purpose, ok := normalizePurpose(req.Purpose)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "invalid_purpose")
+			return
+		}
+		customerID, err := svc.OTPVerify(r.Context(), req.Phone, purpose, req.Code)
 		if err != nil {
 			writeVerifyErr(w, err)
 			return

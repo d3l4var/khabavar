@@ -3625,6 +3625,38 @@ GET  /admin/variants/V/price-records   200 [{"selling_price":260000,…}]
 
 ---
 
+### ۴.۱۲۹ اینترفیس SMS + باگ purpose — کامیت `feat(sms-provider-seam)`
+
+**شکاف:** SMS تنها زیرسیستم بدون درز آداپتور بود. `mockSmsDeliver` یک تابع لخت
+`func(phone, code string)` برمی‌گرداند — بدون context، بدون راهی برای گزارش شکست ارسال، بدون
+نام برای لاگ. پرداخت و ذخیره‌سازی هر دو `KH_*_ADAPTER` داشتند؛ SMS نه.
+
+`identity.SMSProvider` اضافه شد (`Send(ctx, phone, code) error` + `Name()`)، `MockSMS` پیش‌فرض،
+و `KH_SMS_ADAPTER`. آداپتور ناشناخته **در startup panic می‌کند** — بهتر از اجرا و بی‌صدا
+نرساندن کد به هر مشتری.
+
+**رفتار تغییر کرد:** اگر ارسال شکست بخورد، حالا **۵۰۳ `sms_unavailable`** برمی‌گردد، نه ۲۰۲.
+کدی که هرگز نرسیده «sent» نیست؛ کاربر منتظر پیامکی می‌ماند که نمی‌آید و راهی برای تلاش دوباره
+ندارد. ردیف OTP در هر حال ساخته شده، پس خطا چیزی دربارهٔ وجود شماره لو نمی‌دهد.
+
+**باگ — `purpose` به CHECK constraint می‌رسید:**
+```
+ERROR: violates check constraint "otp_challenges_purpose_check"
+```
+مقادیر مجاز `LOGIN|VERIFY_PHONE|ADMIN_LOGIN` هستند؛ کلاینت بدیهی‌ترین چیز را می‌فرستد:
+`"login"` → **۵۰۰**. حالا `normalizePurpose` قبل از INSERT اعتبارسنجی می‌کند.
+
+**شاهد روی باینری:**
+```
+{"phone":"…","purpose":"login"}      202   (قبلاً ۵۰۰)
+{"phone":"…"}                        202   (پیش‌فرض LOGIN)
+{"phone":"…","purpose":"signup"}     400   invalid_purpose
+{"purpose":"login"}                  400
+KH_SMS_ADAPTER=kavenegar            panic: unknown KH_SMS_ADAPTER
+```
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

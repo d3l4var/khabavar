@@ -94,7 +94,8 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 	// The whole identity table lives in one place, so a pattern cannot be registered twice —
 	// which is what stopped this unit from booting.
 	mountIdentityRoutes(mux, svc, oidcSvc, identity.NewDBAdminLoginStore(pool.Pool),
-		identity.NewAdminLoginGuard(10, 5, 15*time.Minute), audit.NewRecorder(pool.Pool), logger)
+		identity.NewAdminLoginGuard(10, 5, 15*time.Minute), audit.NewRecorder(pool.Pool),
+		smsProvider(cfg, logger), logger)
 	hh.SetReady(true)
 	serve(ctx, cfg.HTTPAddr, mux, logger, corsConfig(cfg))
 }
@@ -123,8 +124,8 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	// Customer OTP login must be reachable on the API origin too. It was mounted only in the
 	// identity unit, so a single-unit deployment answered 404 on /auth/otp/* and no customer
 	// could sign in — the same gap staff login had.
-	mux.HandleFunc("POST /api/v1/auth/otp/start", identity.OTPStartHandler(apiIdentitySvc, mockSmsDeliver(logger)))
-	mux.HandleFunc("POST /api/v1/auth/otp/request", identity.OTPStartHandler(apiIdentitySvc, mockSmsDeliver(logger)))
+	mux.HandleFunc("POST /api/v1/auth/otp/start", identity.OTPStartHandler(apiIdentitySvc, smsProvider(cfg, logger)))
+	mux.HandleFunc("POST /api/v1/auth/otp/request", identity.OTPStartHandler(apiIdentitySvc, smsProvider(cfg, logger)))
 	mux.HandleFunc("POST /api/v1/auth/otp/verify", identity.OTPVerifyHandler(apiIdentitySvc))
 	mux.HandleFunc("GET /api/v1/auth/otp/login", identity.OTPLoginPageHandler())
 
@@ -302,16 +303,15 @@ func serve(ctx context.Context, addr string, mux *http.ServeMux, logger *slog.Lo
 	_ = srv.Shutdown(shutCtx)
 }
 
-// mockSmsDeliver returns a deliver func for the Mock SmsAdapter (ADR-ARCH-011).
-// v1 logs the code length at debug level; the real adapter sends via the SMS provider.
-// The raw code is never logged in production (CIAM §۳-۴) — only its length here.
-func mockSmsDeliver(logger *slog.Logger) func(phone, code string) {
-	return func(phone, code string) {
-		// A nil logger used to panic here, which killed the request and left the client with
-		// no response at all. A mock SMS sink must never be able to do that.
-		if logger == nil {
-			return
-		}
-		logger.Debug("sms mock deliver", "phone", phone, "code_len", len(code))
+// smsProvider selects the SMS adapter. Only the mock exists today; a real provider is a new
+// implementation of identity.SMSProvider plus a case here, with no change to the OTP handler.
+func smsProvider(cfg config.Config, logger *slog.Logger) identity.SMSProvider {
+	switch cfg.SMSAdapter {
+	case "", "mock":
+		return identity.MockSMS{Logger: logger}
+	default:
+		// Refuse to start rather than silently deliver nothing: an unknown adapter in
+		// production would mean every customer waits for a code that never arrives.
+		panic("unknown KH_SMS_ADAPTER: " + cfg.SMSAdapter)
 	}
 }
