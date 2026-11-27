@@ -97,3 +97,64 @@ func TestPG_ServiceSurfacesDriverErrors(t *testing.T) {
 }
 
 var _ = pgxpool.Pool{}
+
+// TestPG_StoreSurfacesDriverErrors calls the DBStore methods directly against a closed pool.
+// Every store method has a `return err` arm that a happy-path test never reaches; this
+// reaches them all and proves none of them swallows the failure.
+func TestPG_StoreSurfacesDriverErrors(t *testing.T) {
+	pool, _ := testpg.Setup(t)
+	pool.Close()
+	store := NewDBStore(pool)
+	ctx := context.Background()
+	now := time.Now()
+	id := "00000000-0000-0000-0000-000000000001"
+
+	calls := map[string]func() error{
+		"get cart": func() error { _, _, err := store.GetCart(ctx, id); return err },
+		"update cart status": func() error {
+			return store.UpdateCartStatus(ctx, id, "ACTIVE")
+		},
+		"create order": func() error {
+			_, err := store.CreateOrder(ctx, Order{OrderNumber: "N", Status: OrderPendingPayment}, nil)
+			return err
+		},
+		"get order":     func() error { _, err := store.GetOrder(ctx, id); return err },
+		"get by number": func() error { _, err := store.GetOrderByNumber(ctx, "N"); return err },
+		"list items":    func() error { _, err := store.ListOrderItems(ctx, id); return err },
+		"update status": func() error { return store.UpdateOrderStatus(ctx, id, OrderPaid) },
+		"update paid":   func() error { return store.UpdateOrderPaid(ctx, id, 1, OrderPaid) },
+		"create intent": func() error {
+			_, err := store.CreatePaymentIntent(ctx, PaymentIntent{OrderID: id})
+			return err
+		},
+		"active intent": func() error { _, err := store.GetActivePaymentIntent(ctx, id); return err },
+		"intent status": func() error {
+			return store.UpdatePaymentIntentStatus(ctx, id, IntentSucceeded)
+		},
+		"next number": func() error { _, err := store.NextOrderNumber(ctx, now.Year()); return err },
+		"create refund": func() error {
+			_, err := store.CreateRefund(ctx, Refund{OrderID: id})
+			return err
+		},
+		"list refunds":  func() error { _, err := store.ListRefunds(ctx, id); return err },
+		"successful":    func() error { _, err := store.SuccessfulAttemptID(ctx, id); return err },
+		"update refund": func() error { return store.UpdateOrderRefunded(ctx, id, 1, OrderClosed) },
+		"create attempt": func() error {
+			_, err := store.CreateAttempt(ctx, PaymentAttempt{PaymentIntentID: id})
+			return err
+		},
+		"sum attempts": func() error { _, err := store.SumSucceededAttempts(ctx, id); return err },
+		"get or create cart": func() error {
+			_, err := store.GetOrCreateCart(ctx, id, "")
+			return err
+		},
+		"add item":    func() error { return store.AddCartItem(ctx, id, id, 1) },
+		"set qty":     func() error { return store.SetCartItemQuantity(ctx, id, id, 2) },
+		"delete item": func() error { return store.DeleteCartItem(ctx, id, id) },
+	}
+	for name, fn := range calls {
+		if err := fn(); err == nil {
+			t.Fatalf("%s against a closed pool returned no error", name)
+		}
+	}
+}

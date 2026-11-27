@@ -2690,6 +2690,37 @@ commerce  86.0% / 90%  below [advisory]
 
 ---
 
+### ۴.۱۰۰ commerce: مرجوعی، بازپرداخت و خواندن سفارش — کامیت `test(commerce-refund-paths)`
+
+**`TestPG_CreateRefundGuards`** — `CreateRefund` ۷۵٪:
+- **ترتیب گاردها تثبیت شد:** store سیم‌نشده → `ErrRefundStoreNotWired`؛ مقدار ≤۰ →
+  `ErrRefundAmountInvalid`؛ دلیل خالی → `ErrRefundReasonReq`؛ سفارش ناشناخته →
+  `ErrOrderNotFound`
+- **بازپرداخت بیش از پرداخت → `ErrRefundExceedsPaid`**
+- **بازپرداخت جزئی سفارش را نمی‌بندد**؛ بازپرداخت باقی‌مانده → `refunded_total=100000` و
+  وضعیت **CLOSED**
+- **بازپرداخت سوم با گارد وضعیت رد می‌شود** (`ErrOrderNotRefundable`) — نه با گارد مقدار.
+  این ترتیب را با اجرا فهمیدم؛ فرض اولم غلط بود.
+- فهرست بازپرداخت هر دو را برمی‌گرداند
+
+**`TestPG_ReturnRequestPaths`** — `returns.go`:
+- دلیل خالی → `ErrReturnReasonRequired`؛ مقدار صفر → خطا
+- **مرجوعی برای سفارش دیگری رد می‌شود**؛ سفارش ناشناخته → `ErrOrderNotFound`
+
+**`TestPG_OrderReadPaths`** — `GetOrderHandler` ۷۲٪:
+- **خواندن ناشناس سفارش مهمان → ۴۰۳، نه ۴۰۴** — سفارش وجود دارد ولی خواننده مالکش نیست
+  (حریم خصوصی، نه enumeration)
+- مسیر با شمارهٔ تجاری هم همان نتیجه را می‌دهد
+- شماره/uuid ناشناخته → ۴۰۴؛ سفارش با نشست مشتری دیگر → ۴۰۳
+- `FindIntentByProviderReference` با مرجع ناشناخته → idهای خالی، نه خطا
+
+**`TestPG_StoreSurfacesDriverErrors`** — ۲۲ متد `DBStore` روی pool بسته: همه خطا
+برمی‌گردانند. این شاخه‌های `return err` بودند که هیچ تست خوش‌بینانه‌ای نمی‌دید.
+
+**پوشش: commerce ۸۶.۰٪ → ۸۶.۲٪ → ۸۷.۴٪ → ۸۷.۶٪** — **آستانهٔ ۹۰٪ (advisory) هنوز نه.**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
