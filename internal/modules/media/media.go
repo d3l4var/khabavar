@@ -49,11 +49,11 @@ var (
 // Asset mirrors media_assets (DB v2 §۶). StorageKey is the object path in the
 // storage backend; the binary itself is never stored in the DB.
 type Asset struct {
-	ID         string
-	MediaType  string
-	StorageKey string
-	AltText    string
-	CreatedAt  time.Time
+	ID         string    `json:"id"`
+	MediaType  string    `json:"media_type"`
+	StorageKey string    `json:"storage_key"`
+	AltText    string    `json:"alt_text"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // StorageAdapter abstracts the Object Storage backend. Implementations:
