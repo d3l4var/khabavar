@@ -2186,6 +2186,32 @@ if !allowedTransition(...)    { return ErrInvalidStatus }   // تعارض واق
 
 ---
 
+### ۴.۸۴ catalog — کامیت `test(catalog-http)`
+
+`admin.go` ۲۷٪ و `http.go` ۴۸٪ بودند.
+
+`TestCatalogHTTPHandlers` — ویترین و پنل روی memStore:
+- بدنهٔ خراب در ساخت دسته/محصول/واریانت/ویرایش → ۴۰۰
+- **دروازهٔ انتشار (MA-1/MA-6) واقعاً کار می‌کند:** محصول بدون
+  `sleep_relevance`/`spec_source`/`spec_last_reviewed_at` → **۴۲۲** با کد
+  `publish_gate_missing`؛ با آن‌ها → انتشار موفق
+- **قاعدهٔ دیده‌شدن ویترین:** DRAFT در ویترین ۴۰۴ ولی در پنل ۲۰۰؛ پس از انتشار ۲۰۰؛
+  پس از PAUSED دوباره ۴۰۴
+- وضعیت `NONSENSE` → 4xx؛ id ناشناخته → ۴۰۴ (نه ۵۰۰)؛ SKU تکراری → 4xx
+- صفحه‌بندی بی‌معنا → پیش‌فرض
+
+**سه فرض غلط من که قبل از ادعای باگ بررسی شدند:**
+1. `PATCH /admin/products/{id}` با فقط `title` → ۵۰۰. علت: `s.updates` در تست سیم‌کشی
+   نشده بود (`SetUpdateStore`). **باگ محصول نبود.**
+2. `CreateVariantHandler` با `{id}` در مسیر → ۴۰۴. علت: مسیر واقعی
+   `POST /admin/variants` است و `product_id` از **بدنه** می‌آید. **باگ نبود.**
+3. `spec_last_reviewed_at` با `"2026-01-01"` → ۴۰۰. علت: نوع `*time.Time` و نیاز به
+   RFC3339. **باگ نبود.**
+
+**پوشش: catalog ۶۳.۴٪ → ۷۱.۰٪** (هنوز زیر ۷۵٪؛ `admin.go` ۲۷٪ → و `catalog_db.go` ۷۸٪).
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
