@@ -121,8 +121,7 @@ jobs:
       - name: routes vs contract (both directions, blocking)
         run: python3 scripts/audit-routes.py --fail --fail-undocumented
       - name: contract conformance (declared query params must be read)
-        continue-on-error: true
-        run: python3 scripts/audit-contract-conformance.py
+        run: python3 scripts/audit-contract-conformance.py --fail
       - name: coverage thresholds (enforced set only)
         run: python3 scripts/audit-coverage.py --fail
 

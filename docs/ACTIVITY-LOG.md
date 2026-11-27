@@ -2377,6 +2377,42 @@ handler اصلاح شد.
 
 ---
 
+### ۴.۹۱ گیت conformance واقعاً بسته شد — کامیت `chore(ci-conformance-gate)`
+
+**گیت conformance دو بار بی‌اثر بود:**
+
+```yaml
+continue-on-error: true                                  # ۱) خطا نادیده گرفته می‌شد
+run: python3 scripts/audit-contract-conformance.py       # ۲) و --fail هم پاس نمی‌شد
+```
+
+اسکریپت از قبل `--fail` داشت و `sys.exit(1)` می‌کرد، ولی CI بدون آن صدایش می‌زد. یعنی
+حتی اگر `continue-on-error` هم برداشته می‌شد، **گیت هرگز نمی‌گرفت**.
+
+**اثبات پس از اصلاح** — یک واگرایی واقعی تزریق شد (خواندن `q` از
+`GET /admin/orders` حذف شد):
+
+```
+audit-contract-conformance.py --fail   → exit 1
+  GET /admin/orders   query parameter "q" is declared but never read
+پس از بازگردانی                        → exit 0
+```
+
+**`golangci-lint` نتوانستم تأیید کنم — و این را صریح می‌گویم.** اجرای محلی با
+`go run ...@latest` شکست خورد:
+
+```
+could not import sync/atomic ... export data version 4 is greater than maximum
+supported version 2
+```
+
+این ناسازگاری ابزار با toolchain است، نه باگ کد. دو تشخیص آن هم **false positive** بود
+(`declared and not used: r` در دو تست، در حالی که `r` در خط بعد استفاده می‌شود و `go vet`
+پاک است). پس گیت lint **advisory می‌ماند** — روشن کردن گیتی که نمی‌توانم سبز بودنش را
+اثبات کنم، بدتر از خاموش گذاشتنش است.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
