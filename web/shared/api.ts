@@ -516,8 +516,16 @@ export async function adminListRoles() {
   return adminRequest<{ data: RoleRow[] }>('/admin/roles')
 }
 
+export type WarehouseRow = {
+  id: string
+  name: string
+  warehouse_code: string
+  status: string
+}
+
+// No silent catch: swallowing the error made an empty dropdown look like "no warehouses".
 export async function adminListWarehouses() {
-  return adminRequest<{ data: unknown[] }>('/admin/warehouses').catch(() => ({ data: [] }))
+  return adminRequest<{ items: WarehouseRow[] }>('/admin/warehouses')
 }
 
 // ── money (presentation only) ──

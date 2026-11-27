@@ -19,6 +19,7 @@ import {
   adminCreateProduct,
   adminListRoles,
   adminListStock,
+  adminListWarehouses,
   adminListReturns,
   adminDecideReturn,
   adminReceiveReturn,
@@ -264,6 +265,9 @@ function StockScreen() {
   const [submitted, setSubmitted] = useState('')
   const stock = useAsync(() => adminListStock(submitted), [submitted])
   const [form, setForm] = useState({ warehouse_id: '', variant_id: '', movement_type: 'RECEIPT', quantity: 1 })
+  // The form used to ask for raw UUIDs with English placeholders. An operator cannot paste a
+  // uuid; both fields are pickers now, filled from the API.
+  const warehouses = useAsync(() => adminListWarehouses(), [])
   const [msg, setMsg] = useState<string | null>(null)
 
   return (
@@ -336,8 +340,35 @@ function StockScreen() {
         }}
         style={{ display: 'grid', gap: 'var(--kh-space-2)', maxWidth: '520px' }}
       >
-        <input placeholder="warehouse_id" value={form.warehouse_id} onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })} required style={{ padding: 'var(--kh-space-2)' }} />
-        <input placeholder="variant_id" value={form.variant_id} onChange={(e) => setForm({ ...form, variant_id: e.target.value })} required style={{ padding: 'var(--kh-space-2)' }} />
+        <select
+          aria-label="انبار"
+          value={form.warehouse_id}
+          onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })}
+          required
+          style={{ padding: 'var(--kh-space-2)' }}
+        >
+          <option value="">انتخاب انبار…</option>
+          {(warehouses.data?.items ?? []).map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name} ({w.warehouse_code})
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="کالا"
+          value={form.variant_id}
+          onChange={(e) => setForm({ ...form, variant_id: e.target.value })}
+          required
+          style={{ padding: 'var(--kh-space-2)' }}
+        >
+          <option value="">انتخاب کالا…</option>
+          {/* The variants already on this screen are the ones an operator can move. */}
+          {[...new Map((stock.data?.items ?? []).map((r) => [r.variant_id, r])).values()].map((r) => (
+            <option key={r.variant_id} value={r.variant_id}>
+              {r.sku}
+            </option>
+          ))}
+        </select>
         <select value={form.movement_type} onChange={(e) => setForm({ ...form, movement_type: e.target.value })} style={{ padding: 'var(--kh-space-2)' }}>
           {['RECEIPT', 'RETURN', 'ADJUSTMENT', 'DAMAGE', 'TRANSFER'].map((t) => (
             <option key={t} value={t}>
