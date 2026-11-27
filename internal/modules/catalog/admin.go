@@ -41,7 +41,9 @@ func CreateProductHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req productRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": "invalid JSON body", "code": "invalid_body",
+			})
 			return
 		}
 		id, err := svc.CreateProduct(r.Context(), Product{
@@ -94,8 +96,12 @@ func PublishProductHandler(svc *Service) http.HandlerFunc {
 			writeCatalogErr(w, err)
 			return
 		}
-		svc.audit(r, "catalog.product.published", id, nil, map[string]any{"status": ProductPublished})
-		writeJSON(w, http.StatusOK, map[string]string{"status": ProductPublished})
+		auditErr := svc.audit(r, "catalog.product.published", id, nil, map[string]any{"status": ProductPublished})
+		body := map[string]string{"status": ProductPublished}
+		if auditErr != nil {
+			body["audit_warning"] = "the audit trail could not be written"
+		}
+		writeJSON(w, http.StatusOK, body)
 	}
 }
 
@@ -108,7 +114,9 @@ func ProductStatusHandler(svc *Service) http.HandlerFunc {
 			Status string `json:"status"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": "invalid JSON body", "code": "invalid_body",
+			})
 			return
 		}
 		id := r.PathValue("id")
@@ -129,8 +137,12 @@ func ProductStatusHandler(svc *Service) http.HandlerFunc {
 			writeCatalogErr(w, err)
 			return
 		}
-		svc.audit(r, "catalog.product.status_changed", id, nil, map[string]any{"status": req.Status})
-		writeJSON(w, http.StatusOK, map[string]string{"status": req.Status})
+		auditErr := svc.audit(r, "catalog.product.status_changed", id, nil, map[string]any{"status": req.Status})
+		body := map[string]string{"status": req.Status}
+		if auditErr != nil {
+			body["audit_warning"] = "the audit trail could not be written"
+		}
+		writeJSON(w, http.StatusOK, body)
 	}
 }
 
@@ -156,7 +168,9 @@ func UpdateProductHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req productPatchRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": "invalid JSON body", "code": "invalid_body",
+			})
 			return
 		}
 		patch := ProductPatch{
@@ -181,10 +195,15 @@ func UpdateProductHandler(svc *Service) http.HandlerFunc {
 			writeCatalogErr(w, err)
 			return
 		}
-		svc.audit(r, "catalog.product.updated", id, nil, map[string]any{
+		auditErr := svc.audit(r, "catalog.product.updated", id, nil, map[string]any{
 			"slug": updated.Slug, "status": updated.Status,
 			"sleep_relevance": updated.SleepRelevance, "spec_source": updated.SpecSource,
 		})
+		if auditErr != nil {
+			// The update is written; report the missing trail in a header rather than
+			// changing the body shape of a resource response.
+			w.Header().Set("X-Audit-Warning", "the audit trail could not be written")
+		}
 		writeJSON(w, http.StatusOK, updated)
 	}
 }
@@ -200,7 +219,9 @@ func CreateCategoryHandler(svc *Service) http.HandlerFunc {
 			SortOrder   int    `json:"sort_order"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": "invalid JSON body", "code": "invalid_body",
+			})
 			return
 		}
 		id, err := svc.CreateCategory(r.Context(), Category{
@@ -231,7 +252,9 @@ func CreateVariantHandler(svc *Service) http.HandlerFunc {
 			Status      string          `json:"status"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeCatalogErr(w, errors.New("catalog: invalid JSON body"))
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": "invalid JSON body", "code": "invalid_body",
+			})
 			return
 		}
 		id, err := svc.CreateVariant(r.Context(), Variant{
@@ -248,12 +271,13 @@ func CreateVariantHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
-// audit records a sensitive catalogue action (IAM §۷). A nil recorder is a no-op.
-func (s *Service) audit(r *http.Request, action, entityID string, oldV, newV any) {
+// audit records a sensitive catalogue action (IAM §۷). A nil recorder is a no-op. The error
+// is returned rather than swallowed: a catalogue change with no trail must be visible.
+func (s *Service) audit(r *http.Request, action, entityID string, oldV, newV any) error {
 	if s.auditor == nil {
-		return
+		return nil
 	}
-	_ = s.auditor.Record(r.Context(), "ADMIN", shared.ActorID(r.Context()), action, "product", entityID,
+	return s.auditor.Record(r.Context(), "ADMIN", shared.ActorID(r.Context()), action, "product", entityID,
 		oldV, newV, "")
 }
 

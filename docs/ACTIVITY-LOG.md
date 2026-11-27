@@ -1883,6 +1883,35 @@ return نمی‌شد** — نرخ ۱.۵ ذخیره می‌شد. اعتبارسن
 
 ---
 
+### ۴.۷۳ جاروب کلاس‌ها با اسکریپت — کامیت `fix(error-classes)`
+
+به‌جای ماژول‌به‌ماژول، این بار **کلاس‌های باگ** را در همهٔ کد جارو کردم. سه جاروب:
+
+**الف) sentinelهایی که به کد وضعیت نگاشت شده‌اند ولی هرگز return نمی‌شوند** (اعتبارسنجی
+مرده): `catalog.ErrCategoryNotFound`, `catalog.ErrVariantNotFound`,
+`commerce.ErrRefundNotFound`, `commerce.ErrInvalidTransition`,
+`commerce.ErrLineTotalsMismatch`, `content.ErrDuplicateSlug`,
+`fulfillment.ErrAllocationExceedsOrder`, `inventory.ErrWarehouseNotFound`.
+این‌ها ۴۰۴/۴۰۹ وعده می‌دهند که هیچ‌وقت صادر نمی‌شود — همان الگویی که
+`ErrInvalidTargetRate` را در قیمت‌گذاری لو داد.
+
+**ب) handlerهایی که خطای کلاینت را به ۵۰۰ تبدیل می‌کنند:** پنج handler نوشتن کاتالوگ
+(`create/update product`, `create category`, `create variant`, `product status`) خطای JSON
+را به `writeCatalogErr(errors.New(...))` می‌دادند که `default` آن ۵۰۰ است. **رفع:** مستقیم
+۴۰۰ با کد `invalid_body`.
+
+**ج) audit بلعیده‌شده:** `catalog.Service.audit` و `commerce.CreateRefund` نتیجهٔ
+`Record` را دور می‌ریختند. حالا خطا برمی‌گردد؛ در کاتالوگ به‌صورت `audit_warning` در بدنه
+(یا هدر `X-Audit-Warning` برای پاسخ منبع) و در بازپرداخت به‌صورت خطای صریح
+«refund issued but audit failed» — چون پول جابه‌جا شده و سکوت بدترین گزینه است.
+
+**شاهد:** `TestAdminHandlersRejectBadJSON` (پنج handler، بدنهٔ خراب → ۴۰۰) و
+`TestAuditFailureIsVisible` (خطای audit برمی‌گردد؛ auditor تهی no-op است).
+
+**پوشش catalog: ۵۹.۳٪ → ۶۳.۴٪.**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

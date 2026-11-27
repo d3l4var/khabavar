@@ -156,12 +156,16 @@ func (s *Service) CreateRefund(ctx context.Context, orderID string, amount int64
 		return "", err
 	}
 
-	// Refunds are an audited action (IAM §۷).
+	// Refunds are an audited action (IAM §۷). The refund row is already written, so a
+	// failure here cannot undo the money movement — but it must not be silent either: the
+	// error is returned and the caller reports it alongside the refund id.
 	if s.auditor != nil {
-		_ = s.auditor.Record(ctx, "ADMIN", shared.ActorID(ctx), "order.refund.issued", "order", orderID,
+		if aerr := s.auditor.Record(ctx, "ADMIN", shared.ActorID(ctx), "order.refund.issued", "order", orderID,
 			map[string]any{"refunded_total": o.RefundedTotal, "status": o.Status},
 			map[string]any{"refunded_total": newRefunded, "status": newStatus, "amount": amount, "refund_id": id},
-			"")
+			""); aerr != nil {
+			return id, fmt.Errorf("refund %s issued but audit failed: %w", id, aerr)
+		}
 	}
 
 	s.enqueue(ctx, "RefundIssued", "order", orderID, map[string]any{
