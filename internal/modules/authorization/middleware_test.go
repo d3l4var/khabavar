@@ -157,8 +157,14 @@ func TestRequireAuditedAllowsWhenPermitted(t *testing.T) {
 	if rec.Code != http.StatusOK || !called {
 		t.Fatalf("want 200 and handler called, got %d called=%v", rec.Code, called)
 	}
-	if aud.calls != 0 {
-		t.Errorf("allowed requests must not be audited as denials, got %d", aud.calls)
+	// The old expectation was "no entry at all", which pinned the gap: a permitted mutation
+	// left no trace, so "who changed this?" was unanswerable. What must not happen is a
+	// *denial* entry; exactly one success entry is correct.
+	if aud.calls != 1 {
+		t.Fatalf("allowed mutation must be audited once, got %d", aud.calls)
+	}
+	if aud.action == "authorization.denied" {
+		t.Fatalf("allowed request was audited as a denial")
 	}
 }
 

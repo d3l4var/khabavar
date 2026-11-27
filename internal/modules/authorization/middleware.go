@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -71,8 +72,56 @@ func RequireAudited(chk PermissionChecker, aud Auditor, permission string, next 
 			writeAuthErr(w, http.StatusForbidden, "forbidden")
 			return
 		}
-		next.ServeHTTP(w, r)
+		// Successful mutations are audited here, centrally, so a new admin route cannot ship
+		// without a trail. Only denials were audited before: you could answer "who was
+		// refused" but not "who changed this price". Rich before/after values stay the job of
+		// the handler that knows the entity; this records that the action happened at all.
+		if !isMutating(r.Method) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		if rec.status >= 200 && rec.status < 300 {
+			_ = aud.Record(r.Context(), ActorTypeAdmin, uid, "admin."+strings.ToLower(r.Method),
+				"admin_route", "", nil, map[string]string{
+					"permission": permission,
+					"method":     r.Method,
+					"path":       r.URL.Path,
+					"status":     strconv.Itoa(rec.status),
+				}, clientIP(r))
+		}
 	})
+}
+
+// isMutating reports whether a method changes state and therefore needs a trail.
+func isMutating(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	}
+	return false
+}
+
+// statusRecorder remembers the status the handler wrote, so the guard can audit only what
+// actually succeeded.
+type statusRecorder struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (s *statusRecorder) WriteHeader(code int) {
+	if !s.wroteHeader {
+		s.status = code
+		s.wroteHeader = true
+	}
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusRecorder) Write(b []byte) (int, error) {
+	s.wroteHeader = true
+	return s.ResponseWriter.Write(b)
 }
 
 // BearerFromHeader extracts the token from an "Authorization: Bearer <token>" header.
