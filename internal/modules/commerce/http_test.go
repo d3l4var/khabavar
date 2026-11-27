@@ -2,9 +2,13 @@ package commerce
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/khabavar/khabavar/internal/modules/authorization"
@@ -112,10 +116,10 @@ func TestHTTP_ConfirmPayment_ReturnsPaid(t *testing.T) {
 	oid, _ := svc.CreateOrder(nil, validOrderInput())
 	svc.CreatePaymentIntent(nil, oid)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+oid+"/confirm-payment", nil)
+	req := signedRequest(http.MethodPost, "/api/v1/orders/"+oid+"/confirm-payment", "")
 	req.SetPathValue("id", oid)
 	rec := httptest.NewRecorder()
-	ConfirmPaymentHandler(svc).ServeHTTP(rec, req)
+	ConfirmPaymentHandler(svc, testWebhookSecret).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -132,19 +136,19 @@ func TestHTTP_ConfirmPayment_IdempotentOnSecondCall(t *testing.T) {
 	svc.CreatePaymentIntent(nil, oid)
 
 	// First call: paid.
-	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+oid+"/confirm-payment", nil)
+	req1 := signedRequest(http.MethodPost, "/api/v1/orders/"+oid+"/confirm-payment", "")
 	req1.SetPathValue("id", oid)
 	rec1 := httptest.NewRecorder()
-	ConfirmPaymentHandler(svc).ServeHTTP(rec1, req1)
+	ConfirmPaymentHandler(svc, testWebhookSecret).ServeHTTP(rec1, req1)
 	if rec1.Code != http.StatusOK {
 		t.Fatalf("first: status=%d", rec1.Code)
 	}
 
 	// Second call: already_paid (idempotent, 200 not 400).
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+oid+"/confirm-payment", nil)
+	req2 := signedRequest(http.MethodPost, "/api/v1/orders/"+oid+"/confirm-payment", "")
 	req2.SetPathValue("id", oid)
 	rec2 := httptest.NewRecorder()
-	ConfirmPaymentHandler(svc).ServeHTTP(rec2, req2)
+	ConfirmPaymentHandler(svc, testWebhookSecret).ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("second: status=%d want 200 (idempotent)", rec2.Code)
 	}
@@ -212,4 +216,16 @@ func TestHTTP_CreatePaymentIntent_DuplicateReturns400(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d want 400", rec.Code)
 	}
+}
+
+// testWebhookSecret is the secret the payment tests sign with.
+const testWebhookSecret PaymentWebhookSecret = "test-webhook-secret"
+
+// signedRequest builds a request whose X-Provider-Signature matches its body.
+func signedRequest(method, target, body string) *http.Request {
+	r := httptest.NewRequest(method, target, strings.NewReader(body))
+	mac := hmac.New(sha256.New, []byte(testWebhookSecret))
+	mac.Write([]byte(body))
+	r.Header.Set("X-Provider-Signature", hex.EncodeToString(mac.Sum(nil)))
+	return r
 }

@@ -285,7 +285,7 @@ func mountRoutes(api *apiMux, s services) {
 	// patterns are ambiguous for ServeMux and panic at startup.
 	api.public("GET /api/v1/orders/{id}", commerce.GetOrderHandler(s.commerce))
 	api.public("POST /api/v1/orders/{id}/payment-intents", commerce.CreatePaymentIntentHandler(s.commerce))
-	api.public("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(s.commerce))
+	api.public("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(s.commerce, commerce.PaymentWebhookSecret(s.cfg.PaymentWebhookSecret)))
 	api.public("POST /api/v1/orders/{id}/cancel", commerce.CancelOrderHandler(s.commerce))
 	api.admin("POST /api/v1/admin/orders/{orderNumber}/refunds", commerce.CreateRefundHandler(s.commerce))
 	api.admin("GET /api/v1/admin/orders/{orderNumber}/refunds", commerce.ListRefundsHandler(s.commerce))

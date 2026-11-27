@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/google/uuid"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -280,8 +281,20 @@ func CreatePaymentIntentHandler(svc *Service) http.Handler {
 // ConfirmPaymentHandler handles POST /api/v1/orders/{id}/confirm-payment.
 // This is the payment-provider webhook entry point (idempotency is enforced by the
 // order status check: an already-paid order returns 200, not an error).
-func ConfirmPaymentHandler(svc *Service) http.Handler {
+func ConfirmPaymentHandler(svc *Service, secret PaymentWebhookSecret) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The route is public, so it must prove the caller is the payment provider: the body
+		// is signed with the same HMAC secret as /payments/webhook. Without this check the
+		// order id alone was enough to mark an order PAID.
+		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "unreadable body", "code": "invalid_body"})
+			return
+		}
+		if !VerifyWebhookSignature(secret, body, r.Header.Get("X-Provider-Signature")) {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "bad signature", "code": "invalid_signature"})
+			return
+		}
 		id := r.PathValue("id")
 		if id == "" {
 			id = strings.TrimPrefix(r.URL.Path, "/api/v1/orders/")

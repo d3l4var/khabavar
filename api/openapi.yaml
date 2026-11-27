@@ -3264,11 +3264,19 @@ paths:
     post:
       operationId: postOrdersIdConfirmpayment
       tags: [orders]
-      summary: سفارش — ایجاد، مشاهده و fulfillment
-      description: مسیر پنل/ویترین که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      summary: تأیید پرداخت سفارش (اعلان درگاه)
+      description: >
+        نقطهٔ ورود اعلان درگاه. مسیر عمومی است، پس بدنه باید با همان کلید HMAC مسیر
+        /payments/webhook امضا شود؛ فراخوانی بدون امضا ۴۰۱ می‌گیرد. تکرار اعلان برای سفارش
+        پرداخت‌شده ۲۰۰ با already_paid برمی‌گرداند (idempotent).
       security: []
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
+        - name: X-Provider-Signature
+          in: header
+          required: true
+          description: HMAC-SHA256 بدنهٔ خام با PaymentWebhookSecret
+          schema: { type: string }
       responses:
         "200": { description: پاسخ موفق }
         "400": { $ref: "#/components/responses/BadRequest" }

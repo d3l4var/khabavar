@@ -2619,6 +2619,43 @@ HMAC-دار و درست `POST /api/v1/payments/webhook` است که امضا ر�
 
 ---
 
+### ۴.۹۸ بستن یافتهٔ امنیتی — امضای اجباری روی تأیید پرداخت — کامیت `fix(confirm-payment-signature)`
+
+تصمیم مالک: **گزینهٔ ۱** — امضای اجباری.
+
+`ConfirmPaymentHandler` حالا **بدنهٔ خام را می‌خواند و امضای HMAC را با همان کلید مسیر
+`/payments/webhook` بررسی می‌کند**، پیش از هر کاری:
+
+```go
+if !VerifyWebhookSignature(secret, body, r.Header.Get("X-Provider-Signature")) {
+    writeJSON(w, http.StatusUnauthorized, {"code": "invalid_signature"})
+    return
+}
+```
+
+امضا روی **بدنهٔ خام** است (نه روی id) تا همان مکانیزم webhook بازاستفاده شود و کلاینت
+نتواند id را عوض کند.
+
+**شاهد — سه حالت آزموده شد:**
+```
+فراخوانی بدون امضا        → ۴۰۱ invalid_signature
+امضای غلط (deadbeef)      → ۴۰۱
+وضعیت سفارش پس از رد      → PENDING_PAYMENT (دست‌نخورده)
+امضای درست                → ۲۰۰ {"status":"paid"} و سفارش PAID
+تکرار با امضای درست       → ۲۰۰ {"status":"already_paid"}
+```
+
+**قرارداد به‌روز شد:** پارامتر `X-Provider-Signature` (header، required) با توضیح
+HMAC-SHA256 بدنهٔ خام، و توصیف فارسی مسیر از «مسیر پنل/ویترین» به «اعلان درگاه» تغییر کرد.
+
+**دو تست قدیمی که رفتار ناامن را تثبیت می‌کردند** (`TestHTTP_ConfirmPayment_ReturnsPaid`,
+`..._IdempotentOnSecondCall`) حالا با `signedRequest` امضا می‌فرستند — تست سبز بود ولی
+قرارداد امنیتی غلط را قفل کرده بود.
+
+**پوشش: commerce ۸۴.۱٪** (بدون تغییر معنادار؛ آستانهٔ ۹۰٪ هنوز نه).
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
