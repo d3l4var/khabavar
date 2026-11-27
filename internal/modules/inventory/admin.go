@@ -304,3 +304,64 @@ func writeAdminJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// WarehouseView is one row of the panel's warehouse list.
+type WarehouseView struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	WarehouseCode string `json:"warehouse_code"`
+	Address       string `json:"address,omitempty"`
+	Status        string `json:"status"`
+	CreatedAt     string `json:"created_at"`
+}
+
+// ListWarehouses returns a page of warehouses, optionally filtered by status and a
+// name/code term. The panel needs this to discover the {wid} that every stock operation
+// takes: without it a warehouse could be created but never read back.
+func (s *AdminStore) ListWarehouses(ctx context.Context, status, q string, page, pageSize int) ([]WarehouseView, int, error) {
+	const where = `
+	  WHERE ($1 = '' OR status = $1)
+	    AND ($2 = '' OR name ILIKE '%' || $2 || '%' OR warehouse_code ILIKE '%' || $2 || '%')`
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM warehouses`+where, status, q).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, name, warehouse_code, COALESCE(address,''), status, created_at
+		   FROM warehouses`+where+`
+		  ORDER BY created_at DESC
+		  LIMIT $3 OFFSET $4`, status, q, pageSize, (page-1)*pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := make([]WarehouseView, 0, pageSize)
+	for rows.Next() {
+		var v WarehouseView
+		var created pgtype.Timestamptz
+		if err := rows.Scan(&v.ID, &v.Name, &v.WarehouseCode, &v.Address, &v.Status, &created); err != nil {
+			return nil, 0, err
+		}
+		if created.Valid {
+			v.CreatedAt = created.Time.UTC().Format(time.RFC3339)
+		}
+		out = append(out, v)
+	}
+	return out, total, rows.Err()
+}
+
+// ListWarehousesHandler serves GET /api/v1/admin/warehouses (inventory.manage).
+func ListWarehousesHandler(s *AdminStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		page, size := pageParams(r)
+		items, total, err := s.ListWarehouses(r.Context(),
+			r.URL.Query().Get("status"), r.URL.Query().Get("q"), page, size)
+		if err != nil {
+			writeAdminErr(w, err)
+			return
+		}
+		writeAdminJSON(w, http.StatusOK, map[string]any{
+			"items": items, "page": pageInfo(page, size, total),
+		})
+	}
+}

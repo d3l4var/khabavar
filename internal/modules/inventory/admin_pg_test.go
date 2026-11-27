@@ -117,3 +117,82 @@ func TestPG_InventoryAdminHandlers(t *testing.T) {
 	}
 	_ = store
 }
+
+// TestPG_ListWarehousesHandler covers the panel's warehouse list: the status filter, the
+// name/code search, the paging metadata and the 500 arm. The route did not exist before, so
+// a warehouse could be created but never read back.
+func TestPG_ListWarehousesHandler(t *testing.T) {
+	pool, svc, _ := setupInventory(t)
+	ctx := context.Background()
+
+	for _, w := range []Warehouse{
+		{WarehouseCode: "WH-L1", Name: "انبار یک", Status: WarehouseActive},
+		{WarehouseCode: "WH-L2", Name: "انبار دو", Status: WarehouseInactive},
+	} {
+		if _, err := svc.CreateWarehouse(ctx, w); err != nil {
+			t.Fatalf("create %s: %v", w.WarehouseCode, err)
+		}
+	}
+
+	admin := NewAdminStore(pool)
+	get := func(q string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/admin/warehouses?"+q, nil)
+		rec := httptest.NewRecorder()
+		ListWarehousesHandler(admin)(rec, r)
+		return rec
+	}
+
+	rec := get("")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list = %d: %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Items []WarehouseView `json:"items"`
+		Page  struct {
+			Total int `json:"total"`
+		} `json:"page"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if len(out.Items) < 2 || out.Page.Total < 2 {
+		t.Fatalf("list body = %s", rec.Body.String())
+	}
+	// The code really comes back, which is what the panel needs to pick a warehouse.
+	var sawCode bool
+	for _, w := range out.Items {
+		if w.WarehouseCode == "WH-L1" {
+			sawCode = true
+			if w.ID == "" {
+				t.Fatal("a warehouse row has no id")
+			}
+		}
+	}
+	if !sawCode {
+		t.Fatalf("WH-L1 not in the list: %s", rec.Body.String())
+	}
+
+	// The status filter narrows to the inactive one.
+	_ = json.Unmarshal(get("status=INACTIVE").Body.Bytes(), &out)
+	for _, w := range out.Items {
+		if w.Status != WarehouseInactive {
+			t.Fatalf("status filter leaked %s", w.Status)
+		}
+	}
+	// The q filter matches the code.
+	_ = json.Unmarshal(get("q=WH-L2").Body.Bytes(), &out)
+	if len(out.Items) != 1 || out.Items[0].WarehouseCode != "WH-L2" {
+		t.Fatalf("q filter = %s", get("q=WH-L2").Body.String())
+	}
+	// Nonsense paging falls back to the defaults.
+	if rec := get("page=abc&page_size=xyz"); rec.Code != http.StatusOK {
+		t.Fatalf("bad paging = %d", rec.Code)
+	}
+
+	// The 500 arm with a dead pool.
+	dead := setupClosedPool(t)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/admin/warehouses", nil)
+	rec = httptest.NewRecorder()
+	ListWarehousesHandler(NewAdminStore(dead))(rec, r)
+	if rec.Code != http.StatusInternalServerError || rec.Body.Len() == 0 {
+		t.Fatalf("dead pool = %d, body %q", rec.Code, rec.Body.String())
+	}
+}

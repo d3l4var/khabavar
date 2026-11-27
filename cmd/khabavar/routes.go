@@ -46,6 +46,7 @@ var adminPermissions = map[string]string{
 
 	// ── inventory (INVENTORY_MANAGER; adjustment is the tighter code) ──
 	"POST /api/v1/admin/warehouses":                               "inventory.manage",
+	"GET /api/v1/admin/warehouses":                                "inventory.manage",
 	"POST /api/v1/admin/warehouses/{wid}/variants/{vid}/receive":  "inventory.manage",
 	"POST /api/v1/admin/warehouses/{wid}/variants/{vid}/adjust":   "inventory.adjust",
 	"POST /api/v1/admin/inventory/reserve":                        "inventory.manage",
@@ -301,6 +302,7 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("GET /api/v1/admin/suppliers/{supplierId}/evaluations", suppliers.ListEvaluationsHandler(s.suppliers))
 
 	// ── inventory (P5d) ──
+	api.admin("GET /api/v1/admin/warehouses", inventory.ListWarehousesHandler(s.invAdmin))
 	api.admin("POST /api/v1/admin/warehouses", inventory.CreateWarehouseHandler(s.inventory))
 	api.public("GET /api/v1/warehouses/{wid}/variants/{vid}/stock", inventory.GetStockBalanceHandler(s.inventory))
 	api.admin("POST /api/v1/admin/warehouses/{wid}/variants/{vid}/receive", inventory.ReceiveStockHandler(s.inventory))

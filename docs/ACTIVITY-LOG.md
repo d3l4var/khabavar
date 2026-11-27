@@ -2919,6 +2919,42 @@ HTTP/1.1 405  Content-Type: application/json; charset=utf-8
 
 ---
 
+### ۴.۱۰۶ `GET /admin/warehouses` — شکاف بسته شد — کامیت `feat(warehouse-list)`
+
+تصمیم مالک: افزودن مسیر فهرست.
+
+**`AdminStore.ListWarehouses`** + **`ListWarehousesHandler`** + مسیر
+`GET /api/v1/admin/warehouses` با مجوز `inventory.manage` + ورودی قرارداد.
+
+- فیلتر `status` و جست‌وجوی `q` روی **نام و کد** انبار
+- متادیتای صفحه‌بندی (`page`, `page_size`, `total`, `total_pages`)
+- `created_at` به RFC3339
+
+**شاهد روی باینری واقعی:**
+```
+GET /admin/warehouses  →  200
+{"items":[{"id":"00de4316-…","name":"انبار تهران","warehouse_code":"WH-TEHRAN",
+           "status":"ACTIVE","created_at":"2026-11-26T10:55:47Z"}],
+ "page":{"page":1,"page_size":20,"total":1,"total_pages":1}}
+```
+
+**سفر کامل موجودی، حالا ممکن شد:**
+```
+GET  /admin/warehouses/{wid}/variants/{vid}/movements   200  حرکت RECEIPT با quantity=5
+POST /admin/warehouses/{wid}/variants/{vid}/receive     200  {"ok":true}
+POST /admin/warehouses/{wid}/variants/{vid}/adjust      200  delta=-2
+GET  /warehouses/{wid}/variants/{vid}/stock             200  on_hand=3
+GET  /admin/audit-logs?action=inventory.adjust          →  ۲ ردیف
+```
+
+پایگاه داده تأیید کرد: `on_hand=3, reserved=0` — تعدیل واقعاً اعمال شد.
+**و تریل حسابرسی هر دو عمل را ثبت کرد** (IAM §۷ برای موجودی).
+
+**یک اشتباه من:** مسیر موجودی را `/admin/warehouses/…/stock` زدم و ۴۰۴ گرفتم. مسیر واقعی
+`/warehouses/…/stock` (عمومی) است — همان که ویترین می‌خواند. **باگ نبود.**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
