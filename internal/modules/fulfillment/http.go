@@ -188,6 +188,12 @@ func writeFulSvcErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "allocation exceeds order item quantity", "code": "allocation_exceeds"})
 	case errors.Is(err, ErrQuantityMustBePositive):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "quantity must be positive"})
+	case errors.Is(err, ErrOrderIDRequired):
+		// A missing order id is the client's mistake: without this branch it fell to the
+		// default 500, which is what the handler test caught.
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "order_id is required", "code": "order_id_required"})
+	case errors.Is(err, ErrInvalidEventSource):
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "event source must be MANUAL, CARRIER_API or WEBHOOK", "code": "invalid_event_source"})
 	case errors.Is(err, ErrCarrierRequired):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "carrier required"})
 	default:
