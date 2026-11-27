@@ -36,12 +36,14 @@ func NewListStore(pool *pgxpool.Pool) *ListStore { return &ListStore{pool: pool}
 
 // List returns a page of audit entries, newest first, optionally filtered by action
 // and actor.
-func (s *ListStore) List(ctx context.Context, action, actorID string, page, pageSize int) ([]Entry, int, error) {
+func (s *ListStore) List(ctx context.Context, action, actorID, from, to string, page, pageSize int) ([]Entry, int, error) {
 	var total int
 	if err := s.pool.QueryRow(ctx,
 		`SELECT count(*) FROM audit_logs
 		  WHERE ($1 = '' OR action = $1)
-		    AND ($2 = '' OR actor_id::text = $2)`, action, actorID).Scan(&total); err != nil {
+		    AND ($2 = '' OR actor_id::text = $2)
+		    AND ($3 = '' OR created_at >= $3::timestamptz)
+		    AND ($4 = '' OR created_at <  $4::timestamptz)`, action, actorID, from, to).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := s.pool.Query(ctx,
@@ -51,8 +53,10 @@ func (s *ListStore) List(ctx context.Context, action, actorID string, page, page
 		   FROM audit_logs
 		  WHERE ($1 = '' OR action = $1)
 		    AND ($2 = '' OR actor_id::text = $2)
+		    AND ($3 = '' OR created_at >= $3::timestamptz)
+		    AND ($4 = '' OR created_at <  $4::timestamptz)
 		  ORDER BY created_at DESC
-		  LIMIT $3 OFFSET $4`, action, actorID, pageSize, (page-1)*pageSize)
+		  LIMIT $5 OFFSET $6`, action, actorID, from, to, pageSize, (page-1)*pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -88,7 +92,8 @@ func ListHandler(s *ListStore) http.HandlerFunc {
 			size = 20
 		}
 		entries, total, err := s.List(r.Context(),
-			r.URL.Query().Get("action"), r.URL.Query().Get("actor_id"), page, size)
+			r.URL.Query().Get("action"), r.URL.Query().Get("actor_id"),
+			r.URL.Query().Get("from"), r.URL.Query().Get("to"), page, size)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusInternalServerError)

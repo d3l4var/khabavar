@@ -34,10 +34,13 @@ type OrderListStore struct {
 func NewOrderListStore(pool *pgxpool.Pool) *OrderListStore { return &OrderListStore{pool: pool} }
 
 // List returns a page of orders, newest first, optionally filtered by status.
-func (s *OrderListStore) List(ctx context.Context, status string, page, pageSize int) ([]OrderSummary, int, error) {
+func (s *OrderListStore) List(ctx context.Context, status, q string, page, pageSize int) ([]OrderSummary, int, error) {
 	var total int
 	if err := s.pool.QueryRow(ctx,
-		`SELECT count(*) FROM orders WHERE ($1 = '' OR status = $1)`, status).Scan(&total); err != nil {
+		`SELECT count(*) FROM orders
+		  WHERE ($1 = '' OR status = $1)
+		    AND ($2 = '' OR order_number ILIKE '%'||$2||'%' OR COALESCE(guest_phone,'') LIKE '%'||$2||'%')`,
+		status, q).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := s.pool.Query(ctx,
@@ -45,8 +48,9 @@ func (s *OrderListStore) List(ctx context.Context, status string, page, pageSize
 		        COALESCE(guest_phone,''), created_at
 		   FROM orders
 		  WHERE ($1 = '' OR status = $1)
+		    AND ($2 = '' OR order_number ILIKE '%'||$2||'%' OR COALESCE(guest_phone,'') LIKE '%'||$2||'%')
 		  ORDER BY created_at DESC
-		  LIMIT $2 OFFSET $3`, status, pageSize, (page-1)*pageSize)
+		  LIMIT $3 OFFSET $4`, status, q, pageSize, (page-1)*pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -78,7 +82,7 @@ func ListOrdersHandler(s *OrderListStore) http.HandlerFunc {
 		if size < 1 || size > 100 {
 			size = 20
 		}
-		orders, total, err := s.List(r.Context(), r.URL.Query().Get("status"), page, size)
+		orders, total, err := s.List(r.Context(), r.URL.Query().Get("status"), r.URL.Query().Get("q"), page, size)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusInternalServerError)

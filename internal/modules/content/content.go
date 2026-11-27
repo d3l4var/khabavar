@@ -151,6 +151,8 @@ type Store interface {
 	UpdateArticleStatus(ctx context.Context, id, status string, publishedAt *time.Time, now time.Time) error
 	UpdateArticle(ctx context.Context, a Article) error
 	ListPublishedArticlesForProduct(ctx context.Context, productID string) ([]Article, error)
+	ListArticlesByTopicSlug(ctx context.Context, slug string, page, pageSize int) ([]Article, int, error)
+	SearchPublishedArticles(ctx context.Context, q string, page, pageSize int) ([]Article, int, error)
 	ListPublishedArticles(ctx context.Context, page, pageSize int) ([]Article, int, error)
 	ListArticlesByTopic(ctx context.Context, topicID string, page, pageSize int) ([]Article, int, error)
 	ListTranslations(ctx context.Context, parentArticleID string) ([]Article, error)
@@ -584,4 +586,20 @@ func (s *Service) PublishedArticlesForProduct(ctx context.Context, productID str
 		return nil, ErrArticleNotFound
 	}
 	return s.store.ListPublishedArticlesForProduct(ctx, productID)
+}
+
+// ListArticlesByTopicSlug and SearchPublishedArticles are the storefront's two filters.
+func (s *Service) ListArticlesByTopicSlug(ctx context.Context, slug string, page, pageSize int) ([]Article, int, error) {
+	if slug == "" {
+		return nil, 0, ErrSlugRequired
+	}
+	return s.store.ListArticlesByTopicSlug(ctx, slug, page, pageSize)
+}
+
+// SearchPublishedArticles searches published articles by title/summary.
+func (s *Service) SearchPublishedArticles(ctx context.Context, q string, page, pageSize int) ([]Article, int, error) {
+	if q == "" {
+		return s.store.ListPublishedArticles(ctx, page, pageSize)
+	}
+	return s.store.SearchPublishedArticles(ctx, q, page, pageSize)
 }

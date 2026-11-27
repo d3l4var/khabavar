@@ -197,7 +197,7 @@ func TestPG_AdminOrderList(t *testing.T) {
 	}
 
 	list := NewOrderListStore(pool)
-	all, total, err := list.List(ctx, "", 1, 20)
+	all, total, err := list.List(ctx, "", "", 1, 20)
 	if err != nil {
 		t.Fatalf("List all: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestPG_AdminOrderList(t *testing.T) {
 		t.Errorf("list order: first = %s, want the newest (%s)", all[0].ID, paidID)
 	}
 
-	paid, total, err := list.List(ctx, OrderPaid, 1, 20)
+	paid, total, err := list.List(ctx, OrderPaid, "", 1, 20)
 	if err != nil {
 		t.Fatalf("List paid: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestPG_AdminOrderList(t *testing.T) {
 		t.Error("created_at must be rendered")
 	}
 
-	pending, total, err := list.List(ctx, OrderPendingPayment, 1, 20)
+	pending, total, err := list.List(ctx, OrderPendingPayment, "", 1, 20)
 	if err != nil {
 		t.Fatalf("List pending: %v", err)
 	}

@@ -489,3 +489,53 @@ func TestPG_PublishedArticlesForProduct(t *testing.T) {
 		t.Fatalf("articles = %+v, want only the published one", arts)
 	}
 }
+
+// TestPG_StorefrontFilters covers the two filters the contract declares for the magazine
+// list — topic_slug and q — which the handler used to ignore entirely.
+func TestPG_StorefrontFilters(t *testing.T) {
+	_, svc, store := setupContent(t)
+	ctx := context.Background()
+
+	pubID, err := svc.CreateArticle(ctx, Article{
+		Title: "خواب عمیق", Slug: "filter-pub", Summary: "راهنمای خواب", Body: "متن",
+		Language: "fa", SourceType: "ORIGINAL",
+	})
+	if err != nil {
+		t.Fatalf("CreateArticle: %v", err)
+	}
+	if _, err := svc.AddArticleSource(ctx, ArticleSource{ArticleID: pubID, SourceType: CitationGuideline, Citation: "AASM"}); err != nil {
+		t.Fatalf("AddArticleSource: %v", err)
+	}
+	for _, step := range []func(context.Context, string) error{svc.SubmitForReview, func(c context.Context, id string) error { return svc.Approve(c, id, "") }, svc.Publish} {
+		if err := step(ctx, pubID); err != nil {
+			t.Fatalf("publish step: %v", err)
+		}
+	}
+	// A draft that must never surface through a filter.
+	draftID, err := svc.CreateArticle(ctx, Article{
+		Title: "خواب عمیق (پیش‌نویس)", Slug: "filter-draft", Body: "متن", Language: "fa", SourceType: "ORIGINAL",
+	})
+	if err != nil {
+		t.Fatalf("CreateArticle (draft): %v", err)
+	}
+
+	// q matches the published article only.
+	arts, total, err := svc.SearchPublishedArticles(ctx, "خواب", 1, 10)
+	if err != nil {
+		t.Fatalf("SearchPublishedArticles: %v", err)
+	}
+	if total != 1 || len(arts) != 1 || arts[0].ID != pubID {
+		t.Fatalf("search = %d results (total %d), want only the published one", len(arts), total)
+	}
+	_ = draftID
+
+	// An unknown topic slug is an empty list, not an error.
+	empty, totalEmpty, err := svc.ListArticlesByTopicSlug(ctx, "no-such-topic", 1, 10)
+	if err != nil {
+		t.Fatalf("ListArticlesByTopicSlug(unknown): %v", err)
+	}
+	if totalEmpty != 0 || len(empty) != 0 {
+		t.Fatalf("unknown slug returned %d articles", totalEmpty)
+	}
+	_ = store
+}

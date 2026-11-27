@@ -107,7 +107,7 @@ export async function getProduct(id: string) {
 }
 
 export async function searchProducts(q: string, page = 1, pageSize = 20) {
-  return request<{ data: { Product: Product; Snippet: string }[]; total: number }>(
+  return request<{ data: { product: Product; snippet: string }[]; total: number }>(
     `/products/search?q=${encodeURIComponent(q)}&page=${page}&page_size=${pageSize}`,
   )
 }

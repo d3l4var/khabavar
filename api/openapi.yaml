@@ -1494,7 +1494,6 @@ paths:
       security: []
       parameters:
         - { name: order_number, in: query, required: true, schema: { type: string, pattern: "^KHA-ORD-[0-9]{4}-[0-9]{6}$" } }
-        - { name: authority, in: query, schema: { type: string }, description: شناسه بازگشتی درگاه }
       responses:
         "302":
           description: هدایت به صفحه وضعیت سفارش یا صفحه تلاش مجدد پرداخت

@@ -56,14 +56,22 @@ func ListPublishedArticlesHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 		pageSize := parsePositiveInt(r.URL.Query().Get("page_size"), 20)
-		// ?topic=<topic id> narrows the list to one topic (magazine topic pages).
+		// ?topic=<topic id> is the internal form; the contract names it topic_slug, so both
+		// are accepted: the id narrows by id, the slug resolves server-side.
 		topicID := r.URL.Query().Get("topic")
+		topicSlug := r.URL.Query().Get("topic_slug")
+		search := r.URL.Query().Get("q")
 		var arts []Article
 		var total int
 		var err error
-		if topicID != "" {
+		switch {
+		case topicID != "":
 			arts, total, err = svc.ListArticlesByTopic(r.Context(), topicID, page, pageSize)
-		} else {
+		case topicSlug != "":
+			arts, total, err = svc.ListArticlesByTopicSlug(r.Context(), topicSlug, page, pageSize)
+		case search != "":
+			arts, total, err = svc.SearchPublishedArticles(r.Context(), search, page, pageSize)
+		default:
 			arts, total, err = svc.ListPublishedArticles(r.Context(), page, pageSize)
 		}
 		if err != nil {

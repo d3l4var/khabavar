@@ -28,6 +28,19 @@ func (s *DBStore) SearchProducts(ctx context.Context, f SearchFilter) ([]SearchR
 		join = " JOIN product_categories pc ON pc.product_id = p.id "
 		clauses = append(clauses, "pc.category_id = $"+addArg(f.CategoryID))
 	}
+	// The contract filters by slug, not id: resolve it in SQL so the storefront can link
+	// with the slug it already has and no extra round-trip is needed.
+	if f.CategorySlug != "" {
+		if join == "" {
+			join = " JOIN product_categories pc ON pc.product_id = p.id "
+		}
+		join += " JOIN categories c ON c.id = pc.category_id "
+		clauses = append(clauses, "c.slug = $"+addArg(f.CategorySlug))
+	}
+	if f.BrandSlug != "" {
+		join += " JOIN brands b ON b.id = p.brand_id "
+		clauses = append(clauses, "b.slug = $"+addArg(f.BrandSlug))
+	}
 	if f.Query != "" {
 		q := "%" + strings.ToLower(f.Query) + "%"
 		clauses = append(clauses, "(LOWER(p.title) LIKE $"+addArg(q)+
@@ -53,13 +66,25 @@ func (s *DBStore) SearchProducts(ctx context.Context, f SearchFilter) ([]SearchR
 		return nil, 0, err
 	}
 
-	// Fetch page.
+	// Fetch page. A price sort needs the current approved price per product, so it joins a
+	// lateral subquery; the other sorts stay on the products row.
+	priceJoin := ""
+	switch f.Sort {
+	case "price_asc", "price_desc":
+		priceJoin = " LEFT JOIN LATERAL (" +
+			"SELECT MIN(ppr.selling_price) AS price FROM product_price_records ppr " +
+			"JOIN product_variants pv ON pv.id = ppr.variant_id " +
+			"WHERE pv.product_id = p.id AND ppr.approved_by IS NOT NULL " +
+			"AND ppr.valid_from <= now() AND (ppr.valid_until IS NULL OR ppr.valid_until > now())" +
+			") pr ON true "
+	}
+
 	offset := (f.Page - 1) * f.PageSize
 	listQuery := "SELECT p.id, p.title, p.slug, p.brand_id, p.short_description, p.description, " +
 		"p.manufacturer, p.country_of_origin, p.sleep_relevance, p.spec_source, " +
 		"p.spec_last_reviewed_at, p.status, p.published_at " +
-		"FROM products p" + join + where +
-		" ORDER BY p.published_at DESC NULLS LAST LIMIT $" + addArg(f.PageSize) +
+		"FROM products p" + join + priceJoin + where +
+		" " + orderBy(f.Sort) + " LIMIT $" + addArg(f.PageSize) +
 		" OFFSET $" + addArg(offset)
 	rows, err := s.pool.Query(ctx, listQuery, args...)
 	if err != nil {
@@ -117,3 +142,18 @@ func textVal(t pgtype.Text) string {
 
 // Compile-time assertion that DBStore satisfies SearchStore.
 var _ SearchStore = (*DBStore)(nil)
+
+// orderBy maps the contract's sort enum to SQL. An unknown value falls back to the default
+// order rather than erroring: the enum is advisory for a read endpoint.
+func orderBy(sort string) string {
+	switch sort {
+	case "newest":
+		return "ORDER BY p.published_at DESC NULLS LAST, p.created_at DESC"
+	case "price_asc":
+		return "ORDER BY pr.price ASC NULLS LAST, p.published_at DESC NULLS LAST"
+	case "price_desc":
+		return "ORDER BY pr.price DESC NULLS LAST, p.published_at DESC NULLS LAST"
+	default: // relevance
+		return "ORDER BY p.published_at DESC NULLS LAST"
+	}
+}

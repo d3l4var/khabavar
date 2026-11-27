@@ -31,16 +31,19 @@ const (
 type SearchFilter struct {
 	Query          string // free-text; matched against title/description/manufacturer
 	CategoryID     string // optional; empty = all categories
+	CategorySlug   string // optional; the contract's filter (resolved in SQL)
+	BrandSlug      string // optional; the contract's filter (resolved in SQL)
 	SleepRelevance string // optional; SLEEP_AID/SLEEP_RELATED/GENERAL
 	Status         string // storefront passes PUBLISHED; admin passes "" for all
+	Sort           string // relevance | newest | price_asc | price_desc
 	Page           int
 	PageSize       int
 }
 
 // SearchResult is a product hit with a relevance snippet (the matched context).
 type SearchResult struct {
-	Product Product
-	Snippet string // short excerpt showing the match context (for UI highlighting)
+	Product Product `json:"product"`
+	Snippet string  `json:"snippet"` // short excerpt showing the match context (for UI highlighting)
 }
 
 // SearchStore is the persistence boundary for product search. DBStore implements it.

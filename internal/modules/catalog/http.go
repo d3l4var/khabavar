@@ -130,6 +130,9 @@ func SearchProductsHandler(svc *Service) http.HandlerFunc {
 		f := SearchFilter{
 			Query:          q.Get("q"),
 			CategoryID:     q.Get("category_id"),
+			CategorySlug:   q.Get("category_slug"),
+			BrandSlug:      q.Get("brand_slug"),
+			Sort:           q.Get("sort"),
 			SleepRelevance: q.Get("sleep_relevance"),
 			Status:         ProductPublished, // storefront always searches published
 			Page:           parsePositiveInt(q.Get("page"), 1),

@@ -118,7 +118,7 @@ function ListScreen({ cart }: { cart: ReturnType<typeof useCart> }) {
       {result.data && (result.data.data ?? []).length > 0 ? (
         <Grid>
           {(result.data.data ?? []).map((hit) => {
-            const p: Product = hit.Product
+            const p: Product = hit.product
             return (
               <Card key={p.id}>
                 <h3 style={{ margin: 0 }}>

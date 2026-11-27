@@ -98,7 +98,7 @@ function HomeScreen() {
         {products.data && (products.data.data ?? []).length > 0 ? (
           <Grid>
             {(products.data.data ?? []).map((hit) => (
-              <ProductCard key={hit.Product.id} product={hit.Product} href={`#/product/${encodeURIComponent(hit.Product.id)}`} />
+              <ProductCard key={hit.product.id} product={hit.product} href={`#/product/${encodeURIComponent(hit.product.id)}`} />
             ))}
           </Grid>
         ) : null}
@@ -146,7 +146,7 @@ function ShopScreen() {
       {result.data && (result.data.data ?? []).length > 0 ? (
         <Grid>
           {(result.data.data ?? []).map((hit) => (
-            <ProductCard key={hit.Product.id} product={hit.Product} href={`#/product/${encodeURIComponent(hit.Product.id)}`} />
+            <ProductCard key={hit.product.id} product={hit.product} href={`#/product/${encodeURIComponent(hit.product.id)}`} />
           ))}
         </Grid>
       ) : null}

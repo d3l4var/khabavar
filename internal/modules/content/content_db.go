@@ -5,9 +5,11 @@ import (
 	"context"
 	"time"
 
+	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"strings"
 )
 
 // DBStore is the pgx-backed content.Store.
@@ -456,4 +458,60 @@ func (s *DBStore) ListPublishedArticlesForProduct(ctx context.Context, productID
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// ListArticlesByTopicSlug is the contract's form of the topic filter: the client has the
+// slug, not the id.
+func (s *DBStore) ListArticlesByTopicSlug(ctx context.Context, slug string, page, pageSize int) ([]Article, int, error) {
+	var topicID string
+	err := s.pool.QueryRow(ctx, `SELECT id FROM topics WHERE slug = $1`, slug).Scan(&topicID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return []Article{}, 0, nil // an unknown slug is an empty list, not an error
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	return s.ListArticlesByTopic(ctx, topicID, page, pageSize)
+}
+
+// SearchPublishedArticles matches the title and body of published articles (the magazine's
+// search box). The status filter stays in SQL so a draft can never surface.
+func (s *DBStore) SearchPublishedArticles(ctx context.Context, q string, page, pageSize int) ([]Article, int, error) {
+	like := "%" + strings.ToLower(q) + "%"
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT count(*) FROM articles
+		  WHERE status = 'PUBLISHED' AND (LOWER(title) LIKE $1 OR LOWER(COALESCE(summary,'')) LIKE $1)`,
+		like).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	offset := (page - 1) * pageSize
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, title, slug, COALESCE(summary,''), '', COALESCE(language,'fa'),
+		        COALESCE(source_type,''), COALESCE(source_url,''), COALESCE(parent_article_id::text,''),
+		        COALESCE(author_id::text,''), COALESCE(editor_id::text,''), status,
+		        published_at, created_at, updated_at
+		   FROM articles
+		  WHERE status = 'PUBLISHED' AND (LOWER(title) LIKE $1 OR LOWER(COALESCE(summary,'')) LIKE $1)
+		  ORDER BY published_at DESC NULLS LAST LIMIT $2 OFFSET $3`, like, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := make([]Article, 0, pageSize)
+	for rows.Next() {
+		var a Article
+		var published pgtype.Timestamptz
+		if err := rows.Scan(&a.ID, &a.Title, &a.Slug, &a.Summary, &a.Body, &a.Language,
+			&a.SourceType, &a.SourceURL, &a.ParentArticleID, &a.AuthorID, &a.EditorID,
+			&a.Status, &published, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, 0, err
+		}
+		if published.Valid {
+			t := published.Time
+			a.PublishedAt = &t
+		}
+		out = append(out, a)
+	}
+	return out, total, rows.Err()
 }

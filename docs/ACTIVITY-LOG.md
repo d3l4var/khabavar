@@ -1805,6 +1805,43 @@ GET /payments/return       authority
 
 ---
 
+### ۴.۷۰ بستن ۹ واگرایی قرارداد — کامیت `feat(contract-filters)`
+
+تصمیم مالک: **ترکیب** — هر جا فیلتر کاربردی است پیاده شود، هر جا پارامتر بی‌استفاده است
+از قرارداد حذف شود. نتیجه: `audit-contract-conformance.py` از **۹ مشکل به clean** رسید.
+
+**پیاده‌شده (فیلترهای واقعی):**
+- **`/catalog/products`** — `category_slug` و `brand_slug` در SQL (join روی slug، بدون
+  round-trip اضافه)، و `sort` با چهار حالت: `relevance` (پیش‌فرض)، `newest`،
+  `price_asc`، `price_desc`. مرتب‌سازی قیمت با `LEFT JOIN LATERAL` روی ارزان‌ترین قیمت
+  **تأییدشده و معتبر** هر محصول.
+- **`/magazine/articles`** — `topic_slug` (حل slug → id در SQL؛ slug ناشناخته = لیست
+  خالی، نه خطا) و `q` (جست‌وجو در عنوان/خلاصه، فقط PUBLISHED).
+- **`/admin/orders`** — `q` روی شمارهٔ سفارش و تلفن مهمان.
+- **`/admin/audit-logs`** — `from`/`to` به‌صورت بازهٔ `timestamptz`.
+
+**حذف‌شده از قرارداد:** پارامتر `authority` در `/payments/return` (بی‌استفاده؛ مقصد
+ریدایرکت از config می‌آید).
+
+**شاهد زنده:**
+```
+catalog?sort=price_asc          → داده مرتب‌شده برمی‌گردد
+catalog?category_slug=nope      → total 0
+magazine/articles?q=خواب        → total 1
+admin/orders?q=000008           → total 2
+admin/audit-logs?from=2030-…    → total 0
+```
+
+**یک نشت دیگر که همان‌جا پیدا شد:** پاسخ جست‌وجوی کاتالوگ `{"Product":{…},"Snippet":…}`
+برمی‌گرداند — `SearchResult` هم tag نداشت. tag اضافه شد **و کلاینت‌ها هم به‌روز شدند**
+(`web/main`, `web/shop`, `web/shared/api.ts` → `hit.product`)، چون این کلیدها باربری
+داشتند. بیلد هر دو اپ سبز.
+
+**پوشش SQL: ۹۲/۹۲** (سه متد تازه: `ListArticlesByTopicSlug`, `SearchPublishedArticles`,
+و پارامترهای تازهٔ `List`).
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

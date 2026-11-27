@@ -3,6 +3,7 @@ package content
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -126,6 +127,39 @@ func (m *memStore) GetArticleBySlug(_ context.Context, slug string) (*Article, e
 	}
 	cp := *m.articles[id]
 	return &cp, nil
+}
+
+// ListArticlesByTopicSlug mirrors the DB store: an unknown slug is an empty list.
+func (m *memStore) ListArticlesByTopicSlug(_ context.Context, slug string, page, pageSize int) ([]Article, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var id string
+	for tid, t := range m.topics {
+		if t.Slug == slug {
+			id = tid
+		}
+	}
+	if id == "" {
+		return []Article{}, 0, nil
+	}
+	return m.ListArticlesByTopic(context.Background(), id, page, pageSize)
+}
+
+// SearchPublishedArticles mirrors the DB filter: published only, title/summary match.
+func (m *memStore) SearchPublishedArticles(_ context.Context, q string, page, pageSize int) ([]Article, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	needle := strings.ToLower(q)
+	out := make([]Article, 0)
+	for _, a := range m.articles {
+		if a.Status != StatusPublished {
+			continue
+		}
+		if strings.Contains(strings.ToLower(a.Title), needle) || strings.Contains(strings.ToLower(a.Summary), needle) {
+			out = append(out, *a)
+		}
+	}
+	return out, len(out), nil
 }
 
 // ListPublishedArticlesForProduct mirrors the DB filter: only PUBLISHED articles linked
