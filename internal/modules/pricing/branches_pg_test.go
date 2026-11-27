@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -134,5 +135,84 @@ func TestPG_PricingErrorBranches(t *testing.T) {
 		`{"supply_type":"OWNED_INVENTORY","purchase_cost":60000}`, map[string]string{"id": variantID})
 	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), "audit_warning") {
 		t.Fatalf("a failed audit = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestPG_PricingReadPaths covers the read handlers and the storefront price endpoint: the
+// list handlers' error branches, the storefront 404 for a variant with no approved price,
+// and the economics endpoint.
+func TestPG_PricingReadPaths(t *testing.T) {
+	pool, svc, _ := setupPricing(t)
+	ctx := context.Background()
+	variantID := seedVariant(t, ctx, pool, "SKU-PRP-1")
+	bareVariant := seedVariant(t, ctx, pool, "SKU-PRP-2")
+
+	var actorID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO admin_users (email, full_name, status) VALUES ($1,'قیمت‌گذار','ACTIVE') RETURNING id`,
+		"prp-"+variantID[:8]+"@khabavar.ir").Scan(&actorID); err != nil {
+		t.Fatalf("seed actor: %v", err)
+	}
+
+	call := func(h http.HandlerFunc, method, body string, pv map[string]string) *httptest.ResponseRecorder {
+		var r *http.Request
+		if body == "" {
+			r = httptest.NewRequest(method, "/x", nil)
+		} else {
+			r = httptest.NewRequest(method, "/x", strings.NewReader(body))
+		}
+		r = r.WithContext(shared.WithActorID(r.Context(), actorID))
+		for k, v := range pv {
+			r.SetPathValue(k, v)
+		}
+		rec := httptest.NewRecorder()
+		h(rec, r)
+		return rec
+	}
+
+	// A cost record, then a price record, then approval.
+	if rec := call(CreateCostRecordHandler(svc), http.MethodPost,
+		`{"supply_type":"OWNED_INVENTORY","purchase_cost":40000}`, map[string]string{"id": variantID}); rec.Code != http.StatusCreated {
+		t.Fatalf("cost = %d: %s", rec.Code, rec.Body.String())
+	}
+	rec := call(CreatePriceRecordHandler(svc), http.MethodPost,
+		`{"selling_price":90000}`, map[string]string{"id": variantID})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("price = %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	if rec := call(ApprovePriceRecordHandler(svc), http.MethodPost, "", map[string]string{"id": created.ID}); rec.Code != http.StatusOK {
+		t.Fatalf("approve = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The two list handlers must answer 200 with data.
+	for name, h := range map[string]http.HandlerFunc{
+		"cost records":  ListCostRecordsHandler(svc),
+		"price records": ListPriceRecordsHandler(svc),
+	} {
+		rec := call(h, http.MethodGet, "", map[string]string{"id": variantID})
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), variantID) {
+			t.Fatalf("%s = %d: %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// The storefront price endpoint: 200 for an approved price, 404 for a bare variant.
+	if rec := call(StorefrontPriceHandler(svc), http.MethodGet, "", map[string]string{"id": variantID}); rec.Code != http.StatusOK {
+		t.Fatalf("storefront price = %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(StorefrontPriceHandler(svc), http.MethodGet, "", map[string]string{"id": bareVariant}); rec.Code != http.StatusNotFound {
+		t.Fatalf("storefront price for a bare variant = %d, want 404", rec.Code)
+	}
+
+	// The public economics endpoint answers for a priced variant and reports warnings for a
+	// bare one instead of erroring.
+	if rec := call(EconomicsHandler(svc), http.MethodGet, "", map[string]string{"id": variantID}); rec.Code != http.StatusOK {
+		t.Fatalf("economics = %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(EconomicsHandler(svc), http.MethodGet, "", map[string]string{"id": bareVariant}); rec.Code != http.StatusOK {
+		t.Fatalf("economics for a bare variant = %d: %s", rec.Code, rec.Body.String())
 	}
 }

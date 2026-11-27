@@ -1940,6 +1940,37 @@ return نمی‌شد** — نرخ ۱.۵ ذخیره می‌شد. اعتبارسن
 
 ---
 
+### ۴.۷۵ pricing به آستانه رسید + گیت پوشش — کامیت `test(pricing-threshold)`
+
+**اولین ماژول مالی که آستانهٔ R-CI §۳ را برآورده کرد: pricing ۸۶.۲٪ → ۹۰.۰٪.**
+
+دو تست تازه:
+- `TestPG_PricingReadPaths` — فهرست‌های هزینه/قیمت، قیمت ویترین (۲۰۰ برای قیمت تأییدشده،
+  **۴۰۴** برای واریانت بی‌قیمت)، و economics عمومی.
+- `TestPricingStoreFailuresAreServerErrors` — با یک `brokenStore` (بدون دیتابیس) همهٔ
+  مسیرهای خطای handlerها: **خرابی store باید ۵xx بدهد، نه ۲۰۰ با لیست خالی.**
+- `TestDiscountAmount` — سیاست خالی/خراب/منفی → صفر.
+
+**گیت تازه `scripts/audit-coverage.py`:** آستانه‌ها از R-CI §۳ (۹۰٪ مالی/موجودی، ۷۵٪ سایر)
+با یک مجموعهٔ **ENFORCED** صریح. فقط `pricing` اکنون blocking است؛ بقیه advisory.
+
+**چرا این‌طور:** اجرای همگانی آستانه یعنی یا پایین آوردن عدد یا بلاک کردن CI روی کاری که
+نشده — هر دو ناصادقانه. هر ماژول وقتی به آستانه رسید به مجموعهٔ ENFORCED اضافه می‌شود.
+
+**وضعیت فعلی (اندازه‌گیری‌شده):**
+```
+pricing         90.0% / 90%   ok  [ENFORCED]
+commerce        83.0% / 90%   below [advisory]
+inventory       78.4% / 90%   below [advisory]
+authorization   76.1% / 75%   ok
+worker          86.5% / 75%   ok
+notifications   83.3% / 75%   ok
+catalog 63.4 · suppliers 60.2 · fulfillment 60.8 · identity 51.2 · media 47.4
+content 46.8 · ecosystem 40.0 · audit 0.0 · shared 0.0   (advisory)
+```
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

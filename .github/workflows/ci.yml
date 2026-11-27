@@ -124,6 +124,8 @@ jobs:
       - name: contract conformance (declared query params must be read)
         continue-on-error: true
         run: python3 scripts/audit-contract-conformance.py
+      - name: coverage thresholds (enforced set only)
+        run: python3 scripts/audit-coverage.py --fail
 
   openapi-validate:
     name: openapi-validate
