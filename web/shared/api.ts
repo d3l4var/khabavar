@@ -522,6 +522,13 @@ export async function adminDecideReturn(id: string, approve: boolean, note = '')
   })
 }
 
+export async function adminRefundReturn(id: string, amount: number, note = '') {
+  return adminRequest<ReturnRequest>(`/admin/return-requests/${encodeURIComponent(id)}/refund`, {
+    method: 'POST',
+    body: JSON.stringify({ amount, note }),
+  })
+}
+
 export async function adminReceiveReturn(id: string, note = '') {
   return adminRequest<ReturnRequest>(`/admin/return-requests/${encodeURIComponent(id)}/receive`, {
     method: 'POST',

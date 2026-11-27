@@ -3219,6 +3219,33 @@ POST /oauth/token                     400  {"error":"invalid_request"}
 
 ---
 
+### ۴.۱۱۵ بازپرداخت در پنل + چرخهٔ کامل از صفر — کامیت `feat(return-refund-ui)`
+
+`ReturnsScreen` اکنون دکمهٔ **بازپرداخت** برای وضعیت `RECEIVED` دارد، با فیلد مبلغ (رقم‌های
+فارسی/غیررقمی فیلتر می‌شوند). دکمه وقتی مبلغ خالی است **غیرفعال** است و دلیلش را می‌گوید —
+چون `Number('')` صفر می‌شود و API آن را `invalid_amount` رد می‌کند؛ فرستادن درخواستی که
+می‌دانیم غلط است، کار درستی نیست.
+
+**چرخهٔ کامل از صفر روی باینری (سفارش تازه، مشتری واقعی از OTP):**
+```
+POST /orders/{id}/return-requests           201  claim 6687055a
+POST /admin/return-requests/{id}/approve    200
+POST /admin/return-requests/{id}/receive    200
+POST /admin/return-requests/{id}/refund     200  (۵۰۰۰۰ ریال)
+```
+
+نکتهٔ جانبی که **درست کار کرد**: پیش از افزودن payment attempt، همان بازپرداخت **۴۰۹**
+گرفت نه ۵۰۰ — یعنی اصلاح نگاشت §۴.۱۱۳ واقعاً اثر دارد.
+
+**پایگاه داده و تریل:**
+```
+return_requests.status = REFUNDED   decision_note = 4ac516c8…
+orders.refunded_total = 50000
+audit_logs: order.refund.issued | amount=50000
+```
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

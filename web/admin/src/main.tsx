@@ -22,6 +22,7 @@ import {
   adminListReturns,
   adminDecideReturn,
   adminReceiveReturn,
+  adminRefundReturn,
   adminPatchProduct,
   adminPublishProduct,
   adminRecordMovement,
@@ -411,6 +412,8 @@ function ReturnsScreen() {
   const returns = useAsync(() => adminListReturns(submitted), [submitted])
   const [msg, setMsg] = useState<string | null>(null)
   const [note, setNote] = useState('')
+  // The amount is the operator's call: a claim records a quantity but no line item.
+  const [amount, setAmount] = useState('')
 
   // act runs one decision and reloads the queue: a stale row is a wrong decision.
   const act = async (fn: () => Promise<unknown>, ok: string) => {
@@ -482,6 +485,22 @@ function ReturnsScreen() {
                   {r.status === 'APPROVED' ? (
                     <Button onClick={() => act(() => adminReceiveReturn(r.id, note), 'دریافت ثبت شد.')}>ثبت دریافت</Button>
                   ) : null}
+                  {r.status === 'RECEIVED' ? (
+                    <Button
+                      // Number('') is 0, which the API rejects as invalid_amount. Say so here
+                      // instead of sending a request we know is wrong.
+                      disabled={!amount}
+                      onClick={() => {
+                        if (!amount) {
+                          setMsg('مبلغ بازپرداخت را وارد کنید.')
+                          return
+                        }
+                        act(() => adminRefundReturn(r.id, Number(amount), note), 'بازپرداخت صادر شد.')
+                      }}
+                    >
+                      بازپرداخت
+                    </Button>
+                  ) : null}
                 </td>
               </tr>
             ))}
@@ -489,6 +508,16 @@ function ReturnsScreen() {
         </table>
       ) : null}
 
+      <label style={{ display: 'block', marginBottom: 'var(--kh-space-3)' }}>
+        <span style={{ color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>مبلغ بازپرداخت (ریال) — برای بازپرداخت الزامی است</span>
+        <input
+          inputMode="numeric"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
+          aria-label="مبلغ بازپرداخت به ریال"
+          style={{ display: 'block', width: '100%', marginTop: 'var(--kh-space-1)', padding: 'var(--kh-space-3)', borderRadius: 'var(--kh-radius-sm)', border: '1px solid var(--kh-border)', background: 'var(--kh-surface)', color: 'var(--kh-text)', font: 'inherit' }}
+        />
+      </label>
       <label style={{ display: 'block', marginBottom: 'var(--kh-space-5)' }}>
         <span style={{ color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>یادداشت تصمیم (برای رد الزامی است)</span>
         <input
