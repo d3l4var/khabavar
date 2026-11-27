@@ -70,14 +70,76 @@ func writeError(w http.ResponseWriter, err error) {
 	writeJSON(w, code, errorResponse{Error: err.Error(), Code: errorCode(err)})
 }
 
-// errorCode derives a stable machine-readable code from a domain error, dropping the
-// detail suffix (": status=X") so the code does not vary per request.
+// errorCode maps a domain error to a stable machine-readable code.
+//
+// It used to derive the code from the message by cutting at the first ':'. Every message
+// starts with "commerce:", so every error answered {"code":"COMMERCE"} — useless for a
+// client that wants to branch. The mapping is explicit now, and an unknown error gets a
+// generic code rather than a misleading one.
 func errorCode(err error) string {
-	msg := err.Error()
-	if i := strings.IndexByte(msg, ':'); i > 0 {
-		msg = msg[:i]
+	switch {
+	case errors.Is(err, ErrCartNotFound):
+		return "cart_not_found"
+	case errors.Is(err, ErrCartTokenRequired):
+		return "cart_token_required"
+	case errors.Is(err, ErrCartItemNotFound):
+		return "cart_item_not_found"
+	case errors.Is(err, ErrCartEmpty):
+		return "cart_empty"
+	case errors.Is(err, ErrCartQuantityInvalid):
+		return "cart_quantity_invalid"
+	case errors.Is(err, ErrCustomerSessionRequired):
+		return "customer_session_required"
+	case errors.Is(err, ErrVariantRequired):
+		return "variant_required"
+	case errors.Is(err, ErrShippingAddressReq):
+		return "shipping_address_required"
+	case errors.Is(err, ErrGuestPhoneRequired):
+		return "guest_phone_required"
+	case errors.Is(err, ErrContactRequired):
+		return "contact_required"
+	case errors.Is(err, ErrIdempotencyKeyMissing):
+		return "idempotency_key_required"
+	case errors.Is(err, ErrIdempotencyConflict):
+		return "idempotency_conflict"
+	case errors.Is(err, ErrIdempotencyInFlight):
+		return "idempotency_in_flight"
+	case errors.Is(err, ErrOrderNotFound):
+		return "order_not_found"
+	case errors.Is(err, ErrOrderNumberRequired):
+		return "order_number_required"
+	case errors.Is(err, ErrPaymentIntentNotFound):
+		return "payment_intent_not_found"
+	case errors.Is(err, ErrIntentExists):
+		return "payment_intent_exists"
+	case errors.Is(err, ErrIntentNotSucceeded):
+		return "payment_intent_not_succeeded"
+	case errors.Is(err, ErrAlreadyPaid):
+		return "already_paid"
+	case errors.Is(err, ErrCannotCancel):
+		return "cannot_cancel"
+	case errors.Is(err, ErrTotalsMismatch):
+		return "totals_mismatch"
+	case errors.Is(err, ErrRefundAmountInvalid):
+		return "refund_amount_invalid"
+	case errors.Is(err, ErrRefundReasonReq):
+		return "refund_reason_required"
+	case errors.Is(err, ErrRefundExceedsPaid):
+		return "refund_exceeds_paid"
+	case errors.Is(err, ErrOrderNotRefundable):
+		return "order_not_refundable"
+	case errors.Is(err, ErrNoSucceededPayment):
+		return "no_succeeded_payment"
+	case errors.Is(err, ErrReturnReasonRequired):
+		return "return_reason_required"
+	case errors.Is(err, ErrReturnQuantityInvalid):
+		return "return_quantity_invalid"
+	case errors.Is(err, ErrReturnNotAllowed):
+		return "return_not_allowed"
+	case errors.Is(err, ErrReturnAlreadyOpen):
+		return "return_already_open"
 	}
-	return strings.ToUpper(strings.NewReplacer(" ", "_", "-", "_").Replace(msg))
+	return "request_failed"
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

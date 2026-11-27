@@ -2819,6 +2819,52 @@ read cart                              200  (قلم در سبد)
 
 ---
 
+### ۴.۱۰۴ مسیر کامل مشتری روی باینری واقعی — و کد خطای بی‌مصرف — کامیت `fix(error-codes)`
+
+**سفر کامل مشتری، واقعاً اجرا شد:**
+
+```
+POST /cart/items                      200
+GET  /cart                            200
+POST /checkout  (بدون Idempotency-Key) 400  cart_token_required ← درست
+POST /checkout  (با Idempotency-Key)   201  KHA-ORD-2026-000009
+     subtotal 500000 = ۲ × 250000 · status PENDING_PAYMENT
+POST /checkout  (همان کلید، تکرار)     201  همان سفارش (idempotent)
+POST /orders/{id}/confirm-payment (بدون امضا)  401
+POST /orders/{id}/confirm-payment (با امضا)    200 {"status":"paid"}
+POST /orders/{id}/confirm-payment (تکرار)      200 {"status":"already_paid"}
+```
+
+و از پایگاه داده:
+```
+KHA-ORD-2026-000009 | PAID | paid_total=500000 | payment_attempts=1
+```
+**یک attempt موفق ثبت شد** — پیش‌شرط بازپرداخت (DB §10.5) برقرار است.
+
+**باگ پیدا شده — `code` بی‌مصرف بود:**
+
+```json
+{"error":"commerce: order is already paid","code":"COMMERCE"}
+```
+
+`errorCode` کد را با **بریدن پیام در اولین `:`** می‌ساخت. هر پیام با `commerce:` شروع
+می‌شود، پس **هر خطا `"code":"COMMERCE"`** برمی‌گرداند — کلاینت نمی‌توانست روی آن شاخه
+بزند. با نگاشت صریح ۳۰ sentinel جایگزین شد؛ خطای ناشناخته → `request_failed`.
+
+**شاهد پس از اصلاح:**
+```
+{"error":"commerce: order is already paid","code":"already_paid"}
+{"error":"commerce: variant_id is required","code":"variant_required"}
+{"code":"cart_token_required",...}
+```
+
+`TestErrorCodeIsMachineReadable` این نگاشت را تثبیت می‌کند، شامل sentinel‌های **wrap‌شده**
+(`fmt.Errorf("%w: status=CLOSED", …)`) که کدشان نباید با پسوند جزئیات عوض شود.
+
+**رسانه:** `POST /admin/media` بدون احراز هویت → **۴۰۱** (درست).
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
