@@ -150,17 +150,45 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // ── Refund handlers (P6) ──────────────────────────────────────────────────────
 
-// CreateRefundHandler serves POST /api/v1/admin/orders/{id}/refunds — issue a
+// resolveOrderKey turns the route's {orderNumber} into an order id. The path carries the
+// business number (KHA-ORD-YYYY-NNNNNN), not a uuid, and the handlers used to read
+// PathValue("id") — which is empty — so every refund answered 500 on an empty uuid.
+func resolveOrderKey(svc *Service, r *http.Request) (string, error) {
+	key := r.PathValue("orderNumber")
+	if key == "" {
+		key = r.PathValue("id")
+	}
+	if key == "" {
+		return "", ErrOrderNotFound
+	}
+	if _, err := uuid.Parse(key); err == nil {
+		return key, nil
+	}
+	o, err := svc.GetOrderByNumber(r.Context(), NormalizeOrderNumber(key))
+	if err != nil {
+		return "", err
+	}
+	if o == nil {
+		return "", ErrOrderNotFound
+	}
+	return o.ID, nil
+}
+
+// CreateRefundHandler serves POST /api/v1/admin/orders/{orderNumber}/refunds — issue a
 // refund for an order (R-06 §۱۰). amount is in IRR; reason is mandatory.
 func CreateRefundHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		orderID := r.PathValue("id")
 		var req struct {
 			Amount int64  `json:"amount"`
 			Reason string `json:"reason"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid json"})
+			return
+		}
+		orderID, err := resolveOrderKey(svc, r)
+		if err != nil {
+			writeError(w, err)
 			return
 		}
 		id, err := svc.CreateRefund(r.Context(), orderID, req.Amount, req.Reason)
@@ -172,11 +200,15 @@ func CreateRefundHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
-// ListRefundsHandler serves GET /api/v1/admin/orders/{id}/refunds — the refund
+// ListRefundsHandler serves GET /api/v1/admin/orders/{orderNumber}/refunds — the refund
 // history for an order (admin view).
 func ListRefundsHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		orderID := r.PathValue("id")
+		orderID, err := resolveOrderKey(svc, r)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
 		refunds, err := svc.ListRefunds(r.Context(), orderID)
 		if err != nil {
 			writeError(w, err)

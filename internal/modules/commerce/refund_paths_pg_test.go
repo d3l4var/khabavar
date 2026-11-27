@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -186,5 +187,68 @@ func TestPG_OrderReadPaths(t *testing.T) {
 	}
 	if intentID != "" || gotOrder != "" {
 		t.Fatalf("unknown reference returned %q/%q", intentID, gotOrder)
+	}
+}
+
+// TestPG_RefundRouteByOrderNumber pins the route's contract: the path carries the business
+// number, and both handlers used to read PathValue("id") — empty — so every refund answered
+// 500 on an empty uuid.
+func TestPG_RefundRouteByOrderNumber(t *testing.T) {
+	pool, _, _ := setupCommerce(t)
+	ctx := context.Background()
+	store := NewDBStore(pool)
+	svc := NewService(store, nil)
+	svc.SetRefundStore(store)
+	svc.SetNow(time.Now)
+
+	orderID, _ := seedPaidOrder(t, ctx, pool, 100000)
+	adminID := seedAdmin(t, ctx, pool)
+	var orderNumber string
+	if err := pool.QueryRow(ctx, `SELECT order_number FROM orders WHERE id = $1`, orderID).Scan(&orderNumber); err != nil {
+		t.Fatalf("read number: %v", err)
+	}
+
+	call := func(h http.HandlerFunc, method, body string, pv map[string]string) *httptest.ResponseRecorder {
+		var r *http.Request
+		if body == "" {
+			r = httptest.NewRequest(method, "/x", nil)
+		} else {
+			r = httptest.NewRequest(method, "/x", strings.NewReader(body))
+		}
+		for k, v := range pv {
+			r.SetPathValue(k, v)
+		}
+		r = r.WithContext(shared.WithActorID(r.Context(), adminID))
+		rec := httptest.NewRecorder()
+		h(rec, r)
+		return rec
+	}
+
+	// By business number — the shape the route actually declares.
+	rec := call(CreateRefundHandler(svc), http.MethodPost, `{"amount":40000,"reason":"خرابی"}`,
+		map[string]string{"orderNumber": orderNumber})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("refund by number = %d: %s", rec.Code, rec.Body.String())
+	}
+	// The history reads back by the same key.
+	rec = call(ListRefundsHandler(svc), http.MethodGet, "", map[string]string{"orderNumber": orderNumber})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "40000") {
+		t.Fatalf("list by number = %d: %s", rec.Code, rec.Body.String())
+	}
+	// A uuid still works, so a caller holding the id is not broken.
+	rec = call(ListRefundsHandler(svc), http.MethodGet, "", map[string]string{"orderNumber": orderID})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list by uuid = %d: %s", rec.Code, rec.Body.String())
+	}
+	// An unknown number is a 404, not a 500.
+	rec = call(CreateRefundHandler(svc), http.MethodPost, `{"amount":1,"reason":"x"}`,
+		map[string]string{"orderNumber": "KHA-ORD-2026-999999"})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown number = %d, want 404: %s", rec.Code, rec.Body.String())
+	}
+	// No key at all is a 404 too, never a 500.
+	rec = call(CreateRefundHandler(svc), http.MethodPost, `{"amount":1,"reason":"x"}`, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("no key = %d, want 404", rec.Code)
 	}
 }

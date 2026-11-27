@@ -2955,6 +2955,45 @@ GET  /admin/audit-logs?action=inventory.adjust          →  ۲ ردیف
 
 ---
 
+### ۴.۱۰۷ بازپرداخت روی باینری واقعی — ۵۰۰ روی هر بازپرداخت — کامیت `fix(refund-route-key)`
+
+```
+POST /admin/orders/KHA-ORD-2026-000009/refunds  →  500
+{"error":"internal error","code":"internal_error"}
+```
+
+لاگ سرور: `invalid input syntax for type uuid: ""`
+
+**علت:** مسیر `{orderNumber}` اعلام می‌کند، ولی هر دو handler
+(`CreateRefundHandler`, `ListRefundsHandler`) `r.PathValue("id")` می‌خواندند — **خالی**.
+پس `order_id` رشتهٔ تهی به ستون uuid می‌رفت.
+
+**یعنی هر بازپرداخت در production ۵۰۰ می‌داد** — عملیات مالی اصلی، بدون استثنا.
+
+**اصلاح:** `resolveOrderKey` — کلید مسیر را می‌خواند (`orderNumber`، با fallback به `id`)،
+اگر uuid بود همان را، وگرنه شمارهٔ تجاری را به id تبدیل می‌کند.
+
+**ترتیب مهم:** بدنه **قبل** از جست‌وجوی سفارش decode می‌شود — درخواست خراب باید ۴۰۰ بگیرد
+بدون رفت‌وبرگشت پایگاه داده. تست موجود (`TestHandlerGuards`) همین ترتیب را تثبیت کرده بود
+و مرا از جابه‌جا کردنش بازداشت.
+
+**شاهد پس از اصلاح:**
+```
+POST /admin/orders/KHA-ORD-2026-000009/refunds   201  {"id":"44c475e0-…"}
+GET  /admin/orders/KHA-ORD-2026-000009/refunds   200  status COMPLETED، ارجاع به attempt
+POST … refunds (بیش از پرداخت)                   409
+POST … refunds (شمارهٔ ناشناخته)                 404
+```
+پایگاه داده: `refunded_total=100000`، یک ردیف در `refunds`.
+
+**تریل حسابرسی (IAM §۷) واقعاً نوشت:**
+```
+action: order.refund.issued | actor_type: ADMIN | actor_id: 3fe33da9… | entity: order
+new_values: {"amount":100000,"status":"PAID","refund_id":"44c475e0-…","refunded_total":100000}
+```
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
