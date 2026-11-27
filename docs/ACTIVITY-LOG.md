@@ -3246,6 +3246,44 @@ audit_logs: order.refund.issued | amount=50000
 
 ---
 
+### ۴.۱۱۶ ورود کارمند در جریان OIDC — پنل حالا می‌تواند وارد شود — کامیت `feat(staff-oidc-login)`
+
+**یافته:** `buildLoginRedirect` **همه** را به صفحهٔ OTP مشتری می‌فرستاد. کلاینت
+`khabavar-admin` با scope `staff` هم به `?phone=&code=` می‌رسید — صفحه‌ای که کارمند هرگز
+نمی‌تواند پر کند. یعنی ورود پنل از مسیر OIDC **ساختاراً ناممکن** بود، نه فقط ۴۰۴.
+
+**افزوده شد:**
+- `isStaffClient` — scope `staff` یا `service_code=admin`
+- `buildLoginRedirect` صفحه را بر اساس نوع کلاینت انتخاب می‌کند
+- `GET /api/v1/auth/admin/login` — فرم ورود کارکنان (HTML)
+- `AdminLoginSubmitHandler` — اگر بدنه `continuation` داشت، جریان OIDC را ادامه می‌دهد و
+  `redirect_url` برمی‌گرداند؛ وگرنه به همان ورود JSON قبلی می‌سپارد
+- محدودیت نرخ §۴.۱۱۳ روی همین مسیر هم اعمال می‌شود
+
+**زنجیرهٔ کامل روی باینری:**
+```
+GET  /oauth/authorize (client=khabavar-admin)  302 → /api/v1/auth/admin/login?continuation=…
+GET  /api/v1/auth/admin/login?continuation=…   200  <title>ورود کارکنان</title>
+POST /api/v1/auth/admin/login (گذرواژهٔ غلط)   401  invalid_credentials
+POST /api/v1/auth/admin/login (گذرواژهٔ درست)  200  redirect_url با code و state
+POST /oauth/token (verifier غلط)               400  invalid_grant
+POST /oauth/token (verifier درست)              200  access_token + id_token + refresh_token
+POST /oauth/token (کد دوباره)                  400
+```
+
+**توکن حاصل واقعاً کار می‌کند:**
+```
+GET /admin/orders           200
+GET /admin/return-requests  200
+GET /me                     401   (توکن کارمند به سطح مشتری راه ندارد)
+```
+
+**تست XSS:** `continuation` با `<script>` به‌عنوان رشتهٔ JS رندر می‌شود، نه markup.
+
+**پوشش identity: ۷۵.۴٪ → ۷۴.۲٪** — کد جدید بیشتر از تستش است؛ صادقانه ثبت می‌شود.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

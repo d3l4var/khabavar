@@ -3346,6 +3346,17 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
 
   /auth/admin/login:
+    get:
+      operationId: getAuthAdminLoginPage
+      tags: [identity]
+      summary: صفحهٔ ورود کارکنان برای جریان OIDC
+      description: authorize پیش‌تر همه را به صفحهٔ OTP مشتری می‌فرستاد، که کارمند هرگز نمی‌تواند آن را پر کند.
+      security: []
+      parameters:
+        - { name: continuation, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: فرم ورود (HTML) }
+        "400": { description: continuation لازم است }
     post:
       operationId: postAuthAdminLogin
       tags: [identity]

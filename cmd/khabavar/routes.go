@@ -231,6 +231,7 @@ type services struct {
 	identity        *identity.Service
 	adminLoginStore identity.AdminLoginStore
 	loginGuard      *identity.AdminLoginGuard
+	oidc            *identity.OIDCService
 	auditor         authorization.Auditor
 	cfg             config.Config
 	catList         *catalog.AdminListStore
@@ -291,8 +292,10 @@ func mountRoutes(api *apiMux, s services) {
 	// (ADR-ARCH-008). The wrapper enforces the Idempotency-Key header.
 	// Staff login on the API origin (the identity unit has its own copy; the panel talks
 	// to whichever host serves /api/v1).
-	api.public("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(s.identity, s.adminLoginStore,
-		identity.WithAdminLoginGuard(s.loginGuard, s.auditor)))
+	// The submit handler serves both shapes: a plain JSON login, and the OIDC page flow that
+	// carries a continuation token and answers with a redirect_url.
+	api.public("POST /api/v1/auth/admin/login", identity.AdminLoginSubmitHandler(s.identity,
+		s.oidc, s.adminLoginStore, identity.WithAdminLoginGuard(s.loginGuard, s.auditor)))
 	api.public("POST /api/v1/oauth/logout", identity.LogoutHandler())
 	api.public("POST /api/v1/payments/webhook", commerce.PaymentWebhookHandler(s.commerce, commerce.PaymentWebhookSecret(s.cfg.PaymentWebhookSecret)))
 	api.public("GET /api/v1/payments/return", commerce.PaymentReturnHandler(s.cfg.StorefrontBaseURL))

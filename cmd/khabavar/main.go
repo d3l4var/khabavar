@@ -104,6 +104,11 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 		identity.NewDBAdminLoginStore(pool.Pool),
 		identity.WithAdminLoginGuard(identity.NewAdminLoginGuard(10, 5, 15*time.Minute),
 			audit.NewRecorder(pool.Pool))))
+	mux.HandleFunc("GET /api/v1/auth/admin/login", identity.AdminLoginPageHandler())
+	mux.HandleFunc("POST /api/v1/auth/admin/login", identity.AdminLoginSubmitHandler(svc,
+		oidcSvc, identity.NewDBAdminLoginStore(pool.Pool),
+		identity.WithAdminLoginGuard(identity.NewAdminLoginGuard(10, 5, 15*time.Minute),
+			audit.NewRecorder(pool.Pool))))
 	mux.HandleFunc("GET /oauth/authorize", identity.AuthorizeHandler(oidcSvc))
 	mux.HandleFunc("POST /oauth/token", identity.TokenHandler(oidcSvc))
 	hh.SetReady(true)
@@ -148,6 +153,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 		time.Duration(cfg.AuthCodeTTLSeconds)*time.Second,
 		time.Duration(cfg.AccessTokenTTL)*time.Second,
 		time.Duration(cfg.RefreshTokenTTL)*time.Second)
+	mux.HandleFunc("GET /api/v1/auth/admin/login", identity.AdminLoginPageHandler())
 	mux.HandleFunc("GET /oauth/authorize", identity.AuthorizeHandler(apiOIDCSvc))
 	mux.HandleFunc("POST /oauth/token", identity.TokenHandler(apiOIDCSvc))
 
@@ -204,6 +210,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 		identity:        apiIdentitySvc,
 		adminLoginStore: identity.NewDBAdminLoginStore(pool.Pool),
 		loginGuard:      identity.NewAdminLoginGuard(10, 5, 15*time.Minute),
+		oidc:            apiOIDCSvc,
 		auditor:         auditor,
 		catList:         catalog.NewAdminListStore(pool.Pool),
 		idem:            commerce.NewDBStore(pool.Pool),

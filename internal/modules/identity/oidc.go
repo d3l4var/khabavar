@@ -291,7 +291,7 @@ func (s *OIDCService) Authorize(ctx context.Context, req AuthorizeRequest, beare
 			return AuthorizeResult{}, err
 		}
 		return AuthorizeResult{
-			RedirectURL:       buildLoginRedirect(req.RedirectURI, req.State, ct),
+			RedirectURL:       buildLoginRedirect(client, req.RedirectURI, req.State, ct),
 			RequiresLogin:     true,
 			ContinuationToken: ct,
 		}, nil
@@ -599,8 +599,14 @@ func appendQuery(base, k1, v1, k2, v2 string) string {
 	return base + sep + k1 + "=" + v1 + "&" + k2 + "=" + v2
 }
 
-func buildLoginRedirect(redirectURI, state, continuation string) string {
-	return "/api/v1/auth/otp/login?continuation=" + continuation + "&redirect_uri=" + redirectURI + "&state=" + state
+// buildLoginRedirect picks the page that can actually authenticate this client. It used to
+// send everyone to the customer OTP page, which a staff member can never satisfy.
+func buildLoginRedirect(client *OIDCClient, redirectURI, state, continuation string) string {
+	page := "/api/v1/auth/otp/login"
+	if client != nil && isStaffClient(client.Scopes, client.ServiceCode) {
+		page = "/api/v1/auth/admin/login"
+	}
+	return page + "?continuation=" + continuation + "&redirect_uri=" + redirectURI + "&state=" + state
 }
 
 func bearerFromHeader(r *http.Request) string {
