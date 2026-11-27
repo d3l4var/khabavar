@@ -95,16 +95,32 @@ func TestPG_CustomerHTTPHandlers(t *testing.T) {
 		t.Fatalf("list addresses = %d: %s", rec.Code, rec.Body.String())
 	}
 
-	// The route is PATCH but the handler requires the full address (province, city and
-	// address_line), i.e. it behaves like a PUT. Pinned here so the divergence is visible;
-	// making it a real partial update is a contract decision.
-	if rec := call(UpdateAddressHandler(store), http.MethodPatch, `{"title":"محل کار"}`, map[string]string{"id": addr.ID}, true); rec.Code != http.StatusBadRequest {
-		t.Fatalf("partial address patch = %d, want 400 (the handler is a full replace)", rec.Code)
+	// PATCH is a real partial update: a single field changes and the rest survive.
+	if rec := call(UpdateAddressHandler(store), http.MethodPatch, `{"city":"کرج"}`, map[string]string{"id": addr.ID}, true); rec.Code != http.StatusOK {
+		t.Fatalf("partial patch = %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := call(UpdateAddressHandler(store), http.MethodPatch,
-		`{"title":"محل کار","recipient_name":"مشتری","phone":"09120000001","province":"تهران",`+
-			`"city":"تهران","address_line":"خیابان دوم","postal_code":"1234567890"}`, map[string]string{"id": addr.ID}, true); rec.Code != http.StatusOK {
-		t.Fatalf("update address = %d: %s", rec.Code, rec.Body.String())
+	after, err := store.ListAddresses(ctx, customerID)
+	if err != nil || len(after) != 1 {
+		t.Fatalf("list after patch = %+v, %v", after, err)
+	}
+	if after[0].City != "کرج" {
+		t.Fatalf("city after patch = %q, want کرج", after[0].City)
+	}
+	if after[0].Province != "تهران" || after[0].AddressLine != "خیابان اول" {
+		t.Fatalf("the partial patch clobbered a field: %+v", after[0])
+	}
+	// Clearing a REQUIRED field is refused: the merged result is validated, not just the input.
+	if rec := call(UpdateAddressHandler(store), http.MethodPatch, `{"city":""}`, map[string]string{"id": addr.ID}, true); rec.Code != http.StatusBadRequest {
+		t.Fatalf("clearing a required field = %d, want 400", rec.Code)
+	}
+	// An unknown address is a 404, and another customer's address cannot be patched.
+	if rec := call(UpdateAddressHandler(store), http.MethodPatch, `{"city":"کرج"}`,
+		map[string]string{"id": "00000000-0000-0000-0000-000000000000"}, true); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown address = %d, want 404", rec.Code)
+	}
+	// A broken body is still a 400.
+	if rec := call(UpdateAddressHandler(store), http.MethodPatch, `{`, map[string]string{"id": addr.ID}, true); rec.Code != http.StatusBadRequest {
+		t.Fatalf("broken patch = %d, want 400", rec.Code)
 	}
 	if rec := call(DeleteAddressHandler(store), http.MethodDelete, "", map[string]string{"id": addr.ID}, true); rec.Code != http.StatusNoContent {
 		t.Fatalf("delete address = %d: %s", rec.Code, rec.Body.String())
