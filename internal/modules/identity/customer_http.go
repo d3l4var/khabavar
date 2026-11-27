@@ -9,9 +9,28 @@ import (
 )
 
 // MeHandler serves GET /api/v1/me.
+
+// requireCustomer returns the authenticated customer id, or writes 401 and reports false.
+// The route is behind AuthenticateCustomer, but a handler that trusts the context blindly
+// turns a missing identity into a 500 from the store instead of a 401.
+func requireCustomer(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := authorization.CustomerID(r.Context())
+	if id == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "authentication required", "code": "unauthorized",
+		})
+		return "", false
+	}
+	return id, true
+}
+
 func MeHandler(store CustomerStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p, err := store.Profile(r.Context(), authorization.CustomerID(r.Context()))
+		customerID, ok := requireCustomer(w, r)
+		if !ok {
+			return
+		}
+		p, err := store.Profile(r.Context(), customerID)
 		if err != nil {
 			writeCustomerErr(w, err)
 			return
@@ -23,7 +42,11 @@ func MeHandler(store CustomerStore) http.HandlerFunc {
 // ListAddressesHandler serves GET /api/v1/me/addresses.
 func ListAddressesHandler(store CustomerStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		list, err := store.ListAddresses(r.Context(), authorization.CustomerID(r.Context()))
+		customerID, ok := requireCustomer(w, r)
+		if !ok {
+			return
+		}
+		list, err := store.ListAddresses(r.Context(), customerID)
 		if err != nil {
 			writeCustomerErr(w, err)
 			return
@@ -39,7 +62,11 @@ func CreateAddressHandler(store CustomerStore) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		id, err := store.CreateAddress(r.Context(), authorization.CustomerID(r.Context()), a)
+		customerID, ok := requireCustomer(w, r)
+		if !ok {
+			return
+		}
+		id, err := store.CreateAddress(r.Context(), customerID, a)
 		if err != nil {
 			writeCustomerErr(w, err)
 			return
@@ -55,7 +82,11 @@ func UpdateAddressHandler(store CustomerStore) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if err := store.UpdateAddress(r.Context(), authorization.CustomerID(r.Context()), r.PathValue("id"), a); err != nil {
+		customerID, ok := requireCustomer(w, r)
+		if !ok {
+			return
+		}
+		if err := store.UpdateAddress(r.Context(), customerID, r.PathValue("id"), a); err != nil {
 			writeCustomerErr(w, err)
 			return
 		}
@@ -66,7 +97,11 @@ func UpdateAddressHandler(store CustomerStore) http.HandlerFunc {
 // DeleteAddressHandler serves DELETE /api/v1/me/addresses/{id}.
 func DeleteAddressHandler(store CustomerStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := store.DeleteAddress(r.Context(), authorization.CustomerID(r.Context()), r.PathValue("id")); err != nil {
+		customerID, ok := requireCustomer(w, r)
+		if !ok {
+			return
+		}
+		if err := store.DeleteAddress(r.Context(), customerID, r.PathValue("id")); err != nil {
 			writeCustomerErr(w, err)
 			return
 		}
