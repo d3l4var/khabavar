@@ -3059,6 +3059,38 @@ forward-only اعمال شد. **اگر این را نمی‌دیدم، هر مر
 
 ---
 
+### ۴.۱۱۰ چرخهٔ مرجوعی — قابلیت نیمه‌کاره — کامیت `feat(return-transitions)`
+
+**یافته:** مشتری می‌توانست درخواست مرجوعی ثبت کند و **هیچ راهی برای پردازشش وجود نداشت**.
+پنج وضعیت تعریف شده بود (`REQUESTED`, `APPROVED`, `REJECTED`, `RECEIVED`, `REFUNDED`) ولی
+هیچ متد انتقال و هیچ مسیر ادمینی نبود. درخواست تا ابد در `REQUESTED` می‌ماند.
+
+**افزوده شد:**
+- `returnTransitions` — تنها نقشهٔ مجاز: `REQUESTED → APPROVED → RECEIVED → REFUNDED`،
+  `REQUESTED → REJECTED`. هر چیز دیگر ۴۰۹.
+- `TransitionReturn` — `UPDATE … WHERE id=$1 AND status=$2`؛ وضعیت مبدأ در WHERE است، پس
+  **دو تصمیم همزمان نمی‌توانند هر دو موفق شوند** — بازنده صفر ردیف می‌گیرد و ۴۰۹.
+- `DecideReturn` / `ReceiveReturn` + سه مسیر ادمین با مجوز `order.manage`.
+- رد بدون یادداشت ۴۰۰ است: مشتری‌ای که درخواستش رد شده، مستحق دلیل است.
+
+**شاهد روی باینری:**
+```
+POST …/receive  قبل از approve   409  invalid_return_transition (current REQUESTED)
+POST …/reject   بدون یادداشت     400  decision_note_required
+POST …/approve                   200  status APPROVED، note «تأیید»
+POST …/approve  دوباره           409
+POST …/receive                   200  status RECEIVED
+```
+پایگاه داده: `RECEIVED|رسید`
+
+قرارداد: ۱۳۰ مسیر mount، ۱۳۰ اعلان‌شده، **۰ MOUNTED BUT NOT IN THE CONTRACT**.
+پوشش commerce: ۸۸.۸٪ → **۸۸.۷٪** (با ۳۰۹ خط جدید پوشیده‌شده).
+
+**بازپرداخت گام جداگانه ماند** — `RECEIVED → REFUNDED` عمداً به `CreateRefund` وصل نشد،
+چون جابه‌جایی پول باید همان مسیر حسابرسی‌شدهٔ بازپرداخت را طی کند، نه یک مسیر موازی.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

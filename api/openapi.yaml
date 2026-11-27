@@ -2128,6 +2128,74 @@ paths:
         "201": { description: رویداد ثبت شد }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /admin/return-requests/{id}/approve:
+    post:
+      operationId: postAdminReturnRequestsIdApprove
+      tags: [admin-orders]
+      summary: تأیید درخواست مرجوعی
+      description: REQUESTED → APPROVED. تصمیم کارمند است؛ مشتری فقط درخواست ثبت می‌کند.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string }
+      responses:
+        "200": { description: درخواست تأیید شد }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: انتقال نامعتبر از وضعیت فعلی }
+  /admin/return-requests/{id}/reject:
+    post:
+      operationId: postAdminReturnRequestsIdReject
+      tags: [admin-orders]
+      summary: رد درخواست مرجوعی
+      description: REQUESTED → REJECTED. یادداشت الزامی است — مشتری مستحق دلیل است.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string }
+      responses:
+        "200": { description: درخواست رد شد }
+        "400": { description: یادداشت الزامی است }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: انتقال نامعتبر از وضعیت فعلی }
+  /admin/return-requests/{id}/receive:
+    post:
+      operationId: postAdminReturnRequestsIdReceive
+      tags: [admin-orders]
+      summary: ثبت دریافت کالای مرجوعی
+      description: APPROVED → RECEIVED. پول جابه‌جا نمی‌شود؛ بازپرداخت گام جداگانهٔ حسابرسی‌شده است.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string }
+      responses:
+        "200": { description: دریافت ثبت شد }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: انتقال نامعتبر از وضعیت فعلی }
   /admin/orders/{orderNumber}/refunds:
     get:
       operationId: getAdminOrdersOrderNumberRefunds

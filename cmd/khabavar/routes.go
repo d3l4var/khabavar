@@ -33,6 +33,9 @@ import (
 var adminPermissions = map[string]string{
 	// ── commerce: refunds are FINANCE-exclusive, reconciliation is a finance read ──
 	"POST /api/v1/admin/orders/{orderNumber}/refunds": "order.refund.approve",
+	"POST /api/v1/admin/return-requests/{id}/approve": "order.manage",
+	"POST /api/v1/admin/return-requests/{id}/reject":  "order.manage",
+	"POST /api/v1/admin/return-requests/{id}/receive": "order.manage",
 	"GET /api/v1/admin/orders/{orderNumber}/refunds":  "order.view",
 	"GET /api/v1/admin/orders/{id}/reconcile":         "reports.financial.view",
 
@@ -266,6 +269,10 @@ func mountRoutes(api *apiMux, s services) {
 	api.customer("GET /api/v1/me", identity.MeHandler(s.customer))
 	api.customer("GET /api/v1/me/orders", commerce.MyOrdersHandler(s.orderList))
 	api.customer("POST /api/v1/cart/merge", commerce.MergeCartHandler(s.commerce))
+	// The claim lifecycle is staff-only: a customer files, staff decide.
+	api.admin("POST /api/v1/admin/return-requests/{id}/approve", commerce.ApproveReturnHandler(s.commerce))
+	api.admin("POST /api/v1/admin/return-requests/{id}/reject", commerce.RejectReturnHandler(s.commerce))
+	api.admin("POST /api/v1/admin/return-requests/{id}/receive", commerce.ReceiveReturnHandler(s.commerce))
 	api.customer("POST /api/v1/orders/{id}/return-requests",
 		commerce.Idempotent(s.idem, "return-request", commerce.CreateReturnRequestHandler(s.commerce)))
 	api.customer("GET /api/v1/me/addresses", identity.ListAddressesHandler(s.customer))
