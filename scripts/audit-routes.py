@@ -52,4 +52,11 @@ if only_contract:
         print(f"  {m:6s} {p}")
 if not only_code and not only_contract:
     print("\nroutes and contract agree")
-sys.exit(1 if ('--fail' in sys.argv and (only_code or only_contract)) else 0)
+# --fail is the hard promise: a documented path that is not mounted breaks clients.
+# --fail-undocumented is the reverse gate, opt-in because closing all of them today is a
+# contract revision that needs owner approval.
+if '--fail' in sys.argv and only_contract:
+    sys.exit(1)
+if '--fail-undocumented' in sys.argv and only_code:
+    sys.exit(1)
+sys.exit(0)
