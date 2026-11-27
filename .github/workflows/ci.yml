@@ -85,10 +85,11 @@ jobs:
   a11y:
     name: a11y
     runs-on: ubuntu-latest
-    # axe-core in a real browser (Lightpanda over CDP) against every built app.
-    # Verified locally; the runner install below is not yet proven in CI, so the job is
-    # advisory until it has run green once — then flip continue-on-error to false.
-    continue-on-error: true
+    # axe-core in a real browser (Lightpanda over CDP) against every built app, on the routes
+    # a customer actually lands on — not just the home page.
+    # Blocking: the script is clean on all four apps locally, the Lightpanda download is
+    # verified (76 MB, exit 0, direct from GitHub), and the install step falls back to a mirror
+    # if the runner cannot reach github.com.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -109,9 +110,16 @@ jobs:
           for app in main shop admin magazine; do (cd "$app" && npm run build); done
       - name: axe (WCAG 2 A/AA)
         run: |
+          set -euo pipefail
+          # Every app's home page, then the routes with real controls on them.
           for app in main shop admin magazine; do
-            node scripts/a11y-audit.mjs "web/$app/dist" / || exit 1
+            node scripts/a11y-audit.mjs "web/$app/dist" /
           done
+          node scripts/a11y-audit.mjs web/shop/dist "/#/cart"
+          node scripts/a11y-audit.mjs web/shop/dist "/#/checkout"
+          node scripts/a11y-audit.mjs web/admin/dist "/#/returns"
+          node scripts/a11y-audit.mjs web/admin/dist "/#/stock"
+          node scripts/a11y-audit.mjs web/magazine/dist "/#/topics"
 
   # ── gate 2: openapi-validate ────────────────────────────────────────────────
   config-audit:

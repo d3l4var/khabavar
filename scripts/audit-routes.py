@@ -10,7 +10,10 @@ Usage:  python3 scripts/audit-routes.py [--fail]
 import re
 import sys
 
-ROUTES = ['cmd/khabavar/routes.go', 'cmd/khabavar/main.go']
+# Every file under cmd/khabavar, not a fixed list: moving a route table into its own file made
+# this audit blind to those routes and reported a false "declared but not mounted".
+import glob
+ROUTES = sorted(f for f in glob.glob('cmd/khabavar/*.go') if not f.endswith('_test.go'))
 CONTRACT = 'api/openapi.yaml'
 PREFIX = '/api/v1'
 
