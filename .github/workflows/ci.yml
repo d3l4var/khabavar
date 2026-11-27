@@ -121,6 +121,9 @@ jobs:
       - name: routes vs contract (advisory until R-07 is decided)
         continue-on-error: true
         run: python3 scripts/audit-routes.py
+      - name: contract conformance (declared query params must be read)
+        continue-on-error: true
+        run: python3 scripts/audit-contract-conformance.py
 
   openapi-validate:
     name: openapi-validate
