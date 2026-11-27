@@ -2581,6 +2581,44 @@ return "", fmt.Errorf("inventory: reservation quantity must be > 0") // → 500
 
 ---
 
+### ۴.۹۷ commerce: سطح پرداخت — و یک یافتهٔ امنیتی جدی — کامیت `test(commerce-payment-http)`
+
+**`TestPG_PaymentHTTPHandlers`** — `GetOrderByNumberHandler` ۶۷٪،
+`CreatePaymentIntentHandler` ۶۲٪، `ConfirmPaymentHandler` ۶۲٪، `ListRefunds` ۶۰٪:
+- شمارهٔ سفارش → ۲۰۰ و همان id؛ شمارهٔ ناشناخته → ۴۰۴
+- ایجاد intent → ۲۰۱؛ سفارش ناشناخته → ۴۰۴
+- **تکرار webhook → ۲۰۰ با `already_paid`** (قرارداد idempotent)
+- سفارش واقعاً به PAID رفت
+- فهرست بازپرداخت سفارش بدون بازپرداخت → **لیست خالی**، نه ۴۰۴
+
+## ⚠️ یافتهٔ امنیتی — تصمیم مالک لازم است
+
+هنگام نوشتن تست، انتظار داشتم «تأیید پرداخت با intent پرداختنشده» رد شود. **نشد:**
+
+```
+POST /api/v1/orders/{id}/confirm-payment   → 200 {"status":"paid"}
+```
+
+**علت:** مسیر روی `api.public` mount شده، **بدون امضا و بدون احراز هویت**، و
+`ConfirmPaymentForOrder` وضعیت intent را `REQUIRES_PAYMENT` یا `PROCESSING` می‌پذیرد:
+
+```go
+if pi.Status != IntentRequiresPayment && pi.Status != IntentProcessing {
+    return ErrIntentNotSucceeded
+}
+```
+
+یعنی **هر کسی می‌تواند سفارش خودش را PAID کند بدون اینکه پولی رسیده باشد.** مسیر
+HMAC-دار و درست `POST /api/v1/payments/webhook` است که امضا را با
+`PaymentWebhookSecret` بررسی می‌کند — این مسیر آن را دور می‌زند.
+
+**تصمیم مالک لازم است** (سیاست امنیتی): امضا اجباری شود، توکن کارمند لازم شود، یا مسیر
+حذف شود؟ تا آن زمان **رفتار فعلی در تست تثبیت شد** تا بی‌صدا تغییر نکند.
+
+**پوشش: commerce ۸۳.۶٪ → ۸۴.۱٪** — آستانهٔ ۹۰٪ هنوز نه.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
