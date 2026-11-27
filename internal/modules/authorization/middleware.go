@@ -8,6 +8,7 @@ package authorization
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -102,9 +103,16 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
+// writeAuthErr answers the same JSON envelope as every other response. It used to be
+// text/plain, so a client that always parses JSON got a parse error on exactly the 401/403 it
+// needs to branch on.
 func writeAuthErr(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("WWW-Authenticate", `Bearer realm="khabavar-admin"`)
 	w.WriteHeader(status)
-	_, _ = w.Write([]byte(msg + "\n"))
+	code := "unauthorized"
+	if status == http.StatusForbidden {
+		code = "forbidden"
+	}
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg, "code": code})
 }

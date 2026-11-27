@@ -2994,6 +2994,34 @@ new_values: {"amount":100000,"status":"PAID","refund_id":"44c475e0-…","refunde
 
 ---
 
+### ۴.۱۰۸ ۴۰۱/۴۰۳ متن ساده — کامیت `fix(json-auth-errors)`
+
+```
+GET /api/v1/me  →  401  Content-Type: text/plain
+unauthorized
+```
+
+همان کلاس ۴۰۵/۴۰۴، ولی این یکی را mux نمی‌نویسد بلکه گاردهای `authorization` — پس
+`jsonErrors` نمی‌گرفتش.
+
+دو جا اصلاح شد:
+- `writeAuthErr` (که ۴۰۱/۴۰۳ را متنی می‌نوشت) → JSON با کد
+- `Require` که از `http.Error` استفاده می‌کرد → همان `writeAuthErr`
+
+**شاهد:**
+```
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json; charset=utf-8
+{"code":"unauthorized","error":"unauthorized"}
+```
+
+`TestWriteAuthErrIsJSON` و `TestRequireAnswersJSON` هر دو حالت (بدون هویت → ۴۰۱، مجوز
+ردشده → ۴۰۳) و وجود هدر `WWW-Authenticate` را تثبیت می‌کنند.
+
+**پوشش authorization: ۷۶.۱٪ → ۷۶.۹٪**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

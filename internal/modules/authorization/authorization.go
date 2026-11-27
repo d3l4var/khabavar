@@ -41,12 +41,12 @@ func Require(chk PermissionChecker, permission string, next http.Handler) http.H
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uid := AdminUserID(r.Context())
 		if uid == "" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			writeAuthErr(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		ok, err := chk.HasPermission(r.Context(), uid, permission)
 		if err != nil || !ok {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			writeAuthErr(w, http.StatusForbidden, "forbidden")
 			return
 		}
 		next.ServeHTTP(w, r)
