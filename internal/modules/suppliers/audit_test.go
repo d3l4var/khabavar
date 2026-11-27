@@ -42,8 +42,8 @@ func TestSupplierAudit(t *testing.T) {
 
 	// An invalid transition must not be audited.
 	aud.actions = nil
-	if err := svc.UpdateSupplierStatus(ctx, id, "NONSENSE"); !errors.Is(err, ErrInvalidStatus) {
-		t.Fatalf("invalid status = %v, want ErrInvalidStatus", err)
+	if err := svc.UpdateSupplierStatus(ctx, id, "NONSENSE"); !errors.Is(err, ErrUnknownStatus) {
+		t.Fatalf("invalid status = %v, want ErrUnknownStatus", err)
 	}
 	if len(aud.actions) != 0 {
 		t.Fatalf("a rejected transition was audited: %v", aud.actions)

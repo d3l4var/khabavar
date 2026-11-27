@@ -58,11 +58,14 @@ var EvalWeights = map[string]float64{
 
 // Sentinel errors. HTTP handlers map these to status codes.
 var (
-	ErrSupplierNotFound         = errors.New("suppliers: supplier not found")
-	ErrSupplierNameRequired     = errors.New("suppliers: supplier name is required")
-	ErrSupplierProductNotFound  = errors.New("suppliers: supplier product not found")
-	ErrSupplierVariantNotFound  = errors.New("suppliers: supplier variant not found")
-	ErrInvalidStatus            = errors.New("suppliers: invalid status transition")
+	ErrSupplierNotFound        = errors.New("suppliers: supplier not found")
+	ErrSupplierNameRequired    = errors.New("suppliers: supplier name is required")
+	ErrSupplierProductNotFound = errors.New("suppliers: supplier product not found")
+	ErrSupplierVariantNotFound = errors.New("suppliers: supplier variant not found")
+	ErrInvalidStatus           = errors.New("suppliers: invalid status transition")
+	// ErrUnknownStatus is a value that is not a supplier status at all. It is the client's
+	// input error (400), not a state conflict (409) — the two were conflated.
+	ErrUnknownStatus            = errors.New("suppliers: unknown status value")
 	ErrDuplicateSupplierProduct = errors.New("suppliers: supplier+product link already exists")
 	ErrScoreOutOfRange          = errors.New("suppliers: score must be 0-100")
 	ErrNameRequired             = errors.New("suppliers: name required")
@@ -231,7 +234,7 @@ func (s *Service) CreateSupplier(ctx context.Context, sup Supplier) (string, err
 func (s *Service) UpdateSupplierStatus(ctx context.Context, id, newStatus string) error {
 	if newStatus != SupplierActive && newStatus != SupplierProbation &&
 		newStatus != SupplierSuspended && newStatus != SupplierRetired {
-		return ErrInvalidStatus
+		return ErrUnknownStatus
 	}
 	existing, err := s.store.GetSupplier(ctx, id)
 	if err != nil {

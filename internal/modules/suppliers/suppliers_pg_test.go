@@ -77,7 +77,7 @@ func TestPG_SupplierLifecycle(t *testing.T) {
 		t.Fatalf("RETIRED→PROBATION must be allowed: %v", err)
 	}
 	// An unknown status is refused before touching the row.
-	if err := svc.UpdateSupplierStatus(ctx, id, "NOPE"); !errors.Is(err, ErrInvalidStatus) {
+	if err := svc.UpdateSupplierStatus(ctx, id, "NOPE"); !errors.Is(err, ErrUnknownStatus) {
 		t.Fatalf("unknown status: want ErrInvalidStatus, got %v", err)
 	}
 	if err := svc.UpdateSupplierStatus(ctx, "00000000-0000-0000-0000-000000000000", SupplierActive); !errors.Is(err, ErrSupplierNotFound) {

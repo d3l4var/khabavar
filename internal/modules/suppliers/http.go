@@ -165,6 +165,8 @@ func writeSupSvcErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrSupplierNotFound), errors.Is(err, ErrSupplierProductNotFound), errors.Is(err, ErrSupplierVariantNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
+	case errors.Is(err, ErrUnknownStatus):
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "unknown supplier status", "code": "unknown_status"})
 	case errors.Is(err, ErrInvalidStatus):
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "invalid status transition", "code": "invalid_status"})
 	case errors.Is(err, ErrDuplicateSupplierProduct):
