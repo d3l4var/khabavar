@@ -2759,6 +2759,29 @@ POST /api/v1/cart/merge بدون نشست مشتری → 500
 
 ---
 
+### ۴.۱۰۲ commerce به ۹۰٪ رسید — کامیت `test(commerce-threshold)`
+
+**`TestPG_HandlerPathFallbacks`** — هر handler یک شاخهٔ جایگزین دارد برای روتری که
+`PathValue` ست نمی‌کند و id را از مسیر می‌خواند. این شاخه در production **کد مرده** است و
+در CI تست‌نشده بود:
+- `GetOrderHandler`, `CreatePaymentIntentHandler`, `CancelOrderHandler`,
+  `ConfirmPaymentHandler` — همه با مسیر واقعی و **بدون** `SetPathValue`
+- ۴۰۴ یعنی fallback کار نکرده؛ هیچ‌کدام ۴۰۴ نداد
+
+**`TestPG_IdempotencyHelpers`** — `jsonBody` (۰٪): مقدار قابل marshal، و مقدار
+غیرقابل marshal → بایت خالی، نه panic.
+
+**پوشش: commerce ۸۸.۸٪ → ۸۹.۹٪ → ۹۰.۱٪** — آستانهٔ ۹۰٪ برآورده شد.
+
+```
+audit-coverage: all enforced thresholds met
+below threshold but advisory: 0
+```
+
+**هیچ ماژولی زیر آستانه نمانده — نه enforced، نه advisory.**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

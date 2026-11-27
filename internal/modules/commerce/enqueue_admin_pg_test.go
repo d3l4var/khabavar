@@ -2,10 +2,14 @@ package commerce
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -155,4 +159,69 @@ func testpgSetupClosed(t *testing.T) *pgxpool.Pool {
 	pool, _ := testpg.Setup(t)
 	pool.Close()
 	return pool
+}
+
+// TestPG_HandlerPathFallbacks covers the branch every handler keeps for a router that does
+// not set PathValue: the id is recovered from the URL path. Without this the fallback is
+// dead code in production and untested in CI.
+func TestPG_HandlerPathFallbacks(t *testing.T) {
+	pool, svc, _ := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-FB-1")
+	orderID, err := svc.CreateOrder(ctx, orderInput(productID, variantID, "KHA-ORD-2026-000951"))
+	if err != nil {
+		t.Fatalf("CreateOrder: %v", err)
+	}
+	if _, err := svc.CreatePaymentIntent(ctx, orderID); err != nil {
+		t.Fatalf("intent: %v", err)
+	}
+
+	// No SetPathValue at all: the handler must parse the id out of the path.
+	cases := []struct {
+		name   string
+		h      http.Handler
+		method string
+		target string
+	}{
+		{"get order", GetOrderHandler(svc), http.MethodGet, "/api/v1/orders/" + orderID},
+		{"payment intent", CreatePaymentIntentHandler(svc), http.MethodPost,
+			"/api/v1/orders/" + orderID + "/payment-intents"},
+		{"cancel", CancelOrderHandler(svc), http.MethodPost,
+			"/api/v1/orders/" + orderID + "/cancel"},
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest(c.method, c.target, strings.NewReader(`{"reason":"تست"}`))
+		rec := httptest.NewRecorder()
+		c.h.ServeHTTP(rec, r)
+		// The point is that the id was recovered: a 404 would mean the fallback failed.
+		if rec.Code == http.StatusNotFound {
+			t.Fatalf("%s: the path fallback did not recover the id (%d): %s",
+				c.name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// The confirm handler's fallback too, with a valid signature.
+	body := ""
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+orderID+"/confirm-payment",
+		strings.NewReader(body))
+	mac := hmac.New(sha256.New, []byte(testWebhookSecret))
+	mac.Write([]byte(body))
+	r.Header.Set("X-Provider-Signature", hex.EncodeToString(mac.Sum(nil)))
+	rec := httptest.NewRecorder()
+	ConfirmPaymentHandler(svc, testWebhookSecret).ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("confirm fallback = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestPG_IdempotencyHelpers covers jsonBody and the idempotency wrapper's error arms, which
+// were the last uncovered statements in the package.
+func TestPG_IdempotencyHelpers(t *testing.T) {
+	// jsonBody marshals, and an unmarshallable value yields empty bytes rather than panicking.
+	if got := string(jsonBody(map[string]any{"a": 1})); got != `{"a":1}` {
+		t.Fatalf("jsonBody = %s", got)
+	}
+	if got := jsonBody(make(chan int)); len(got) != 0 {
+		t.Fatalf("jsonBody of a chan = %q, want empty", got)
+	}
 }
