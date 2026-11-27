@@ -2413,6 +2413,41 @@ supported version 2
 
 ---
 
+### ۴.۹۲ چهار کامپوننت بی‌استفاده — قرارداد کاملاً پاک — کامیت `docs(contract-zero-warnings)`
+
+تصمیم: **وصل کردن آن‌هایی که داده‌ای واقعی توصیف می‌کنند، حذف آن‌هایی که قابلیتی
+ناموجود را وعده می‌دهند.**
+
+**وصل شد:**
+- **`RefundStatus`** → schema تازهٔ `Refund` ساخته شد و پاسخ `POST /admin/orders/{}/refunds`
+  به آن وصل شد. پیش از این **پاسخ بازپرداخت هیچ schema‌ای نداشت** — فقط ورودی مستند بود.
+- **`ArticleStatus`** → schema تازهٔ `AdminArticleView` (نمای تحریریه با وضعیت گردش کار) و
+  پاسخ `PATCH /admin/articles/{articleId}` به آن وصل شد.
+
+**حذف شد:**
+- **`AcceptLanguage`** — هیچ endpoint‌ای این header را اعلام نمی‌کرد و API تک‌زبانه است.
+- **`SessionInfo`** — مسیر `/auth/sessions` هیچ‌گاه mount نشده بود؛ سندی برای قابلیتی که
+  وجود ندارد.
+
+**پنج خواندن پنل که در جابه‌جایی قبلی گم شده بودند برگشتند.** هنگام حذف ورودی‌های تکراری
+`{id}`، متد `GET` این پنج مسیر هم با آن‌ها رفت: `/admin/orders/{orderNumber}/refunds`,
+`/admin/products/{productId}`, `/admin/suppliers/{supplierId}/evaluations`,
+`/admin/variants/{variantId}/cost-records`, `/admin/variants/{variantId}/price-records`.
+گیت دوطرفه مسیرها **همان‌جا قرمز شد** و مانع از کامیت شدنش شد — یعنی گیت کار کرد.
+
+**یک باگ در ابزار خودم:** regex من `\w` بود و `admin-catalog` (با خط تیره) را نمی‌دید،
+پس هشدار tag را «صفر» گزارش می‌کرد در حالی که دو tag غایب بود. با `[\w-]` اصلاح شد.
+
+**نتیجه:**
+```
+spectral:   0 errors, 0 warnings          (از ۴ هشدار اولیه)
+paths:      115 · operationIds: 126
+routes:     exit 0 (دوطرفه)
+conformance: exit 0
+```
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

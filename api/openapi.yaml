@@ -36,6 +36,10 @@ servers:
     description: Development
 
 tags:
+  - name: admin-catalog
+    description: کاتالوگ در پنل
+  - name: admin-suppliers
+    description: تأمین‌کنندگان در پنل
   - name: content
     description: تحریریهٔ مجله — مقالات، موضوعات و منابع
   - name: ecosystem
@@ -121,14 +125,6 @@ components:
         minimum: 1
         maximum: 100
         default: 20
-    AcceptLanguage:
-      name: Accept-Language
-      in: header
-      description: زبان پاسخ — نسخه اول فقط fa-IR
-      schema:
-        type: string
-        default: fa-IR
-        enum: [fa-IR]
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -330,15 +326,6 @@ components:
         refresh_token: { type: string, description: چرخش در هر استفاده (CIAM §۵) }
         id_token: { type: string, description: فقط با scope openid }
         scope: { type: string }
-
-    SessionInfo:
-      type: object
-      description: نشست فعال این سرویس — نشست هر سرویس مستقل و قابل ابطال جداگانه است
-      properties:
-        session_id: { type: string, format: uuid }
-        service_code: { type: string, enum: [main, shop, magazine, admin] }
-        expires_at: { type: string, format: date-time }
-        created_at: { type: string, format: date-time }
 
     CategoryNode:
       type: object
@@ -990,6 +977,19 @@ components:
         amount: { $ref: "#/components/schemas/Money" }
         reason: { type: string, maxLength: 500 }
 
+    Refund:
+      type: object
+      description: بازپرداخت ثبت‌شده — وضعیت از RefundStatus
+      properties:
+        id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        order_item_id: { type: string, format: uuid }
+        payment_attempt_id: { type: string, format: uuid }
+        amount: { $ref: "#/components/schemas/Money" }
+        reason: { type: string }
+        status: { $ref: "#/components/schemas/RefundStatus" }
+        created_at: { type: string, format: date-time }
+
     AdminArticleUpsert:
       type: object
       required: [title, body, language]
@@ -1015,6 +1015,19 @@ components:
               source_type: { type: string, enum: [JOURNAL, BOOK, GUIDELINE, EXPERT, OTHER] }
               citation: { type: string }
               url: { type: string }
+
+    AdminArticleView:
+      type: object
+      description: نمای تحریریه — شامل وضعیت گردش کار که ویترین نمی‌بیند
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        title: { type: string }
+        language: { type: string }
+        status: { $ref: "#/components/schemas/ArticleStatus" }
+        published_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     ReviewInput:
       type: object
@@ -1716,6 +1729,18 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
 
   /admin/products/{productId}:
+    get:
+      operationId: getAdminProductsProductId
+      tags: [admin-catalog]
+      summary: جزئیات محصول در پنل (شامل پیش‌نویس)
+      description: خواندن پنل که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
     patch:
       operationId: patchAdminProductsProductId
       tags: [admin-products]
@@ -1844,6 +1869,18 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
 
   /admin/suppliers/{supplierId}/evaluations:
+    get:
+      operationId: getAdminSuppliersSupplierIdEvaluations
+      tags: [admin-suppliers]
+      summary: ارزیابی‌های یک تأمین‌کننده
+      description: خواندن پنل که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: supplierId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       operationId: postAdminSuppliersSupplierIdEvaluations
       tags: [admin-supply]
@@ -1927,6 +1964,18 @@ paths:
 
   # ───────────────────────── admin — قیمت‌گذاری ─────────────────────────
   /admin/variants/{variantId}/cost-records:
+    get:
+      operationId: getAdminVariantsVariantIdCost-records
+      tags: [admin-pricing]
+      summary: تاریخچهٔ بهای تمام‌شدهٔ واریانت
+      description: خواندن پنل که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       operationId: postAdminVariantsVariantIdCostRecords
       tags: [admin-pricing]
@@ -1946,6 +1995,18 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /admin/variants/{variantId}/price-records:
+    get:
+      operationId: getAdminVariantsVariantIdPrice-records
+      tags: [admin-pricing]
+      summary: تاریخچهٔ قیمت فروش واریانت
+      description: خواندن پنل که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       operationId: postAdminVariantsVariantIdPriceRecords
       tags: [admin-pricing]
@@ -2068,6 +2129,18 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
 
   /admin/orders/{orderNumber}/refunds:
+    get:
+      operationId: getAdminOrdersOrderNumberRefunds
+      tags: [admin-orders]
+      summary: فهرست بازپرداخت‌های یک سفارش
+      description: خواندن پنل که پیش‌تر فقط در کد بود؛ اکنون در قرارداد قابل کشف است.
+      security: []
+      parameters:
+        - { name: orderNumber, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: پاسخ موفق }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       operationId: postAdminOrdersOrderNumberRefunds
       tags: [admin-orders]
@@ -2083,7 +2156,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RefundInput" }
       responses:
-        "201": { description: بازپرداخت در گردش پردازش }
+        "201":
+          description: بازپرداخت در گردش پردازش
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Refund" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409":
           description: سقف بازپرداخت این سفارش/قلم گذشت
@@ -2150,7 +2227,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/AdminArticleUpsert" }
       responses:
-        "200": { description: ذخیره شد }
+        "200":
+          description: ذخیره شد
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminArticleView" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /admin/articles/{articleId}/review:
