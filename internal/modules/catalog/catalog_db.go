@@ -3,11 +3,13 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -76,6 +78,11 @@ func (s *DBStore) CreateProduct(ctx context.Context, p Product) (string, error) 
 		nullableStr(p.SleepRelevance), nullableStr(p.SpecSource),
 		nullableTime(p.SpecLastReviewedAt), p.Status).Scan(&id)
 	if err != nil {
+		// A duplicate slug is the operator's mistake, not a server fault: two products cannot
+		// share a URL. It used to surface as 500 "server error", which told nobody anything.
+		if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return "", ErrSlugTaken
+		}
 		return "", err
 	}
 	for _, cid := range p.CategoryIDs {

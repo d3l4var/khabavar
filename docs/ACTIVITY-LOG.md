@@ -3540,6 +3540,37 @@ this order is not readable by the caller
 
 ---
 
+### ۴.۱۲۶ پنل — سه صفحهٔ باقی‌مانده و دو باگ — کامیت `fix(panel-create-audit)`
+
+**نقش‌ها:** درست — کد، نام، توضیح و فهرست مجوزها برای هر نقش.
+
+**Audit:** داده داشت ولی **بی‌مصرف** بود — فقط action، entity_type و `2026-11-27T20:31:03Z` خام.
+بدون actor، بدون شناسهٔ رکورد، بدون تاریخ شمسی. حالا:
+```
+admin.post   کارمند · 52697f58…   admin_route   ۱۴۰۵/۹/۷, ۰:۰۱
+permission: inventory.adjust · path: /api/v1/admin/stock/movements · status: 201
+
+order.refund.issued  کارمند · 52697f58…  order · 9010cce8…  ۱۴۰۵/۹/۶, ۲۰:۰۵
+amount: 50000 · status: CLOSED · refund_id: 4ac516c8-…
+```
+
+**باگ ۱ — ایجاد محصول ۵۰۰ می‌داد.** علت واقعی با یک probe روی پایگاه داده پیدا شد:
+```
+duplicate key value violates unique constraint "products_slug_key"
+```
+یعنی خطای کلاینت به‌صورت `internal error` برمی‌گشت — **نهمین نمونهٔ همین کلاس**. حالا
+`pgconn.PgError` با کد `23505` به `ErrSlugTaken` نگاشت می‌شود → **۴۰۹ `duplicate_slug`**،
+و پیام فارسی: «این اسلاگ قبلاً استفاده شده است.»
+
+**باگ ۲ — همهٔ مسیرهای جزئیات/انتشار ۴۰۴ می‌دادند.** مسیرها `{productId}` و `{variantId}`
+اعلام می‌کنند، handlerها `PathValue("id")` می‌خواندند → رشتهٔ تهی. **دقیقاً همان باگ مسیر
+بازپرداخت**، این بار در چهار handler. `pathID(r, "productId", "variantId", "id")` اضافه شد.
+
+**شاهد کامل:** ایجاد `panel-create-2` → صفحهٔ جزئیات با DRAFT و «دروازهٔ انتشار ناقص»؛
+اسلاگ تکراری → `409 duplicate_slug` و فرم باز می‌ماند (قبلاً کل فهرست با «not found» پاک می‌شد).
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

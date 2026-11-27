@@ -91,6 +91,8 @@ func writeCatalogErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "sku already exists", "code": "duplicate_sku"})
 	case errors.Is(err, ErrInvalidStatus):
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "invalid status transition", "code": "invalid_status"})
+	case errors.Is(err, ErrSlugTaken):
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "slug already exists", "code": "duplicate_slug"})
 	case errors.Is(err, ErrSlugRequired):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "slug required"})
 	default:

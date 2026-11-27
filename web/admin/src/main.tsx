@@ -399,9 +399,22 @@ function AuditScreen() {
               <Card>
                 <div style={{ display: 'flex', gap: 'var(--kh-space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
                   <Badge>{e.action}</Badge>
-                  <span style={{ fontSize: 'var(--kh-text-sm)' }}>{e.entity_type}</span>
-                  <span style={{ color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>{e.created_at}</span>
+                  {/* Who and what: an audit row without the actor answers nothing. */}
+                  <span style={{ fontSize: 'var(--kh-text-sm)' }} title={e.actor_id || ''}>
+                    {e.actor_type === 'ADMIN' ? 'کارمند' : e.actor_type === 'CUSTOMER' ? 'مشتری' : e.actor_type}
+                    {e.actor_id ? ` · ${e.actor_id.slice(0, 8)}…` : ''}
+                  </span>
+                  <span style={{ fontSize: 'var(--kh-text-sm)' }} title={e.entity_id || ''}>
+                    {e.entity_type}
+                    {e.entity_id ? ` · ${e.entity_id.slice(0, 8)}…` : ''}
+                  </span>
+                  <span style={{ color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>{formatAuditTime(e.created_at)}</span>
                 </div>
+                {auditDetail(e.new_values) ? (
+                  <p style={{ margin: 'var(--kh-space-2) 0 0', color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>
+                    {auditDetail(e.new_values)}
+                  </p>
+                ) : null}
               </Card>
             </li>
           ))}
@@ -409,6 +422,43 @@ function AuditScreen() {
       ) : null}
     </Container>
   )
+}
+
+// formatAuditTime renders the audit timestamp in the reader's calendar and timezone. The raw
+// ISO UTC string ("2026-11-27T20:31:03Z") is not readable for a Persian-speaking operator.
+function formatAuditTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  try {
+    return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'short', timeStyle: 'short' }).format(d)
+  } catch {
+    return d.toISOString()
+  }
+}
+
+// auditDetail pulls the one or two fields that make an entry meaningful, without dumping the
+// whole new_values blob into the list.
+function auditDetail(nv: unknown): string {
+  if (!nv || typeof nv !== 'object') return ''
+  const o = nv as Record<string, unknown>
+  const parts: string[] = []
+  for (const k of ['permission', 'path', 'amount', 'status', 'refund_id', 'reason']) {
+    const v = o[k]
+    if (typeof v === 'string' || typeof v === 'number') parts.push(`${k}: ${v}`)
+  }
+  return parts.join(' · ')
+}
+
+// productCreateMessage turns the API's machine error into something an operator can act on.
+// The server message is English and names the constraint, not the fix.
+function productCreateMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : ''
+  if (raw.includes('duplicate_slug') || raw.includes('slug already exists')) {
+    return 'این اسلاگ قبلاً استفاده شده است. اسلاگ دیگری انتخاب کنید.'
+  }
+  if (raw.includes('slug required')) return 'اسلاگ الزامی است.'
+  if (raw.includes('invalid_body')) return 'اطلاعات فرم کامل نیست.'
+  return raw || 'ایجاد محصول ناموفق بود.'
 }
 
 function RolesScreen() {
@@ -692,7 +742,7 @@ function NewProductForm({ onCreated }: { onCreated: (id: string) => void }) {
           setOpen(false)
           onCreated(created.id)
         } catch (err) {
-          setMsg(err instanceof Error ? err.message : 'ایجاد محصول ناموفق بود.')
+          setMsg(productCreateMessage(err))
         } finally {
           setBusy(false)
         }

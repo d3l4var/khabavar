@@ -34,6 +34,19 @@ type productRequest struct {
 	SpecSource         string     `json:"spec_source"`
 	SpecLastReviewedAt *time.Time `json:"spec_last_reviewed_at"`
 	CategoryIDs        []string   `json:"category_ids"`
+	Status             string     `json:"status"`
+}
+
+// pathID reads the path parameter whatever the route table calls it. The catalog routes declare
+// {productId} and {variantId}; the handlers read PathValue("id") and therefore always got "".
+// Every one of these endpoints answered 404 on a real id — the same defect the refund path had.
+func pathID(r *http.Request, names ...string) string {
+	for _, n := range names {
+		if v := r.PathValue(n); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // CreateProductHandler serves POST /api/v1/admin/products.
@@ -46,7 +59,16 @@ func CreateProductHandler(svc *Service) http.HandlerFunc {
 			})
 			return
 		}
+		// A product is a draft until the publish gate passes. The column has DEFAULT 'DRAFT',
+		// but the INSERT names status explicitly, so an empty string from a client that does not
+		// send the field overrode that default and violated the status CHECK — every create from
+		// the panel answered 500.
+		status := req.Status
+		if status == "" {
+			status = ProductDraft
+		}
 		id, err := svc.CreateProduct(r.Context(), Product{
+			Status:             status,
 			Title:              req.Title,
 			Slug:               req.Slug,
 			BrandID:            req.BrandID,
@@ -71,7 +93,7 @@ func CreateProductHandler(svc *Service) http.HandlerFunc {
 // including DRAFT/PAUSED products the storefront must never see.
 func AdminProductDetailHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		d, err := svc.GetProductDetail(r.Context(), r.PathValue("id"))
+		d, err := svc.GetProductDetail(r.Context(), pathID(r, "productId", "variantId", "id"))
 		if err != nil {
 			writeCatalogErr(w, err)
 			return
@@ -85,7 +107,7 @@ func AdminProductDetailHandler(svc *Service) http.HandlerFunc {
 // missing-field reason rather than a raw CHECK violation.
 func PublishProductHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+		id := pathID(r, "productId", "variantId", "id")
 		if err := svc.PublishProduct(r.Context(), id); err != nil {
 			if errors.Is(err, ErrPublishGateMissing) {
 				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
@@ -119,7 +141,7 @@ func ProductStatusHandler(svc *Service) http.HandlerFunc {
 			})
 			return
 		}
-		id := r.PathValue("id")
+		id := pathID(r, "productId", "variantId", "id")
 		var err error
 		switch req.Status {
 		case ProductPaused:
@@ -183,7 +205,7 @@ func UpdateProductHandler(svc *Service) http.HandlerFunc {
 		if req.CategoryIDs != nil {
 			patch.CategoryIDs = *req.CategoryIDs
 		}
-		id := r.PathValue("id")
+		id := pathID(r, "productId", "variantId", "id")
 		updated, err := svc.UpdateProduct(r.Context(), id, patch)
 		if err != nil {
 			if errors.Is(err, ErrPublishGateMissing) {

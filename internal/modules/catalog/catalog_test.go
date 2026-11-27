@@ -3,6 +3,9 @@ package catalog
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -10,12 +13,13 @@ import (
 
 // memStore is an in-memory catalog.Store for unit tests.
 type memStore struct {
-	mu    sync.Mutex
-	cats  map[string]Category
-	prods map[string]*memProduct
-	vars  map[string]Variant // keyed by id
-	bySKU map[string]string  // sku → variant id
-	seq   int
+	dupSlug error
+	mu      sync.Mutex
+	cats    map[string]Category
+	prods   map[string]*memProduct
+	vars    map[string]Variant // keyed by id
+	bySKU   map[string]string  // sku → variant id
+	seq     int
 }
 
 type memProduct struct {
@@ -51,6 +55,9 @@ func (m *memStore) ListCategories(_ context.Context) ([]Category, error) {
 }
 
 func (m *memStore) CreateProduct(_ context.Context, p Product) (string, error) {
+	if m.dupSlug != nil {
+		return "", m.dupSlug
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.seq++
@@ -428,5 +435,53 @@ func TestStorefrontDetailHidesUnpublished(t *testing.T) {
 	}
 	if _, err := svc.GetStorefrontProduct(ctx, id); err != nil {
 		t.Fatalf("a PUBLISHED product must be readable: %v", err)
+	}
+}
+
+// TestCreateProduct_DuplicateSlugIsConflict pins the mapping the panel depends on: two products
+// cannot share a URL, and the operator must be told so. It used to answer 500 "server error".
+func TestCreateProduct_DuplicateSlugIsConflict(t *testing.T) {
+	store := newMemStore()
+	store.dupSlug = ErrSlugTaken
+	svc := NewService(store)
+	if _, err := svc.CreateProduct(context.Background(), Product{Slug: "taken", Title: "x"}); !errors.Is(err, ErrSlugTaken) {
+		t.Fatalf("expected ErrSlugTaken, got %v", err)
+	}
+	rec := httptest.NewRecorder()
+	writeCatalogErr(rec, ErrSlugTaken)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status=%d want 409", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "duplicate_slug") {
+		t.Fatalf("body=%s", rec.Body.String())
+	}
+}
+
+// TestAdminRoutesReadTheirPathParam pins the defect: the route table declares {productId} and
+// {variantId}, so a handler reading PathValue("id") got "" and every detail/publish/status call
+// answered 404 on a real id.
+func TestAdminRoutesReadTheirPathParam(t *testing.T) {
+	cases := []struct {
+		pattern string
+		url     string
+		want    string
+	}{
+		{"GET /api/v1/admin/products/{productId}", "/api/v1/admin/products/abc-1", "abc-1"},
+		{"PATCH /api/v1/admin/products/{productId}", "/api/v1/admin/products/abc-2", "abc-2"},
+		{"POST /api/v1/admin/products/{productId}/publish", "/api/v1/admin/products/abc-3/publish", "abc-3"},
+		{"POST /api/v1/admin/variants/{variantId}/cost-records", "/api/v1/admin/variants/v-9/cost-records", "v-9"},
+	}
+	for _, c := range cases {
+		mux := http.NewServeMux()
+		var got string
+		mux.HandleFunc(c.pattern, func(w http.ResponseWriter, r *http.Request) {
+			got = pathID(r, "productId", "variantId", "id")
+		})
+		method := c.pattern[:strings.Index(c.pattern, " ")]
+		req := httptest.NewRequest(method, c.url, nil)
+		mux.ServeHTTP(httptest.NewRecorder(), req)
+		if got != c.want {
+			t.Fatalf("%s -> %q, want %q", c.pattern, got, c.want)
+		}
 	}
 }

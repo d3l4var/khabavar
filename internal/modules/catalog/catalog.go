@@ -46,6 +46,7 @@ var (
 	ErrInvalidStatus      = errors.New("catalog: invalid status transition")
 	ErrDuplicateSKU       = errors.New("catalog: variant sku already exists")
 	ErrSlugRequired       = errors.New("catalog: slug required")
+	ErrSlugTaken          = errors.New("catalog: slug already exists")
 )
 
 // Category mirrors categories (parent_id forms the tree).
