@@ -161,6 +161,14 @@ func (a *apiMux) public(pattern string, h http.Handler) {
 	a.mounted[pattern] = ""
 }
 
+// publicCustomer mounts a public route that behaves differently for a signed-in customer
+// (cart, checkout): the identity is attached when present, and the request is anonymous
+// otherwise.
+func (a *apiMux) publicCustomer(pattern string, h http.Handler) {
+	a.mux.Handle(pattern, authorization.OptionalCustomer(a.resolve, h))
+	a.mounted[pattern] = "public+customer"
+}
+
 // customer mounts a route that requires a *customer* bearer token (never a staff one),
 // and puts the customer id in the request context for the handler.
 func (a *apiMux) customer(pattern string, h http.Handler) {
@@ -265,7 +273,7 @@ func mountRoutes(api *apiMux, s services) {
 	api.customer("PATCH /api/v1/me/addresses/{id}", identity.UpdateAddressHandler(s.customer))
 	api.customer("DELETE /api/v1/me/addresses/{id}", identity.DeleteAddressHandler(s.customer))
 
-	api.public("GET /api/v1/cart", commerce.CartHandler(s.commerce))
+	api.publicCustomer("GET /api/v1/cart", commerce.CartHandler(s.commerce))
 	// Checkout is money-touching, so a retry must not create a second order
 	// (ADR-ARCH-008). The wrapper enforces the Idempotency-Key header.
 	// Staff login on the API origin (the identity unit has its own copy; the panel talks
@@ -274,10 +282,10 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("POST /api/v1/oauth/logout", identity.LogoutHandler())
 	api.public("POST /api/v1/payments/webhook", commerce.PaymentWebhookHandler(s.commerce, commerce.PaymentWebhookSecret(s.cfg.PaymentWebhookSecret)))
 	api.public("GET /api/v1/payments/return", commerce.PaymentReturnHandler(s.cfg.StorefrontBaseURL))
-	api.public("POST /api/v1/checkout", commerce.Idempotent(s.idem, "POST /api/v1/checkout", commerce.CheckoutHandler(s.commerce)))
-	api.public("POST /api/v1/cart/items", commerce.AddCartItemHandler(s.commerce))
-	api.public("PATCH /api/v1/cart/items/{id}", commerce.UpdateCartItemHandler(s.commerce))
-	api.public("DELETE /api/v1/cart/items/{id}", commerce.DeleteCartItemHandler(s.commerce))
+	api.publicCustomer("POST /api/v1/checkout", commerce.Idempotent(s.idem, "POST /api/v1/checkout", commerce.CheckoutHandler(s.commerce)))
+	api.publicCustomer("POST /api/v1/cart/items", commerce.AddCartItemHandler(s.commerce))
+	api.publicCustomer("PATCH /api/v1/cart/items/{id}", commerce.UpdateCartItemHandler(s.commerce))
+	api.publicCustomer("DELETE /api/v1/cart/items/{id}", commerce.DeleteCartItemHandler(s.commerce))
 
 	api.public("POST /api/v1/orders", commerce.CreateOrderHandler(s.commerce))
 	// GET /orders/{id} accepts either the internal UUID or the business order number

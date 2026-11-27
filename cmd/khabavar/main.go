@@ -126,6 +126,14 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 		time.Duration(cfg.AccessTokenTTL)*time.Second,
 		5, ratelimit.New(cfg.OTPMaxPerHour, time.Hour))
 
+	// Customer OTP login must be reachable on the API origin too. It was mounted only in the
+	// identity unit, so a single-unit deployment answered 404 on /auth/otp/* and no customer
+	// could sign in — the same gap staff login had.
+	mux.HandleFunc("POST /api/v1/auth/otp/start", identity.OTPStartHandler(apiIdentitySvc, mockSmsDeliver(logger)))
+	mux.HandleFunc("POST /api/v1/auth/otp/request", identity.OTPStartHandler(apiIdentitySvc, mockSmsDeliver(logger)))
+	mux.HandleFunc("POST /api/v1/auth/otp/verify", identity.OTPVerifyHandler(apiIdentitySvc))
+	mux.HandleFunc("GET /api/v1/auth/otp/login", identity.OTPLoginPageHandler())
+
 	// RBAC wiring: token → admin identity → seeded permission matrix (IAM §۱/§۴).
 	resolver := identity.DBSubjectResolver(pool.Pool, cfg.TokenSigningKey)
 	resolve := func(ctx context.Context, bearer string) (string, string, bool) {

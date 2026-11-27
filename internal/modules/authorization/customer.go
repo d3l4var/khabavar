@@ -37,3 +37,24 @@ func AuthenticateCustomer(resolve SubjectResolver, next http.Handler) http.Handl
 		next.ServeHTTP(w, r.WithContext(WithCustomerID(r.Context(), id)))
 	})
 }
+
+// OptionalCustomer attaches the customer identity when a valid customer bearer is present and
+// lets the request through anonymously otherwise. The cart and checkout routes are public
+// because a guest must be able to use them, but a signed-in customer must not be treated as a
+// guest — without this the handler saw an empty CustomerID and demanded a guest token.
+func OptionalCustomer(resolve SubjectResolver, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bearer := BearerFromHeader(r)
+		if bearer == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		kind, id, ok := resolve(r.Context(), bearer)
+		if !ok || kind != "customer" || id == "" {
+			// A staff token or a bad token is not an error here: the route stays anonymous.
+			next.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(WithCustomerID(r.Context(), id)))
+	})
+}

@@ -44,7 +44,10 @@ var returnableStatuses = map[string]bool{
 	OrderPaid:          true,
 	OrderInFulfillment: true,
 	OrderShipped:       true,
-	OrderCompleted:     true,
+	// DELIVERED was missing: the goods are in the customer's hands, which is the most
+	// ordinary moment to return them, and the route answered 409.
+	OrderDelivered: true,
+	OrderCompleted: true,
 }
 
 // CreateReturnRequest records a customer's return claim. It is scoped by customer: the

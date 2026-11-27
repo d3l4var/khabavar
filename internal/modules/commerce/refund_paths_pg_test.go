@@ -252,3 +252,27 @@ func TestPG_RefundRouteByOrderNumber(t *testing.T) {
 		t.Fatalf("no key = %d, want 404", rec.Code)
 	}
 }
+
+// TestPG_ReturnableStatuses pins which order states accept a return. DELIVERED was missing —
+// the goods are in the customer's hands, the most ordinary moment to return them, and the
+// route answered 409 return_not_allowed.
+func TestPG_ReturnableStatuses(t *testing.T) {
+	cases := []struct {
+		status string
+		want   bool
+	}{
+		{OrderPaid, true},
+		{OrderInFulfillment, true},
+		{OrderShipped, true},
+		{OrderDelivered, true},
+		{OrderCompleted, true},
+		// A return before the money was taken, or after a cancellation, makes no sense.
+		{OrderPendingPayment, false},
+		{OrderCancelled, false},
+	}
+	for _, c := range cases {
+		if got := returnableStatuses[c.status]; got != c.want {
+			t.Fatalf("returnable[%s] = %v, want %v", c.status, got, c.want)
+		}
+	}
+}

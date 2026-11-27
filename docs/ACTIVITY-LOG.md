@@ -3022,6 +3022,43 @@ Content-Type: application/json; charset=utf-8
 
 ---
 
+### ۴.۱۰۹ مسیر مشتری روی باینری واقعی — سه باگ — کامیت `fix(customer-surface)`
+
+**باگ ۱ — ورود مشتری روی واحد API وجود نداشت.** `/auth/otp/*` فقط در `runIdentity` ثبت
+شده بود؛ در استقرار تک‌واحدی **۴۰۴**. یعنی **هیچ مشتری نمی‌توانست وارد شود** — `/me`،
+آدرس‌ها، سفارش‌ها و مرجوعی همه دور از دسترس. همان کلاس باگ ورود کارمند (§۴.۶۸).
+→ چهار مسیر OTP در `runAPI` هم mount شد. **شاهد: `POST /auth/otp/request` → ۲۰۲،
+`verify` → ۲۰۰ با توکن ۶۴ کاراکتری.**
+
+**باگ ۲ — مشتری واردشده مهمان حساب می‌شد.** `/cart` و `/checkout` روی `api.public` بودند
+که هیچ هویتی را نمی‌خواند:
+
+```
+GET  /cart   با توکن مشتری  →  400  cart_token_required
+POST /checkout با توکن مشتری →  400  guest_phone_required
+```
+
+`authorization.OptionalCustomer` و `apiMux.publicCustomer` اضافه شد: اگر توکن مشتری معتبر
+بود، هویت را می‌چسباند، وگرنه مهمان می‌ماند. **شاهد: `GET /cart` → ۲۰۰،
+`POST /cart/items` → ۲۰۰، `POST /checkout` → ۲۰۱ (KHA-ORD-2026-000010)، `/me/orders` → ۲۰۰
+با total=1.**
+
+**باگ ۳ — سفارش DELIVERED قابل مرجوع نبود.** `returnableStatuses` شامل PAID،
+IN_FULFILLMENT، SHIPPED و COMPLETED بود ولی **DELIVERED نه** — یعنی کالایی که به دست
+مشتری رسیده، قابل مرجوع نبود:
+
+```
+POST /orders/{id}/return-requests  →  409  return_not_allowed
+```
+→ `OrderDelivered` اضافه شد. **شاهد: ۲۰۱ و ردیف `REQUESTED` در `return_requests`.**
+
+**یافتهٔ عملیاتی:** پایگاه دادهٔ اصلی **یک migration عقب بود** — `return_requests`
+(000016) وجود نداشت ولی `idempotency_keys` (000015) وجود داشت. migration به‌صورت
+forward-only اعمال شد. **اگر این را نمی‌دیدم، هر مرجوعی با `relation does not exist` ۵۰۰
+می‌داد.**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

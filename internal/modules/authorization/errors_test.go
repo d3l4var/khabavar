@@ -70,3 +70,50 @@ func TestRequireAnswersJSON(t *testing.T) {
 type denyChecker struct{}
 
 func (denyChecker) HasPermission(context.Context, string, string) (bool, error) { return false, nil }
+
+// TestOptionalCustomer covers the public-with-identity routes: a valid customer bearer is
+// attached, and anything else (no token, a staff token, a bad token) continues anonymously
+// instead of failing — the cart and checkout routes must work for guests.
+func TestOptionalCustomer(t *testing.T) {
+	var seen string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = CustomerID(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	resolve := func(_ context.Context, bearer string) (string, string, bool) {
+		switch bearer {
+		case "customer-token":
+			return "customer", "cust-1", true
+		case "staff-token":
+			return "admin", "admin-1", true
+		}
+		return "", "", false
+	}
+	h := OptionalCustomer(resolve, next)
+
+	cases := []struct {
+		name   string
+		bearer string
+		want   string
+	}{
+		{"no token", "", ""},
+		{"customer", "customer-token", "cust-1"},
+		{"staff token is not a customer", "staff-token", ""},
+		{"bad token", "garbage", ""},
+	}
+	for _, c := range cases {
+		seen = "unset"
+		r := httptest.NewRequest(http.MethodGet, "/x", nil)
+		if c.bearer != "" {
+			r.Header.Set("Authorization", "Bearer "+c.bearer)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d, want 200 (never a 401 on an optional route)", c.name, rec.Code)
+		}
+		if seen != c.want {
+			t.Fatalf("%s: customer id = %q, want %q", c.name, seen, c.want)
+		}
+	}
+}
