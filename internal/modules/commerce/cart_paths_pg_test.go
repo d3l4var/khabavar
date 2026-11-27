@@ -2,7 +2,13 @@ package commerce
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/khabavar/khabavar/internal/modules/authorization"
 )
 
 // TestPG_CartServicePaths covers the cart service end to end: guest carts, quantity updates,
@@ -88,5 +94,120 @@ func TestPG_CartServicePaths(t *testing.T) {
 	// Updating an unknown item is an error, not a silent success.
 	if _, err := svc.UpdateCartItem(ctx, "", "guest-session-1", "00000000-0000-0000-0000-000000000000", 1); err == nil {
 		t.Fatal("updating an unknown cart item succeeded")
+	}
+}
+
+// TestPG_MergeCartsStoreEdge covers MergeCarts' early return and CartView's not-found arm,
+// plus the merge handler's failure path. MergeCarts was at 71%, CartView at 81%.
+func TestPG_MergeCartsStoreEdge(t *testing.T) {
+	pool, svc, store := setupCommerce(t)
+	ctx := context.Background()
+	_, variantID := seedProductVariant(t, ctx, pool, "SKU-MRG-1")
+	svc.SetCartStore(store)
+
+	// Merging a cart into itself is a no-op, not an error.
+	guest, err := svc.AddToCart(ctx, "", "guest-merge-edge", variantID, 1)
+	if err != nil {
+		t.Fatalf("guest add: %v", err)
+	}
+	if err := store.MergeCarts(ctx, guest.ID, guest.ID); err != nil {
+		t.Fatalf("self merge = %v, want nil", err)
+	}
+	// The cart survives a self-merge.
+	still, err := store.CartView(ctx, guest.ID)
+	if err != nil || still == nil || len(still.Items) != 1 {
+		t.Fatalf("cart after self merge = %+v, %v", still, err)
+	}
+
+	// CartView on an unknown id is ErrCartNotFound.
+	if _, err := store.CartView(ctx, "00000000-0000-0000-0000-000000000000"); !errors.Is(err, ErrCartNotFound) {
+		t.Fatalf("unknown cart = %v, want ErrCartNotFound", err)
+	}
+	// RemoveCartItem on an unknown line is an error, not a silent success.
+	if _, err := svc.RemoveCartItem(ctx, "", "guest-merge-edge", "00000000-0000-0000-0000-000000000000"); err == nil {
+		t.Fatal("removing an unknown line succeeded")
+	}
+
+	// The merge handler: a customer merging an unknown guest token is a no-op 200.
+	customerID := seedCustomerRow(t, ctx, pool)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/cart/merge",
+		strings.NewReader(`{"session_token":"no-such-guest"}`))
+	r = r.WithContext(authorization.WithCustomerID(r.Context(), customerID))
+	rec := httptest.NewRecorder()
+	MergeCartHandler(svc)(rec, r)
+	if rec.Code >= 500 {
+		t.Fatalf("merge with an unknown token = %d: %s", rec.Code, rec.Body.String())
+	}
+	// Without a customer session the merge is refused.
+	r = httptest.NewRequest(http.MethodPost, "/api/v1/cart/merge",
+		strings.NewReader(`{"session_token":"guest-merge-edge"}`))
+	rec = httptest.NewRecorder()
+	MergeCartHandler(svc)(rec, r)
+	if rec.Code < 400 || rec.Code >= 500 {
+		t.Fatalf("merge without a session = %d, want a 4xx", rec.Code)
+	}
+}
+
+// TestPG_OrderInputValidationAndMyOrders covers validateOrderInput's arms and the customer
+// order list handler. validateOrderInput was at 83%, MyOrdersHandler at 85%.
+func TestPG_OrderInputValidationAndMyOrders(t *testing.T) {
+	pool, svc, _ := setupCommerce(t)
+	ctx := context.Background()
+	productID, variantID := seedProductVariant(t, ctx, pool, "SKU-VAL-1")
+
+	base := orderInput(productID, variantID, "KHA-ORD-2026-000901")
+
+	// Each validation arm, one at a time.
+	// An empty order number is NOT an error here: CreateOrder generates one. The
+	// ErrOrderNumberRequired arm of validateOrderInput is therefore unreachable from this
+	// entry point — pinned so the difference between the two is visible.
+	noNumber := base
+	noNumber.OrderNumber = ""
+	generated, err := svc.CreateOrder(ctx, noNumber)
+	if err != nil {
+		t.Fatalf("empty number should be generated, got %v", err)
+	}
+	if generated == "" {
+		t.Fatal("no id returned for a generated order")
+	}
+	noContact := base
+	noContact.CustomerID, noContact.GuestPhone = "", ""
+	if _, err := svc.CreateOrder(ctx, noContact); !errors.Is(err, ErrContactRequired) {
+		t.Fatalf("no contact = %v, want ErrContactRequired", err)
+	}
+	noItems := base
+	noItems.Items = nil
+	if _, err := svc.CreateOrder(ctx, noItems); !errors.Is(err, ErrCartEmpty) {
+		t.Fatalf("no items = %v, want ErrCartEmpty", err)
+	}
+	badSupply := base
+	badSupply.Items = append([]OrderItemInput(nil), base.Items...)
+	badSupply.Items[0].SupplyType = "BOGUS"
+	if _, err := svc.CreateOrder(ctx, badSupply); err == nil {
+		t.Fatal("an invalid supply_type was accepted")
+	}
+	noSnapshot := base
+	noSnapshot.Items = append([]OrderItemInput(nil), base.Items...)
+	noSnapshot.Items[0].SKUSnapshot = ""
+	if _, err := svc.CreateOrder(ctx, noSnapshot); err == nil {
+		t.Fatal("a missing sku snapshot was accepted")
+	}
+
+	// The customer order list handler answers 200 with paging metadata.
+	customerID := seedCustomerRow(t, ctx, pool)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/orders?page=1&page_size=5", nil)
+	r = r.WithContext(authorization.WithCustomerID(r.Context(), customerID))
+	rec := httptest.NewRecorder()
+	MyOrdersHandler(NewOrderListStore(pool))(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("my orders = %d: %s", rec.Code, rec.Body.String())
+	}
+	// Nonsense paging falls back to the defaults.
+	r = httptest.NewRequest(http.MethodGet, "/api/v1/me/orders?page=abc&page_size=9999", nil)
+	r = r.WithContext(authorization.WithCustomerID(r.Context(), customerID))
+	rec = httptest.NewRecorder()
+	MyOrdersHandler(NewOrderListStore(pool))(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("my orders with bad paging = %d", rec.Code)
 	}
 }

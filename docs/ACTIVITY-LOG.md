@@ -2721,6 +2721,44 @@ commerce  86.0% / 90%  below [advisory]
 
 ---
 
+### ۴.۱۰۱ commerce: outbox، فهرست ادمین و اعتبارسنجی — کامیت `test(commerce-outbox-validation)`
+
+**`TestPG_ConfirmEmitsOrderPaid`:**
+- تأیید پرداخت **رخداد `OrderPaid` را در outbox می‌گذارد**
+- **تکرار تأیید رخداد دومی نمی‌فرستد** (`ErrAlreadyPaid`)
+- **خرابی صف تأیید را نمی‌شکند** — پول جابه‌جا شده و outbox بهترین‌تلاش است (P4)
+
+**`TestPG_ListOrdersHandlerPaging`** — `ListOrdersHandler` ۷۵٪:
+- فیلتر `status` و `q`؛ صفحه‌بندی بی‌معنا → پیش‌فرض؛ `page_size=5000` → ۲۰ (خارج از بازه
+  به پیش‌فرض برمی‌گردد، نه سقف)
+- **شاخهٔ ۵۰۰** با pool بسته، با بدنهٔ JSON
+
+**`TestPG_MergeCartsStoreEdge`:**
+- **ادغام سبد با خودش no-op است**، نه خطا؛ سبد سالم می‌ماند
+- `CartView` با id ناشناخته → `ErrCartNotFound`
+- حذف قلم ناشناخته → خطا
+
+**باگ پیدا شده — ۵۰۰ به‌جای ۴۰۱:**
+
+```
+POST /api/v1/cart/merge بدون نشست مشتری → 500
+```
+
+`MergeGuestCart` یک `errors.New(...)` خام برمی‌گرداند، پس `statusForError` به default
+می‌افتاد. `ErrCustomerSessionRequired` اضافه شد → **۴۰۱** با کد پایدار. همان کلاس باگ‌های
+خام inventory.
+
+**`TestPG_OrderInputValidationAndMyOrders`:**
+- هر شاخهٔ `validateOrderInput`: تماس غایب، آیتم خالی، `supply_type` نامعتبر، snapshot غایب
+- `MyOrdersHandler` → ۲۰۰ با متادیتای صفحه‌بندی؛ صفحه‌بندی بی‌معنا → پیش‌فرض
+
+**شاخهٔ مرده:** `ErrOrderNumberRequired` از `CreateOrder` **دست‌نیافتنی** است — شمارهٔ خالی
+خودکار تولید می‌شود. تثبیت شد تا تفاوت دیده شود، نه اینکه رفتار عوض شود.
+
+**پوشش: commerce ۸۷.۶٪ → ۸۸.۱٪ → ۸۸.۵٪ → ۸۸.۸٪** — آستانهٔ ۹۰٪ (advisory) هنوز نه.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

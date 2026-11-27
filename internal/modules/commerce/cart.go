@@ -82,7 +82,7 @@ func validateCartQuantity(q int) error {
 // client may retry the merge after the cart expired.
 func (s *Service) MergeGuestCart(ctx context.Context, customerID, guestToken string) (*CartView, error) {
 	if customerID == "" {
-		return nil, errors.New("commerce: a customer session is required to merge a cart")
+		return nil, ErrCustomerSessionRequired
 	}
 	if s.carts == nil {
 		return nil, errors.New("commerce: cart store not configured")

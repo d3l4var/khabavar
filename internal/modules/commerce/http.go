@@ -19,6 +19,8 @@ import (
 
 func statusForError(err error) int {
 	switch {
+	case errors.Is(err, ErrCustomerSessionRequired):
+		return http.StatusUnauthorized
 	case errors.Is(err, ErrOrderNotFound), errors.Is(err, ErrCartNotFound):
 		return http.StatusNotFound
 	case errors.Is(err, ErrCartEmpty),
