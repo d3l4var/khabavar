@@ -114,6 +114,16 @@ export function StateBlock({ kind, message, onRetry }: { kind: 'loading' | 'empt
 
 // useAsync is the one loading primitive: it tracks loading/error/data and exposes a
 // retry, so no screen has to re-implement the three states.
+// humanError turns any thrown value into a sentence a Persian-speaking customer can read.
+// The API's own errors already carry a code, so they are shown as-is; everything else is a
+// transport failure and says so.
+function humanError(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err && typeof (err as { code?: unknown }).code === 'string') {
+    return err instanceof Error ? err.message : 'خطا در دریافت داده.'
+  }
+  return 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.'
+}
+
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   const [state, setState] = useState<{ loading: boolean; error: string | null; data: T | null }>({
     loading: true,
@@ -127,7 +137,10 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []) {
     setState((s) => ({ ...s, loading: true, error: null }))
     fn()
       .then((data) => alive && setState({ loading: false, error: null, data }))
-      .catch((err: unknown) => alive && setState({ loading: false, error: err instanceof Error ? err.message : 'خطای نامشخص', data: null }))
+      // A network failure surfaces as a TypeError with an English message ("fetch error",
+      // "Failed to fetch"). A Persian UI must not show that, so anything that is not an API
+      // error becomes one sentence the customer can act on.
+      .catch((err: unknown) => alive && setState({ loading: false, error: humanError(err), data: null }))
     return () => {
       alive = false
     }
