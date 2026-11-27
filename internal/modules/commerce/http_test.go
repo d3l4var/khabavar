@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/khabavar/khabavar/internal/modules/authorization"
 )
 
 // ── CreateOrder ───────────────────────────────────────────────────────────────
@@ -56,8 +58,11 @@ func TestHTTP_CreateOrder_RejectsEmptyItems(t *testing.T) {
 func TestHTTP_GetOrder_Returns200(t *testing.T) {
 	svc, _, _ := testService(t)
 	oid, _ := svc.CreateOrder(nil, validOrderInput())
+	// The order belongs to cust-1, so the read must come from that customer — the gate is
+	// part of the contract (a bare order id is not enough).
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/"+oid, nil)
 	req.SetPathValue("id", oid)
+	req = req.WithContext(authorization.WithCustomerID(req.Context(), "cust-1"))
 	rec := httptest.NewRecorder()
 	GetOrderHandler(svc).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/khabavar/khabavar/internal/modules/authorization"
 )
 
 // ── Error → status mapping ────────────────────────────────────────────────────
@@ -159,33 +161,79 @@ func CreateOrderHandler(svc *Service) http.Handler {
 // ── GetOrderDetail ────────────────────────────────────────────────────────────
 
 // GetOrderHandler handles GET /api/v1/orders/{id}. The path segment may be either the
-// internal UUID or the business order number (KHA-ORD-YYYY-NNNNNN) — the contract
-// exposes GET /orders/{orderNumber} for guest tracking (UJ-01), and keeping one route
-// avoids an ambiguous ServeMux pattern with /orders/{id}/fulfillment.
+// internal UUID or the business order number (KHA-ORD-YYYY-NNNNNN) — the contract exposes
+// GET /orders/{orderNumber} for guest tracking (UJ-01).
+//
+// Authorisation is part of the contract (R-07): a customer reads only their own order, and
+// a guest order requires ?phone= matching guest_phone, otherwise 403. Without this gate a
+// sequential order number is enough to read someone else's phone number and address.
 func GetOrderHandler(svc *Service) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract {id} from the path. We use strings.Cut to avoid importing chi/gorilla
-		// in the handler — the router in cmd/khabavar passes the trimmed path suffix.
 		id := r.PathValue("id")
 		if id == "" {
 			id = strings.TrimPrefix(r.URL.Path, "/api/v1/orders/")
 		}
-		if _, err := uuid.Parse(id); err != nil {
+		// Resolve the path segment to an order id: a UUID is used as-is, anything else is
+		// the business order number (KHA-ORD-YYYY-NNNNNN).
+		orderID := id
+		if _, perr := uuid.Parse(id); perr != nil {
 			o, err := svc.GetOrderByNumber(r.Context(), NormalizeOrderNumber(id))
 			if err != nil {
 				writeError(w, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, o)
-			return
+			if o == nil {
+				writeError(w, ErrOrderNotFound)
+				return
+			}
+			orderID = o.ID
 		}
-		d, err := svc.GetOrderDetail(r.Context(), id)
+		d, err := svc.GetOrderDetail(r.Context(), orderID)
 		if err != nil {
 			writeError(w, err)
 			return
 		}
+		if d == nil {
+			writeError(w, ErrOrderNotFound)
+			return
+		}
+		if !mayReadOrder(r, &d.Order) {
+			writeJSON(w, http.StatusForbidden, map[string]any{
+				"error": "this order is not readable by the caller",
+				"code":  "order_forbidden",
+			})
+			return
+		}
 		writeJSON(w, http.StatusOK, d)
 	})
+}
+
+// mayReadOrder is the read gate for a single order: the owning customer, or a guest who
+// proves the phone on the order. Anything else is a 403, never a silent 200.
+func mayReadOrder(r *http.Request, o *Order) bool {
+	if o.CustomerID != "" {
+		return authorization.CustomerID(r.Context()) == o.CustomerID
+	}
+	phone := NormalizePhone(r.URL.Query().Get("phone"))
+	return phone != "" && phone == NormalizePhone(o.GuestPhone)
+}
+
+// NormalizePhone reduces a phone to its digits so ۰۹۱۲… and 0912… compare equal.
+func NormalizePhone(p string) string {
+	var b strings.Builder
+	for _, r := range p {
+		switch {
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r >= '۰' && r <= '۹':
+			b.WriteRune('0' + (r - '۰'))
+		}
+	}
+	out := b.String()
+	if strings.HasPrefix(out, "98") && len(out) == 12 {
+		out = "0" + out[2:]
+	}
+	return out
 }
 
 // ── GetOrderByNumber ──────────────────────────────────────────────────────────

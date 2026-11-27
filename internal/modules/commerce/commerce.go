@@ -139,22 +139,22 @@ type OrderItemInput struct {
 
 // Order mirrors orders.
 type Order struct {
-	ID               string `json:"id"`
-	OrderNumber      string `json:"order_number"`
-	CustomerID       string `json:"customer_id,omitempty"`
-	GuestPhone       string `json:"guest_phone,omitempty"`
-	Status           string `json:"status"`
-	Currency         string `json:"currency"`
-	Subtotal         int64  `json:"subtotal"`
-	DiscountTotal    int64  `json:"discount_total"`
-	ShippingTotal    int64  `json:"shipping_total"`
-	TaxTotal         int64  `json:"tax_total"`
-	GrandTotal       int64  `json:"grand_total"`
-	PaidTotal        int64  `json:"paid_total"`
-	RefundedTotal    int64  `json:"refunded_total"`
-	ShippingAddrSnap json.RawMessage
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               string          `json:"id"`
+	OrderNumber      string          `json:"order_number"`
+	CustomerID       string          `json:"customer_id,omitempty"`
+	GuestPhone       string          `json:"guest_phone,omitempty"`
+	Status           string          `json:"status"`
+	Currency         string          `json:"currency"`
+	Subtotal         int64           `json:"subtotal"`
+	DiscountTotal    int64           `json:"discount_total"`
+	ShippingTotal    int64           `json:"shipping_total"`
+	TaxTotal         int64           `json:"tax_total"`
+	GrandTotal       int64           `json:"grand_total"`
+	PaidTotal        int64           `json:"paid_total"`
+	RefundedTotal    int64           `json:"refunded_total"`
+	ShippingAddrSnap json.RawMessage `json:"shipping_address,omitempty"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
 }
 
 // OrderItem mirrors order_items.
