@@ -2143,6 +2143,31 @@ paths:
         "200": { description: پاسخ موفق }
         "400": { description: وضعیت ناشناخته }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /admin/return-requests/{id}/refund:
+    post:
+      operationId: postAdminReturnRequestsIdRefund
+      tags: [admin-orders]
+      summary: بازپرداخت یک مرجوعی دریافت‌شده
+      description: RECEIVED → REFUNDED. مبلغ را کارمند تعیین می‌کند، چون درخواست فقط تعداد دارد و نه قلم کالا.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: integer, format: int64, minimum: 1, description: مبلغ به ریال }
+                note: { type: string }
+      responses:
+        "200": { description: بازپرداخت صادر و درخواست بسته شد }
+        "400": { description: مبلغ نامعتبر یا بدنهٔ خراب }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: درخواست در وضعیت RECEIVED نیست، یا مبلغ از پرداخت‌شده بیشتر است }
   /admin/return-requests/{id}/approve:
     post:
       operationId: postAdminReturnRequestsIdApprove

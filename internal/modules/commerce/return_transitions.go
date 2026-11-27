@@ -177,3 +177,39 @@ func (s *Service) ListReturns(ctx context.Context, status string, page, pageSize
 	}
 	return l.ListReturns(ctx, status, page, pageSize)
 }
+
+// RefundReturn closes a claim by moving money. The amount is the operator's call (option C):
+// the claim records a quantity but no line item, so only a human can say what the returned
+// goods are worth — and that decision is recorded in the audit trail with the actor.
+//
+// Order of operations: the refund goes first, because a claim marked REFUNDED with no money
+// moved is a lie the customer sees. If the transition then fails, the error names the refund id
+// so the operator can reconcile instead of refunding twice.
+func (s *Service) RefundReturn(ctx context.Context, id string, amount int64, reason string) (*ReturnRequest, error) {
+	st, err := s.returnStore()
+	if err != nil {
+		return nil, err
+	}
+	claim, err := st.GetReturnRequest(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if claim.Status != ReturnReceived {
+		return nil, fmt.Errorf("%w: %s → %s (current %s)", ErrReturnTransition, ReturnReceived, ReturnRefunded, claim.Status)
+	}
+	if amount <= 0 {
+		return nil, ErrRefundAmountInvalid
+	}
+	if reason == "" {
+		reason = "مرجوعی " + claim.ID
+	}
+	refundID, err := s.CreateRefund(ctx, claim.OrderID, amount, reason)
+	if err != nil {
+		return nil, err
+	}
+	out, err := st.TransitionReturn(ctx, id, ReturnReceived, ReturnRefunded, refundID)
+	if err != nil {
+		return nil, fmt.Errorf("refund %s was issued but the claim could not be closed: %w", refundID, err)
+	}
+	return out, nil
+}

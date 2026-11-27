@@ -69,8 +69,26 @@ type adminLoginRequest struct {
 	Password string `json:"password"`
 }
 
+// AdminLoginOption configures the handler without breaking existing call sites.
+type AdminLoginOption func(*adminLoginConfig)
+
+type adminLoginConfig struct {
+	guard *AdminLoginGuard
+	aud   AdminLoginAuditor
+}
+
+// WithAdminLoginGuard throttles staff login and records failures. Without it the endpoint is
+// unlimited, which is how it shipped: a password could be guessed forever.
+func WithAdminLoginGuard(g *AdminLoginGuard, aud AdminLoginAuditor) AdminLoginOption {
+	return func(c *adminLoginConfig) { c.guard, c.aud = g, aud }
+}
+
 // AdminLoginHandler serves POST /api/v1/auth/admin/login.
-func AdminLoginHandler(svc *Service, store AdminLoginStore) http.HandlerFunc {
+func AdminLoginHandler(svc *Service, store AdminLoginStore, opts ...AdminLoginOption) http.HandlerFunc {
+	var cfg adminLoginConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req adminLoginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -81,12 +99,22 @@ func AdminLoginHandler(svc *Service, store AdminLoginStore) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "email and password required")
 			return
 		}
-		token, err := svc.AdminLogin(r.Context(), store, req.Email, req.Password, clientIP(r), r.UserAgent())
+		ip := clientIP(r)
+		// Throttle before touching the password: a blocked attempt must not cost a bcrypt
+		// round, or the limiter itself becomes the denial-of-service.
+		if !cfg.guard.Allow(ip, req.Email) {
+			auditLoginFailure(r.Context(), cfg.aud, req.Email, ip, "throttled")
+			writeErr(w, http.StatusTooManyRequests, "too many attempts")
+			return
+		}
+		token, err := svc.AdminLogin(r.Context(), store, req.Email, req.Password, ip, r.UserAgent())
 		switch {
 		case errors.Is(err, ErrAdminCredentials):
+			auditLoginFailure(r.Context(), cfg.aud, req.Email, ip, "invalid_credentials")
 			writeErr(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		case errors.Is(err, ErrAdminInactive):
+			auditLoginFailure(r.Context(), cfg.aud, req.Email, ip, "inactive")
 			writeErr(w, http.StatusForbidden, "account is not active")
 			return
 		case err != nil:

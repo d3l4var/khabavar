@@ -17,6 +17,8 @@ func returnErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: err.Error(), Code: "return_not_found"})
 	case errors.Is(err, ErrReturnTransition):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: err.Error(), Code: "invalid_return_transition"})
+	case errors.Is(err, ErrRefundAmountInvalid):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error(), Code: "invalid_amount"})
 	case errors.Is(err, ErrReturnDecisionNote):
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error(), Code: "decision_note_required"})
 	default:
@@ -118,4 +120,25 @@ func parsePageParam(v string, def int) int {
 		return 100
 	}
 	return n
+}
+
+// RefundReturnHandler serves POST /api/v1/admin/return-requests/{id}/refund. The amount is
+// required: the claim carries a quantity but no line item, so only a human can price it.
+func RefundReturnHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Amount int64  `json:"amount"`
+			Note   string `json:"note"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid json", Code: "invalid_body"})
+			return
+		}
+		rr, err := svc.RefundReturn(r.Context(), r.PathValue("id"), body.Amount, body.Note)
+		if err != nil {
+			returnErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, rr)
+	}
 }

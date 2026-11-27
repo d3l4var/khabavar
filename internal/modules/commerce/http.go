@@ -41,7 +41,10 @@ func statusForError(err error) int {
 		errors.Is(err, ErrReturnQuantityInvalid):
 		return http.StatusBadRequest
 	case errors.Is(err, ErrRefundExceedsPaid), errors.Is(err, ErrOrderNotRefundable),
-		errors.Is(err, ErrReturnNotAllowed), errors.Is(err, ErrReturnAlreadyOpen):
+		errors.Is(err, ErrReturnNotAllowed), errors.Is(err, ErrReturnAlreadyOpen),
+		// A business state, not a server fault: the order was never paid, so there is nothing
+		// to refund. It answered 500 with "internal error", which hides the real cause.
+		errors.Is(err, ErrNoSucceededPayment):
 		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError

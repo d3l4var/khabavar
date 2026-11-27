@@ -98,7 +98,12 @@ func runIdentity(ctx context.Context, cfg config.Config, logger *slog.Logger, po
 	mux.HandleFunc("GET /api/v1/auth/otp/login", identity.OTPLoginPageHandler())
 	mux.HandleFunc("POST /api/v1/auth/otp/login", identity.OTPLoginSubmitHandler(svc, oidcSvc))
 	// Staff login for the panel (email + password → opaque session token).
-	mux.HandleFunc("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(svc, identity.NewDBAdminLoginStore(pool.Pool)))
+	// Staff login is throttled per IP and per email, and every failure is recorded: a lockout
+	// without a trail cannot be investigated.
+	mux.HandleFunc("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(svc,
+		identity.NewDBAdminLoginStore(pool.Pool),
+		identity.WithAdminLoginGuard(identity.NewAdminLoginGuard(10, 5, 15*time.Minute),
+			audit.NewRecorder(pool.Pool))))
 	mux.HandleFunc("GET /oauth/authorize", identity.AuthorizeHandler(oidcSvc))
 	mux.HandleFunc("POST /oauth/token", identity.TokenHandler(oidcSvc))
 	hh.SetReady(true)
@@ -186,6 +191,8 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 		cfg:             cfg,
 		identity:        apiIdentitySvc,
 		adminLoginStore: identity.NewDBAdminLoginStore(pool.Pool),
+		loginGuard:      identity.NewAdminLoginGuard(10, 5, 15*time.Minute),
+		auditor:         auditor,
 		catList:         catalog.NewAdminListStore(pool.Pool),
 		idem:            commerce.NewDBStore(pool.Pool),
 		invAdmin:        inventory.NewAdminStore(pool.Pool),

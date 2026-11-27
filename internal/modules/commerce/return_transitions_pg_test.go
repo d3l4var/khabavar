@@ -186,3 +186,67 @@ func TestPG_ListReturns(t *testing.T) {
 		t.Fatalf("refunded = %d, %v; want 0", none, err)
 	}
 }
+
+// TestPG_RefundReturn closes the lifecycle: RECEIVED → REFUNDED moves money through the same
+// audited refund path, with the amount chosen by the operator (the claim has no line item).
+func TestPG_RefundReturn(t *testing.T) {
+	pool, _, _ := setupCommerce(t)
+	ctx := context.Background()
+	store := NewDBStore(pool)
+	svc := NewService(store, nil)
+	svc.SetRefundStore(store)
+	svc.SetNow(time.Now)
+
+	orderID, _ := seedPaidOrder(t, ctx, pool, 100000)
+	customerID := seedCustomerRow(t, ctx, pool)
+	if _, err := pool.Exec(ctx, `UPDATE orders SET status = 'DELIVERED', customer_id = $2 WHERE id = $1`, orderID, customerID); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	claim, err := svc.CreateReturnRequest(ctx, orderID, customerID, 1, "خرابی")
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	// Refunding before the goods came back is not a legal transition.
+	if _, err := svc.RefundReturn(ctx, claim.ID, 40000, "زود"); !errors.Is(err, ErrReturnTransition) {
+		t.Fatalf("refund before receive = %v, want ErrReturnTransition", err)
+	}
+	if _, err := svc.DecideReturn(ctx, claim.ID, true, "ok"); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	if _, err := svc.ReceiveReturn(ctx, claim.ID, "رسید"); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	// A zero amount is refused: a refund of nothing is not a refund.
+	if _, err := svc.RefundReturn(ctx, claim.ID, 0, "صفر"); !errors.Is(err, ErrRefundAmountInvalid) {
+		t.Fatalf("zero amount = %v, want ErrRefundAmountInvalid", err)
+	}
+	// More than was paid is refused by the refund path itself.
+	if _, err := svc.RefundReturn(ctx, claim.ID, 999999, "زیاد"); !errors.Is(err, ErrRefundExceedsPaid) {
+		t.Fatalf("over-refund = %v, want ErrRefundExceedsPaid", err)
+	}
+
+	out, err := svc.RefundReturn(ctx, claim.ID, 40000, "بازپرداخت مرجوعی")
+	if err != nil {
+		t.Fatalf("refund: %v", err)
+	}
+	if out.Status != ReturnRefunded {
+		t.Fatalf("status = %s, want REFUNDED", out.Status)
+	}
+	// The decision note carries the refund id, so the claim and the money are linked.
+	if out.DecisionNote == "" {
+		t.Fatal("decision note must carry the refund id")
+	}
+	// The money actually moved.
+	var refunded int64
+	if err := pool.QueryRow(ctx, `SELECT refunded_total FROM orders WHERE id = $1`, orderID).Scan(&refunded); err != nil {
+		t.Fatalf("read refunded: %v", err)
+	}
+	if refunded != 40000 {
+		t.Fatalf("refunded_total = %d, want 40000", refunded)
+	}
+	// Refunding twice is refused: the claim is no longer RECEIVED.
+	if _, err := svc.RefundReturn(ctx, claim.ID, 40000, "دوباره"); !errors.Is(err, ErrReturnTransition) {
+		t.Fatalf("second refund = %v, want ErrReturnTransition", err)
+	}
+}

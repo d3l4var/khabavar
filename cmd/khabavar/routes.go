@@ -37,6 +37,7 @@ var adminPermissions = map[string]string{
 	"POST /api/v1/admin/return-requests/{id}/approve": "order.manage",
 	"POST /api/v1/admin/return-requests/{id}/reject":  "order.manage",
 	"POST /api/v1/admin/return-requests/{id}/receive": "order.manage",
+	"POST /api/v1/admin/return-requests/{id}/refund":  "order.refund.approve",
 	"GET /api/v1/admin/orders/{orderNumber}/refunds":  "order.view",
 	"GET /api/v1/admin/orders/{id}/reconcile":         "reports.financial.view",
 
@@ -229,6 +230,8 @@ type services struct {
 	customer        identity.CustomerStore
 	identity        *identity.Service
 	adminLoginStore identity.AdminLoginStore
+	loginGuard      *identity.AdminLoginGuard
+	auditor         authorization.Auditor
 	cfg             config.Config
 	catList         *catalog.AdminListStore
 	idem            commerce.IdempotencyStore
@@ -275,6 +278,7 @@ func mountRoutes(api *apiMux, s services) {
 	api.admin("POST /api/v1/admin/return-requests/{id}/approve", commerce.ApproveReturnHandler(s.commerce))
 	api.admin("POST /api/v1/admin/return-requests/{id}/reject", commerce.RejectReturnHandler(s.commerce))
 	api.admin("POST /api/v1/admin/return-requests/{id}/receive", commerce.ReceiveReturnHandler(s.commerce))
+	api.admin("POST /api/v1/admin/return-requests/{id}/refund", commerce.RefundReturnHandler(s.commerce))
 	api.customer("POST /api/v1/orders/{id}/return-requests",
 		commerce.Idempotent(s.idem, "return-request", commerce.CreateReturnRequestHandler(s.commerce)))
 	api.customer("GET /api/v1/me/addresses", identity.ListAddressesHandler(s.customer))
@@ -287,7 +291,8 @@ func mountRoutes(api *apiMux, s services) {
 	// (ADR-ARCH-008). The wrapper enforces the Idempotency-Key header.
 	// Staff login on the API origin (the identity unit has its own copy; the panel talks
 	// to whichever host serves /api/v1).
-	api.public("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(s.identity, s.adminLoginStore))
+	api.public("POST /api/v1/auth/admin/login", identity.AdminLoginHandler(s.identity, s.adminLoginStore,
+		identity.WithAdminLoginGuard(s.loginGuard, s.auditor)))
 	api.public("POST /api/v1/oauth/logout", identity.LogoutHandler())
 	api.public("POST /api/v1/payments/webhook", commerce.PaymentWebhookHandler(s.commerce, commerce.PaymentWebhookSecret(s.cfg.PaymentWebhookSecret)))
 	api.public("GET /api/v1/payments/return", commerce.PaymentReturnHandler(s.cfg.StorefrontBaseURL))
