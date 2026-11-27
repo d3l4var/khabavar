@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Badge, Button, Card, Container, Footer, Grid, Header, StateBlock, useAsync } from '../../shared/components'
 import { getArticle, listArticles, listArticlesByTopic, listTopics, type Article, type Topic } from '../../shared/api'
+import { ErrorBoundary } from '../../shared/ErrorBoundary'
 import '../../shared/tokens.css'
 
 const NAV = [
@@ -216,4 +217,8 @@ function App() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+)

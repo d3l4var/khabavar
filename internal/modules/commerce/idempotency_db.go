@@ -75,6 +75,14 @@ func (s *DBStore) Claim(ctx context.Context, key, scope, requestHash string, ttl
 }
 
 // Complete stores the response for replay.
+// Release drops the claim so the same key can be retried. A failed request must not pin its key
+// until the TTL: the client retries precisely because it failed, and it used the same key on
+// purpose. Storing status 0 instead made every retry answer idempotency_in_flight.
+func (s *DBStore) Release(ctx context.Context, key string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM idempotency_keys WHERE key = $1`, key)
+	return err
+}
+
 func (s *DBStore) Complete(ctx context.Context, key string, statusCode int, body []byte) error {
 	ct, err := s.pool.Exec(ctx,
 		`UPDATE idempotency_keys SET status_code = $2, response_body = $3 WHERE key = $1`,

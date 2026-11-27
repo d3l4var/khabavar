@@ -2,6 +2,7 @@ package commerce
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -106,6 +107,11 @@ func Idempotent(store IdempotencyStore, scope string, next http.HandlerFunc) htt
 				// The response is already written; log-worthy but not client-facing.
 				_ = err
 			}
+		} else if rel, ok := store.(interface {
+			Release(context.Context, string) error
+		}); ok {
+			// A failure releases the key: the client retries with the same key on purpose.
+			_ = rel.Release(r.Context(), key)
 		} else {
 			_ = store.Complete(r.Context(), key, 0, nil)
 		}

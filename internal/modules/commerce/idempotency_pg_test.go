@@ -94,13 +94,15 @@ func TestPG_IdempotencyMiddleware(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("failing handler = %d", rec.Code)
 	}
-	// The same key must be claimable again (the first attempt stored no response).
+	// A failure must RELEASE the key, so the retry that follows can claim it. The old
+	// expectation was "not owned" — which the handler read as status 0, i.e. in flight, so
+	// every retry after a 4xx answered idempotency_in_flight until the TTL expired.
 	owned, _, err := store.Claim(ctx, failKey, "test-scope", HashRequest([]byte(`{"b":1}`)), 24*time.Hour)
 	if err != nil {
 		t.Fatalf("Claim after failure: %v", err)
 	}
-	if owned {
-		t.Fatal("a failed attempt must not keep the key owned")
+	if !owned {
+		t.Fatal("a failed attempt must release the key so the retry can claim it")
 	}
 }
 

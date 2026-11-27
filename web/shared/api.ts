@@ -6,6 +6,15 @@
 // (ADR-DATA-001), which is why formatToman lives here and nowhere else.
 
 const BASE = import.meta.env.VITE_API_BASE ?? '/api/v1'
+// API_ORIGIN is the scheme+host of the API, used for the OIDC endpoints that live at the root
+// (/oauth/*) rather than under /api/v1.
+const API_ORIGIN = (() => {
+  try {
+    return new URL(BASE, window.location.origin).origin
+  } catch {
+    return window.location.origin
+  }
+})()
 
 export type Product = {
   id: string
@@ -62,9 +71,16 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // init.headers must be MERGED, not spread over the defaults: spreading `...init` after the
+  // headers object replaced them wholesale, so a caller passing one header silently lost
+  // Content-Type and Accept.
   const res = await fetch(`${BASE}${path}`, {
-    headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}) },
     ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...((init?.headers as Record<string, string> | undefined) ?? {}),
+    },
   })
   if (!res.ok) {
     let code = 'http_error'
@@ -152,8 +168,15 @@ export type OrderInput = {
   tax_total: number
 }
 
-export async function createOrder(input: OrderInput) {
-  return request<{ id: string }>('/orders', { method: 'POST', body: JSON.stringify(input) })
+// createOrder is idempotent server-side: the same key returns the same order instead of
+// creating a second one on a double click or a network retry.
+export async function createOrder(input: OrderInput, idempotencyKey?: string) {
+  const key = idempotencyKey ?? b64url(crypto.getRandomValues(new Uint8Array(18)))
+  return request<{ id: string }>('/orders', {
+    method: 'POST',
+    body: JSON.stringify(input),
+    headers: { 'Idempotency-Key': key },
+  })
 }
 
 // A guest order is readable only by the phone that placed it (commerce.mayReadOrder). Without
@@ -273,7 +296,9 @@ function b64url(bytes: Uint8Array): string {
 }
 
 export function adminRedirectURI(): string {
-  return `${window.location.origin}/auth/callback`
+  // VITE_OIDC_REDIRECT overrides the callback so a static preview (which cannot serve
+  // /auth/callback) can register a URL the API already trusts.
+  return (import.meta.env.VITE_OIDC_REDIRECT as string | undefined) ?? `${window.location.origin}/auth/callback`
 }
 
 // beginOIDCLogin authenticates the staff member and returns the URL to navigate to.
@@ -292,7 +317,10 @@ export async function beginOIDCLogin(email: string, password: string): Promise<s
     code_challenge_method: 'S256',
     state,
   })
-  return `/oauth/authorize?${params.toString()}`
+  // The authorize endpoint lives on the API origin, not on the app's. Returning a bare path
+  // navigated the panel to its own host, where no such route exists — the customer saw a blank
+  // 404 page ("it shows for a second and then goes white").
+  return `${API_ORIGIN}/oauth/authorize?${params.toString()}`
 }
 
 // completeOIDCLogin exchanges ?code= for tokens when the callback lands. It does not
@@ -308,7 +336,7 @@ export async function completeOIDCLogin(): Promise<boolean> {
   if (url.searchParams.get('state') !== saved.state) {
     throw new ApiError(400, 'state_mismatch', 'پاسخ ورود با درخواست هم‌خوان نیست.')
   }
-  const res = await fetch('/oauth/token', {
+  const res = await fetch(`${API_ORIGIN}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

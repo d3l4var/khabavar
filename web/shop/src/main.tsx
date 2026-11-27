@@ -17,6 +17,7 @@ import {
   type OrderItemInput,
   type Product,
 } from '../../shared/api'
+import { ErrorBoundary } from '../../shared/ErrorBoundary'
 import '../../shared/tokens.css'
 
 const CART_KEY = 'kh.cart.v1'
@@ -386,4 +387,8 @@ function App() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+)

@@ -77,6 +77,8 @@ var (
 	ErrShippingAddressReq    = errors.New("commerce: shipping_address is required")
 	ErrGuestPhoneRequired    = errors.New("commerce: guest_phone is required for a guest checkout (MA-8)")
 	ErrIdempotencyKeyMissing = errors.New("commerce: Idempotency-Key header is required")
+	// ErrOrderItemInvalid covers a line the caller sent without the snapshots an order needs.
+	ErrOrderItemInvalid = errors.New("commerce: order item is invalid")
 	// ErrIdempotencyKeyTooLong guards the varchar(100) column: an over-long key used to reach
 	// the database and surface as a 500 for what is a bad request.
 	ErrIdempotencyKeyTooLong = errors.New("commerce: Idempotency-Key is longer than 100 characters")
@@ -407,11 +409,20 @@ func validateOrderInput(in OrderInput) error {
 		return ErrCartEmpty
 	}
 	for i, it := range in.Items {
+		// An empty or malformed id used to reach the uuid column and answer 500. Validate here,
+		// where it is plainly the caller's mistake.
+		if !validUUID(it.VariantID) {
+			return fmt.Errorf("%w: item %d variant_id is not a uuid", ErrOrderItemInvalid, i)
+		}
+		if it.ProductID != "" && !validUUID(it.ProductID) {
+			return fmt.Errorf("%w: item %d product_id is not a uuid", ErrOrderItemInvalid, i)
+		}
 		if it.SupplyType != "OWNED_INVENTORY" && it.SupplyType != "SUPPLIER_SOURCED" {
-			return fmt.Errorf("commerce: item %d invalid supply_type %q", i, it.SupplyType)
+			return fmt.Errorf("%w: item %d invalid supply_type %q", ErrOrderItemInvalid, i, it.SupplyType)
 		}
 		if it.SKUSnapshot == "" || it.TitleSnapshot == "" {
-			return fmt.Errorf("commerce: item %d missing sku/title snapshot", i)
+			// A missing snapshot is the caller's mistake, so it must map to 400, not 500.
+			return fmt.Errorf("%w: item %d missing sku/title snapshot", ErrOrderItemInvalid, i)
 		}
 	}
 	return nil
@@ -669,4 +680,11 @@ const (
 // canonical form (§۴.۱).
 func NormalizeOrderNumber(n string) string {
 	return strings.ToUpper(strings.TrimSpace(n))
+}
+
+// validUUID reports whether s parses as a UUID, so a malformed id is a 400 before it reaches a
+// uuid column and comes back as a 500.
+func validUUID(s string) bool {
+	_, err := uuid.Parse(s)
+	return err == nil
 }

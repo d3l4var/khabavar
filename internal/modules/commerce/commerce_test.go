@@ -219,7 +219,7 @@ func validOrderInput() OrderInput {
 		OrderNumber: "KHA-ORD-2026-000001",
 		Items: []OrderItemInput{
 			{
-				ProductID: "prod-1", VariantID: "var-1",
+				ProductID: "00000000-0000-0000-0000-000000000010", VariantID: "00000000-0000-0000-0000-000000000011",
 				SKUSnapshot: "SKU-001", TitleSnapshot: "عسل خواب‌آور ۵۰۰گ",
 				Quantity: 2, UnitPrice: 500_000, SupplyType: "OWNED_INVENTORY",
 			},

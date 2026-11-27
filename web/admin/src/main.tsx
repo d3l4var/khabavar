@@ -32,6 +32,7 @@ import {
   type AdminOrder,
   type AdminProductRow,
 } from '../../shared/api'
+import { ErrorBoundary } from '../../shared/ErrorBoundary'
 import '../../shared/tokens.css'
 import { ProductDetailScreen } from './ProductDetail'
 
@@ -604,7 +605,11 @@ function App() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+)
 
 // NewProductForm creates a DRAFT product and jumps to its detail page, where the
 // publish gate, categories, variants and pricing live. The slug is derived from the

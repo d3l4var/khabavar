@@ -40,6 +40,8 @@ func statusForError(err error) int {
 		errors.Is(err, ErrReturnReasonRequired),
 		errors.Is(err, ErrReturnQuantityInvalid):
 		return http.StatusBadRequest
+	case errors.Is(err, ErrOrderItemInvalid):
+		return http.StatusBadRequest
 	case errors.Is(err, ErrRefundExceedsPaid), errors.Is(err, ErrOrderNotRefundable),
 		errors.Is(err, ErrReturnNotAllowed), errors.Is(err, ErrReturnAlreadyOpen),
 		// A business state, not a server fault: the order was never paid, so there is nothing

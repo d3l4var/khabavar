@@ -303,7 +303,11 @@ func mountRoutes(api *apiMux, s services) {
 	api.publicCustomer("PATCH /api/v1/cart/items/{id}", commerce.UpdateCartItemHandler(s.commerce))
 	api.publicCustomer("DELETE /api/v1/cart/items/{id}", commerce.DeleteCartItemHandler(s.commerce))
 
-	api.public("POST /api/v1/orders", commerce.CreateOrderHandler(s.commerce))
+	// Order creation is the only path money flows through, so it must be idempotent: a double
+	// click or a network retry used to create two orders. /checkout already had the wrapper;
+	// /orders did not.
+	api.public("POST /api/v1/orders", commerce.Idempotent(s.idem, "POST /api/v1/orders",
+		commerce.CreateOrderHandler(s.commerce).ServeHTTP))
 	// GET /orders/{id} accepts either the internal UUID or the business order number
 	// (KHA-ORD-YYYY-NNNNNN) — the contract exposes /orders/{orderNumber}. The two are
 	// one route on purpose: separate /orders/by-number/{n} and /orders/{id}/fulfillment

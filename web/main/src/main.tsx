@@ -31,6 +31,7 @@ import {
   type Article,
   type Product,
 } from '../../shared/api'
+import { ErrorBoundary } from '../../shared/ErrorBoundary'
 import '../../shared/tokens.css'
 
 // ── tiny hash router ──────────────────────────────────────────────────────────
@@ -367,4 +368,8 @@ function App() {
   )
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+)
