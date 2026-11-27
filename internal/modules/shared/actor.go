@@ -17,8 +17,13 @@ func WithActorID(ctx context.Context, id string) context.Context {
 }
 
 // ActorID returns the acting principal's id, or "" when the call is anonymous
-// (storefront, background job).
+// (storefront, background job). A nil context is treated as anonymous rather than
+// panicking: this helper sits on the path of every sensitive handler (IAM §۷), and a
+// caller that loses its context should get a 401, not a crashed process.
 func ActorID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
 	v, _ := ctx.Value(actorKey{}).(string)
 	return v
 }
