@@ -3116,6 +3116,31 @@ status: 200 | path: /api/v1/admin/return-requests/f9e157af-…/approve
 
 ---
 
+### ۴.۱۱۲ صف مرجوعی — API و پنل — کامیت `feat(returns-queue)`
+
+**یافته:** سه مسیر انتقال وجود داشت ولی **هیچ مسیری برای دیدن صف نبود**. کارمند فقط
+می‌توانست درخواستی را پردازش کند که id آن را از قبل می‌دانست. یعنی چرخهٔ §۴.۱۱۰ در عمل
+قابل استفاده نبود.
+
+**افزوده شد:**
+- `GET /api/v1/admin/return-requests?status=&page=&page_size=` با مجوز `order.view`
+- وضعیت ناشناخته ۴۰۰ است، نه فهرست خالی — «NOPE» نباید مثل «همه» رفتار کند
+- `ReturnsScreen` در پنل: فیلتر وضعیت، تأیید/رد/ثبت دریافت، یادداشت تصمیم
+- سه تابع کلاینت در `web/shared/api.ts`
+
+**شاهد روی باینری:**
+```
+GET /admin/return-requests               200  total=2 (APPROVED، RECEIVED)
+GET /admin/return-requests?status=APPROVED 200  total=1
+GET /admin/return-requests?status=NOPE   400
+GET /admin/return-requests (بدون توکن)   401
+```
+
+پنل: `tsc --noEmit` پاک، بیلد admin و shop سبز.
+قرارداد: **۱۳۱ mount، ۱۳۱ اعلان‌شده، ۰ بدون قرارداد**.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

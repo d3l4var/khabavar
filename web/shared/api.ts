@@ -494,3 +494,37 @@ export function formatToman(rial: number): string {
   const toman = Math.round(rial / 10)
   return toman.toLocaleString('fa-IR') + ' تومان'
 }
+
+// Return claims: the panel queue, then the staff decisions. Before the list existed staff could
+// only act on an id they already knew.
+export type ReturnRequest = {
+  id: string
+  order_id: string
+  customer_id: string
+  quantity: number
+  reason: string
+  status: 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'RECEIVED' | 'REFUNDED'
+  decision_note?: string
+  created_at: string
+}
+
+export async function adminListReturns(status = '', page = 1, pageSize = 20) {
+  const qs = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  if (status) qs.set('status', status)
+  return adminRequest<{ items: ReturnRequest[]; page: { total: number } }>(`/admin/return-requests?${qs}`)
+}
+
+export async function adminDecideReturn(id: string, approve: boolean, note = '') {
+  const action = approve ? 'approve' : 'reject'
+  return adminRequest<ReturnRequest>(`/admin/return-requests/${encodeURIComponent(id)}/${action}`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  })
+}
+
+export async function adminReceiveReturn(id: string, note = '') {
+  return adminRequest<ReturnRequest>(`/admin/return-requests/${encodeURIComponent(id)}/receive`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  })
+}

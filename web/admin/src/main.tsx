@@ -19,6 +19,9 @@ import {
   adminCreateProduct,
   adminListRoles,
   adminListStock,
+  adminListReturns,
+  adminDecideReturn,
+  adminReceiveReturn,
   adminPatchProduct,
   adminPublishProduct,
   adminRecordMovement,
@@ -35,6 +38,7 @@ const NAV = [
   { label: 'سفارش‌ها', href: '#/orders' },
   { label: 'محصولات', href: '#/products' },
   { label: 'انبار', href: '#/stock' },
+  { label: 'مرجوعی‌ها', href: '#/returns' },
   { label: 'Audit', href: '#/audit' },
   { label: 'نقش‌ها', href: '#/roles' },
 ]
@@ -398,6 +402,105 @@ function RolesScreen() {
   )
 }
 
+
+// ReturnsScreen is the staff queue for return claims. The API had approve/reject/receive by id
+// but no list, so a claim could only be handled by someone who already knew its id.
+function ReturnsScreen() {
+  const [status, setStatus] = useState('')
+  const [submitted, setSubmitted] = useState('')
+  const returns = useAsync(() => adminListReturns(submitted), [submitted])
+  const [msg, setMsg] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+
+  // act runs one decision and reloads the queue: a stale row is a wrong decision.
+  const act = async (fn: () => Promise<unknown>, ok: string) => {
+    setMsg(null)
+    try {
+      await fn()
+      setMsg(ok)
+      returns.retry()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'اقدام ناموفق بود.')
+    }
+  }
+
+  return (
+    <Container>
+      <h1 style={{ marginTop: 'var(--kh-space-5)' }}>مرجوعی‌ها</h1>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          setSubmitted(status)
+        }}
+        style={{ display: 'flex', gap: 'var(--kh-space-2)', margin: 'var(--kh-space-3) 0' }}
+      >
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          aria-label="فیلتر وضعیت"
+          style={{ padding: 'var(--kh-space-3)', borderRadius: 'var(--kh-radius-sm)', border: '1px solid var(--kh-border)', background: 'var(--kh-surface)', color: 'var(--kh-text)', font: 'inherit' }}
+        >
+          <option value="">همه</option>
+          <option value="REQUESTED">در انتظار</option>
+          <option value="APPROVED">تأییدشده</option>
+          <option value="REJECTED">ردشده</option>
+          <option value="RECEIVED">دریافت‌شده</option>
+          <option value="REFUNDED">بازپرداخت‌شده</option>
+        </select>
+        <Button type="submit">اعمال</Button>
+      </form>
+
+      {msg ? <p role="status" style={{ color: 'var(--kh-text-muted)' }}>{msg}</p> : null}
+      {returns.loading ? <StateBlock kind="loading" /> : null}
+      {returns.error ? <StateBlock kind="error" message={returns.error} onRetry={returns.retry} /> : null}
+      {returns.data && (returns.data.items ?? []).length === 0 ? <StateBlock kind="empty" message="درخواست مرجوعی وجود ندارد." /> : null}
+      {returns.data && (returns.data.items ?? []).length > 0 ? (
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 'var(--kh-space-5)' }}>
+          <thead>
+            <tr style={{ textAlign: 'start', color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>
+              <th>وضعیت</th>
+              <th>سفارش</th>
+              <th>تعداد</th>
+              <th>دلیل</th>
+              <th>اقدام</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(returns.data.items ?? []).map((r) => (
+              <tr key={r.id} style={{ borderTop: '1px solid var(--kh-border)' }}>
+                <td style={{ padding: 'var(--kh-space-2)' }}>{r.status}</td>
+                <td style={{ fontSize: 'var(--kh-text-sm)' }}>{r.order_id.slice(0, 8)}…</td>
+                <td>{r.quantity}</td>
+                <td>{r.reason}</td>
+                <td style={{ display: 'flex', gap: 'var(--kh-space-2)', flexWrap: 'wrap' }}>
+                  {r.status === 'REQUESTED' ? (
+                    <>
+                      <Button onClick={() => act(() => adminDecideReturn(r.id, true, note), 'تأیید شد.')}>تأیید</Button>
+                      <Button onClick={() => act(() => adminDecideReturn(r.id, false, note), 'رد شد.')}>رد</Button>
+                    </>
+                  ) : null}
+                  {r.status === 'APPROVED' ? (
+                    <Button onClick={() => act(() => adminReceiveReturn(r.id, note), 'دریافت ثبت شد.')}>ثبت دریافت</Button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+
+      <label style={{ display: 'block', marginBottom: 'var(--kh-space-5)' }}>
+        <span style={{ color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>یادداشت تصمیم (برای رد الزامی است)</span>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          style={{ display: 'block', width: '100%', marginTop: 'var(--kh-space-1)', padding: 'var(--kh-space-3)', borderRadius: 'var(--kh-radius-sm)', border: '1px solid var(--kh-border)', background: 'var(--kh-surface)', color: 'var(--kh-text)', font: 'inherit' }}
+        />
+      </label>
+    </Container>
+  )
+}
+
 function App() {
   const hash = useHashRoute()
   const [authed, setAuthed] = useState(() => Boolean(adminToken()))
@@ -438,6 +541,9 @@ function App() {
       break
     case 'stock':
       screen = <StockScreen />
+      break
+    case 'returns':
+      screen = <ReturnsScreen />
       break
     case 'audit':
       screen = <AuditScreen />

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -125,4 +126,54 @@ func (s *Service) returnStore() (returnTransitioner, error) {
 		return nil, ErrRefundStoreNotWired
 	}
 	return rs, nil
+}
+
+// ListReturns returns claims for the panel, newest first, optionally filtered by status.
+// The panel had no way to find a claim: only transitions by id existed, so staff could not
+// see the queue they were supposed to work.
+func (s *DBStore) ListReturns(ctx context.Context, status string, page, pageSize int) ([]ReturnRequest, int, error) {
+	where := ""
+	args := []any{}
+	if status != "" {
+		where = " WHERE status = $1"
+		args = append(args, status)
+	}
+	var total int
+	if err := s.pool.QueryRow(ctx, "SELECT count(*) FROM return_requests"+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	args = append(args, pageSize, (page-1)*pageSize)
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, order_id, customer_id, quantity, reason, status, COALESCE(decision_note,''), created_at
+		   FROM return_requests`+where+
+			` ORDER BY created_at DESC LIMIT $`+strconv.Itoa(len(args)-1)+` OFFSET $`+strconv.Itoa(len(args)), args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := make([]ReturnRequest, 0, pageSize)
+	for rows.Next() {
+		var rr ReturnRequest
+		if err := rows.Scan(&rr.ID, &rr.OrderID, &rr.CustomerID, &rr.Quantity, &rr.Reason,
+			&rr.Status, &rr.DecisionNote, &rr.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, rr)
+	}
+	return out, total, rows.Err()
+}
+
+// ListReturns is the service face of the panel queue.
+func (s *Service) ListReturns(ctx context.Context, status string, page, pageSize int) ([]ReturnRequest, int, error) {
+	type lister interface {
+		ListReturns(context.Context, string, int, int) ([]ReturnRequest, int, error)
+	}
+	if s.refunds == nil {
+		return nil, 0, ErrRefundStoreNotWired
+	}
+	l, ok := s.refunds.(lister)
+	if !ok {
+		return nil, 0, ErrRefundStoreNotWired
+	}
+	return l.ListReturns(ctx, status, page, pageSize)
 }

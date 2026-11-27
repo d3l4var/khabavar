@@ -130,3 +130,59 @@ func TestPG_ReturnHTTPHandlers(t *testing.T) {
 		t.Fatalf("unknown claim = %d, want 404", rec.Code)
 	}
 }
+
+// TestPG_ListReturns covers the panel queue: staff had no way to find a claim, only to act on
+// an id they already knew.
+func TestPG_ListReturns(t *testing.T) {
+	pool, _, _ := setupCommerce(t)
+	ctx := context.Background()
+	store := NewDBStore(pool)
+	svc := NewService(store, nil)
+	svc.SetRefundStore(store)
+	svc.SetNow(time.Now)
+
+	customerID := seedCustomerRow(t, ctx, pool)
+	orderA, _ := seedPaidOrder(t, ctx, pool, 100000)
+	if _, err := pool.Exec(ctx, `UPDATE orders SET status = 'DELIVERED', customer_id = $2 WHERE id = $1`, orderA, customerID); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	first, err := svc.CreateReturnRequest(ctx, orderA, customerID, 1, "خرابی")
+	if err != nil {
+		t.Fatalf("claim A: %v", err)
+	}
+	// seedPaidOrder reuses one product slug, so a second call collides. The second claim only
+	// needs a row that belongs to another order, which a direct insert gives us.
+	var orderB string
+	if err := pool.QueryRow(ctx, `INSERT INTO orders (order_number, status, currency, subtotal, grand_total,
+			shipping_address_snapshot, customer_id)
+		VALUES ('KHA-ORD-2026-900001', 'DELIVERED', 'IRR', 50000, 50000, '{}'::jsonb, $1) RETURNING id`, customerID).Scan(&orderB); err != nil {
+		t.Fatalf("order B: %v", err)
+	}
+	if _, err := svc.CreateReturnRequest(ctx, orderB, customerID, 2, "اشتباه"); err != nil {
+		t.Fatalf("claim B: %v", err)
+	}
+	if _, err := svc.DecideReturn(ctx, first.ID, true, "ok"); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+
+	// Unfiltered: both claims.
+	all, total, err := svc.ListReturns(ctx, "", 1, 20)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if total < 2 || len(all) < 2 {
+		t.Fatalf("list = %d items, total %d, want both", len(all), total)
+	}
+	// Filtered: only the approved one.
+	approved, atotal, err := svc.ListReturns(ctx, ReturnApproved, 1, 20)
+	if err != nil {
+		t.Fatalf("list approved: %v", err)
+	}
+	if atotal != 1 || len(approved) != 1 || approved[0].ID != first.ID {
+		t.Fatalf("filtered = %d items, total %d, want just %s", len(approved), atotal, first.ID)
+	}
+	// An unknown status matches nothing rather than everything.
+	if _, none, err := svc.ListReturns(ctx, ReturnRefunded, 1, 20); err != nil || none != 0 {
+		t.Fatalf("refunded = %d, %v; want 0", none, err)
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // Admin handlers for the return claim lifecycle. The customer can only create a claim
@@ -73,4 +75,47 @@ func ReceiveReturnHandler(svc *Service) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, rr)
 	}
+}
+
+// ListReturnsHandler serves GET /api/v1/admin/return-requests — the panel's queue. Without it
+// the only way to reach a claim was to already know its id.
+func ListReturnsHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		status := strings.TrimSpace(q.Get("status"))
+		if status != "" && !isReturnStatus(status) {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "unknown status: " + status, Code: "invalid_status"})
+			return
+		}
+		page := parsePageParam(q.Get("page"), 1)
+		pageSize := parsePageParam(q.Get("page_size"), 20)
+		items, total, err := svc.ListReturns(r.Context(), status, page, pageSize)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items": items,
+			"page":  map[string]any{"page": page, "page_size": pageSize, "total": total},
+		})
+	}
+}
+
+func isReturnStatus(s string) bool {
+	switch s {
+	case ReturnRequested, ReturnApproved, ReturnRejected, ReturnReceived, ReturnRefunded:
+		return true
+	}
+	return false
+}
+
+func parsePageParam(v string, def int) int {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return def
+	}
+	if n > 100 {
+		return 100
+	}
+	return n
 }
