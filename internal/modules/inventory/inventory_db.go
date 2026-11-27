@@ -110,7 +110,9 @@ func (s *DBStore) ReserveStock(ctx context.Context, warehouseID, variantID strin
 		  WHERE warehouse_id = $1 AND variant_id = $2 FOR UPDATE`,
 		warehouseID, variantID).Scan(&onHand, &reserved)
 	if err == pgx.ErrNoRows {
-		// Create a zero balance row, then the invariant check below fails naturally.
+		// No row yet: insert a zero balance so the invariant check below has numbers to
+		// compare. The insert is rolled back when the check fails — a refused reservation
+		// must not leave a row behind.
 		_, err = tx.Exec(ctx,
 			`INSERT INTO stock_balances (warehouse_id, variant_id, on_hand_quantity, reserved_quantity, updated_at)
 			 VALUES ($1,$2,0,0,$3)`,
