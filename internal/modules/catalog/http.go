@@ -83,7 +83,7 @@ func parsePositiveInt(s string, def int) int {
 
 func writeCatalogErr(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, ErrProductNotFound), errors.Is(err, ErrCategoryNotFound), errors.Is(err, ErrVariantNotFound):
+	case errors.Is(err, ErrProductNotFound), errors.Is(err, ErrCategoryNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
 	case errors.Is(err, ErrPublishGateMissing):
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "publish gate not satisfied", "code": "publish_gate_missing"})

@@ -31,6 +31,10 @@ func TestAdjustStockWritesAudit(t *testing.T) {
 	aud := &fakeAuditor{}
 	svc.SetAuditor(aud)
 
+	// The warehouse must exist now that AdjustStock validates it (a 404 instead of an FK 500).
+	if _, err := svc.CreateWarehouse(context.Background(), Warehouse{WarehouseCode: "wh-1", Name: "انبار تست"}); err != nil {
+		t.Fatalf("CreateWarehouse: %v", err)
+	}
 	// Seed on-hand first: a negative adjustment off an empty shelf is refused.
 	if err := svc.AdjustStock(context.Background(), "wh-1", "var-1", 10, "MANUAL", "", "admin-9", "ورود اولیه"); err != nil {
 		t.Fatalf("seed on-hand: %v", err)

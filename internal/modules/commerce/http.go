@@ -18,12 +18,10 @@ import (
 
 func statusForError(err error) int {
 	switch {
-	case errors.Is(err, ErrOrderNotFound), errors.Is(err, ErrCartNotFound), errors.Is(err, ErrRefundNotFound):
+	case errors.Is(err, ErrOrderNotFound), errors.Is(err, ErrCartNotFound):
 		return http.StatusNotFound
 	case errors.Is(err, ErrCartEmpty),
-		errors.Is(err, ErrInvalidTransition),
 		errors.Is(err, ErrTotalsMismatch),
-		errors.Is(err, ErrLineTotalsMismatch),
 		errors.Is(err, ErrIntentExists),
 		errors.Is(err, ErrIntentNotSucceeded),
 		errors.Is(err, ErrAlreadyPaid),

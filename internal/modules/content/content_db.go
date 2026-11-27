@@ -90,6 +90,9 @@ func (s *DBStore) CreateArticle(ctx context.Context, a Article) (string, error) 
 		a.Title, a.Slug, nullableStr(a.Summary), a.Body, a.Language, a.SourceType,
 		nullableStr(a.SourceURL), nullableStr(a.ParentArticleID),
 		nullableStr(a.AuthorID), nullableStr(a.EditorID), a.Status).Scan(&id)
+	if isUniqueViolation(err) {
+		return "", ErrDuplicateSlug // the slug index spoke; map it to a domain error
+	}
 	return id, err
 }
 
@@ -514,4 +517,10 @@ func (s *DBStore) SearchPublishedArticles(ctx context.Context, q string, page, p
 		out = append(out, a)
 	}
 	return out, total, rows.Err()
+}
+
+// isUniqueViolation reports a Postgres unique-constraint error (SQLSTATE 23505).
+func isUniqueViolation(err error) bool {
+	var pgErr interface{ SQLState() string }
+	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
 }

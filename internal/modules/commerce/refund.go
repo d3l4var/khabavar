@@ -55,7 +55,6 @@ const (
 
 // Sentinel errors for refunds.
 var (
-	ErrRefundNotFound      = errors.New("commerce: refund not found")
 	ErrRefundAmountInvalid = errors.New("commerce: refund amount must be > 0")
 	ErrRefundExceedsPaid   = errors.New("commerce: refund amount exceeds paid − already refunded")
 	ErrOrderNotRefundable  = errors.New("commerce: order is not in a refundable state")

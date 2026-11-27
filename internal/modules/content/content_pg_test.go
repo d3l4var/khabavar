@@ -539,3 +539,17 @@ func TestPG_StorefrontFilters(t *testing.T) {
 	}
 	_ = store
 }
+
+// TestPG_DuplicateSlugIsAConflict: the unique index used to surface as a 500. A duplicate
+// slug is the client's mistake and must be a 409 with a domain error.
+func TestPG_DuplicateSlugIsAConflict(t *testing.T) {
+	_, svc, _ := setupContent(t)
+	ctx := context.Background()
+	if _, err := svc.CreateArticle(ctx, Article{Title: "اول", Slug: "dup-slug", Body: "متن", Language: "fa", SourceType: "ORIGINAL"}); err != nil {
+		t.Fatalf("CreateArticle: %v", err)
+	}
+	_, err := svc.CreateArticle(ctx, Article{Title: "دوم", Slug: "dup-slug", Body: "متن", Language: "fa", SourceType: "ORIGINAL"})
+	if !errors.Is(err, ErrDuplicateSlug) {
+		t.Fatalf("duplicate slug = %v, want ErrDuplicateSlug", err)
+	}
+}

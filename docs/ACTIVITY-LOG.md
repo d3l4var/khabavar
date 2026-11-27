@@ -1912,6 +1912,34 @@ return نمی‌شد** — نرخ ۱.۵ ذخیره می‌شد. اعتبارسن
 
 ---
 
+### ۴.۷۴ اعتبارسنجی‌های مرده: دو وصل شد، پنج حذف — کامیت `fix(dead-validations)`
+
+هشت sentinel که به کد وضعیت نگاشت شده بودند ولی هرگز صادر نمی‌شدند بررسی شدند. **دو
+مورد باگ واقعی بودند** (خطای کلاینت → ۵۰۰)، بقیه واقعاً مرده.
+
+**وصل شد (باگ واقعی):**
+- **`content.ErrDuplicateSlug`** — slug تکراری به ایندکس یکتا می‌خورد و **۵۰۰** می‌داد.
+  حالا `isUniqueViolation` (SQLSTATE 23505) آن را به `ErrDuplicateSlug` → **۴۰۹** نگاشت
+  می‌کند.
+- **`inventory.ErrWarehouseNotFound`** — رسید/تعدیل روی انبار ناموجود کلید خارجی را
+  می‌شکست و **۵۰۰** می‌داد. حالا `ReceiveStock` و `AdjustStock` وجود انبار را چک می‌کنند
+  → **۴۰۴**.
+
+**حذف شد (مرده):** `catalog.ErrVariantNotFound`، `commerce.ErrRefundNotFound`،
+`commerce.ErrInvalidTransition`، `commerce.ErrLineTotalsMismatch` — و ورودی‌هایشان در
+نگاشت‌ها. دو مورد جاروب قبلی هم false positive بودند: `ErrAllocationExceedsOrder` داخل
+`fmt.Errorf(%w)` برمی‌گردد و `ErrCategoryNotFound` مستقیم به `writeCatalogErr` داده می‌شود.
+
+**شاهد:** `TestPG_DuplicateSlugIsAConflict` (تکراری → `ErrDuplicateSlug`) و
+`TestPG_UnknownWarehouseIsNotFound` (رسید و تعدیل روی انبار ناموجود → `ErrWarehouseNotFound`).
+
+**یک تست موجود شکست و درست بود:** `TestAdjustStockWritesAudit` انبار نمی‌ساخت و حالا
+`ErrWarehouseNotFound` می‌گرفت — یعنی اعتبارسنجی تازه کار می‌کند. تست اصلاح شد.
+
+**سنتینل مرده باقی‌مانده: صفر.**
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی

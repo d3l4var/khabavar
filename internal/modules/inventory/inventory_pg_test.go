@@ -339,3 +339,17 @@ func TestPG_WarehouseReads(t *testing.T) {
 		t.Fatalf("unknown code returned %+v, want nil", missing)
 	}
 }
+
+// TestPG_UnknownWarehouseIsNotFound: receiving or adjusting against a warehouse that does
+// not exist used to break a foreign key and answer 500. It is now a domain 404.
+func TestPG_UnknownWarehouseIsNotFound(t *testing.T) {
+	_, svc, _ := setupInventory(t)
+	ctx := context.Background()
+	missing := "00000000-0000-0000-0000-000000000000"
+	if err := svc.ReceiveStock(ctx, missing, "00000000-0000-0000-0000-000000000001", 1, "PO", "", ""); !errors.Is(err, ErrWarehouseNotFound) {
+		t.Fatalf("ReceiveStock(unknown warehouse) = %v, want ErrWarehouseNotFound", err)
+	}
+	if err := svc.AdjustStock(ctx, missing, "00000000-0000-0000-0000-000000000001", 1, "MANUAL", "", "", ""); !errors.Is(err, ErrWarehouseNotFound) {
+		t.Fatalf("AdjustStock(unknown warehouse) = %v, want ErrWarehouseNotFound", err)
+	}
+}

@@ -42,7 +42,6 @@ const (
 var (
 	ErrCategoryNotFound   = errors.New("catalog: category not found")
 	ErrProductNotFound    = errors.New("catalog: product not found")
-	ErrVariantNotFound    = errors.New("catalog: variant not found")
 	ErrPublishGateMissing = errors.New("catalog: publish requires sleep_relevance, spec_source and spec_last_reviewed_at (MA-1/MA-6)")
 	ErrInvalidStatus      = errors.New("catalog: invalid status transition")
 	ErrDuplicateSKU       = errors.New("catalog: variant sku already exists")

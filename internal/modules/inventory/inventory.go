@@ -220,6 +220,12 @@ func (s *Service) ReceiveStock(ctx context.Context, warehouseID, variantID strin
 	if qty <= 0 {
 		return fmt.Errorf("inventory: receive qty must be > 0")
 	}
+	// An unknown warehouse would otherwise surface as a foreign-key 500.
+	if w, err := s.store.GetWarehouse(ctx, warehouseID); err != nil {
+		return err
+	} else if w == nil {
+		return ErrWarehouseNotFound
+	}
 	now := s.now()
 	if err := s.store.AdjustOnHand(ctx, warehouseID, variantID, qty, now); err != nil {
 		return fmt.Errorf("adjust on_hand: %w", err)
@@ -245,6 +251,11 @@ func (s *Service) ReceiveStock(ctx context.Context, warehouseID, variantID strin
 func (s *Service) AdjustStock(ctx context.Context, warehouseID, variantID string, delta int, referenceType, referenceID, createdBy, notes string) error {
 	if delta == 0 {
 		return ErrZeroQuantity
+	}
+	if w, err := s.store.GetWarehouse(ctx, warehouseID); err != nil {
+		return err
+	} else if w == nil {
+		return ErrWarehouseNotFound
 	}
 	now := s.now()
 	if err := s.store.AdjustOnHand(ctx, warehouseID, variantID, delta, now); err != nil {
