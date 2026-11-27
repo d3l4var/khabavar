@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -94,11 +95,17 @@ func (s *DBStore) GetProduct(ctx context.Context, id string) (*Product, error) {
 	var p Product
 	var brandID, shortDesc, desc, manufacturer, origin, sleepRel, specSrc pgtype.Text
 	var specReviewed, publishedAt pgtype.Timestamptz
+	// The storefront links products by SLUG; the panel uses the uuid. id is a uuid column, so
+	// passing a slug straight through was a driver error and the product page answered 500.
+	where := `WHERE id = $1`
+	if _, err := uuid.Parse(id); err != nil {
+		where = `WHERE slug = $1`
+	}
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, title, slug, brand_id, short_description, description, manufacturer,
 		        country_of_origin, sleep_relevance, spec_source, spec_last_reviewed_at,
 		        status, published_at
-		   FROM products WHERE id = $1`, id).
+		   FROM products `+where, id).
 		Scan(&p.ID, &p.Title, &p.Slug, &brandID, &shortDesc, &desc, &manufacturer,
 			&origin, &sleepRel, &specSrc, &specReviewed, &p.Status, &publishedAt)
 	if err == pgx.ErrNoRows {
@@ -122,9 +129,9 @@ func (s *DBStore) GetProduct(ctx context.Context, id string) (*Product, error) {
 		t := publishedAt.Time
 		p.PublishedAt = &t
 	}
-	// Load category ids.
+	// Load category ids. Use the resolved p.ID: the caller may have passed a slug.
 	rows, err := s.pool.Query(ctx,
-		`SELECT category_id FROM product_categories WHERE product_id = $1`, id)
+		`SELECT category_id FROM product_categories WHERE product_id = $1`, p.ID)
 	if err != nil {
 		return nil, err
 	}

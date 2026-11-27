@@ -247,7 +247,9 @@ func (s *Service) GetProductDetail(ctx context.Context, id string) (*ProductDeta
 	if p == nil {
 		return nil, ErrProductNotFound
 	}
-	variants, err := s.store.ListVariantsByProduct(ctx, id)
+	// Use the resolved id, not the caller's key: a slug is not a uuid and the variants query
+	// would fail on the column type.
+	variants, err := s.store.ListVariantsByProduct(ctx, p.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list variants: %w", err)
 	}

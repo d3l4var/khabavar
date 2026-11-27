@@ -30,7 +30,7 @@ func (s *Service) AddToCart(ctx context.Context, customerID, sessionToken, varia
 		return nil, err
 	}
 	if variantID == "" {
-		return nil, errors.New("commerce: variant_id is required")
+		return nil, ErrVariantRequired
 	}
 	c, err := s.Cart(ctx, customerID, sessionToken) // ensures the cart exists
 	if err != nil {
