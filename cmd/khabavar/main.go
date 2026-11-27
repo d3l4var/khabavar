@@ -254,7 +254,7 @@ func serve(ctx context.Context, addr string, mux *http.ServeMux, logger *slog.Lo
 	// Wrap the mux with security headers + CORS (R-19 P9). SecurityHeaders adds
 	// HSTS, X-Content-Type-Options, CSP, Cache-Control. CORS allows the four
 	// khabavar subdomains to make authenticated cross-origin requests.
-	handler := security.Chain(mux,
+	handler := security.Chain(jsonErrors(mux),
 		security.CORS(security.DefaultCORSConfig()),
 		security.SecurityHeaders,
 	)

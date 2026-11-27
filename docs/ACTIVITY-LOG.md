@@ -2865,6 +2865,60 @@ KHA-ORD-2026-000009 | PAID | paid_total=500000 | payment_attempts=1
 
 ---
 
+### ۴.۱۰۵ پنل ادمین روی باینری واقعی — و ۴۰۵/۴۰۴ متنی — کامیت `fix(json-errors)`
+
+**حساب کارمند برای دود-تست ساخته شد** (بدون نیاز به گذرواژهٔ موجود؛ هش bcrypt تازه با
+گذرواژهٔ معلوم، نقش `SMOKE_ADMIN` با ۲۴ مجوز). **اعتبارنامهٔ هیچ حساب واقعی حدس زده نشد.**
+
+```
+POST /auth/admin/login                     200  access_token (۶۴ کاراکتر)
+GET  /admin/orders  (با مجوز)              200
+GET  /admin/stock                          200
+GET  /admin/users                          200
+GET  /admin/audit-logs                     200
+GET  /admin/products                       200
+GET  /admin/orders?q=000009                200
+GET  /admin/orders  (بدون توکن)            401
+GET  /admin/orders  (توکن نامعتبر)         401
+GET  /admin/orders  (نقش بدون مجوز)        403  ← RBAC واقعاً کار می‌کند
+```
+
+**رسانه، رفت‌وبرگشت کامل:**
+```
+POST /admin/media           201  {"id":…,"media_type":"IMAGE","storage_key":"IMAGE/…"}
+GET  /media/{id}/content    200  ۱۱ بایت — cmp با فایل اصلی: یکسان
+GET  /media/{id}            200
+POST /admin/media (بدون احراز) 401
+```
+
+**باگ پیدا شده — ۴۰۵ و ۴۰۴ متن ساده بودند:**
+
+```
+HTTP/1.1 405 Method Not Allowed
+Content-Type: text/plain; charset=utf-8
+Method Not Allowed
+```
+
+کلاینتی که همیشه JSON می‌خواند، روی **دقیقاً همان پاسخ‌هایی** که باید رویشان شاخه بزند
+(متد اشتباه، مسیر ناشناخته) خطای parse می‌گرفت. `jsonErrors` اضافه شد و mux را می‌پوشاند:
+
+```
+HTTP/1.1 405  Content-Type: application/json; charset=utf-8
+{"code":"method_not_allowed","error":"method not allowed"}
+{"code":"not_found","error":"not found"}
+```
+
+`TestJSONErrors` هر دو حالت و عبور بی‌تغییر پاسخ عادی را تثبیت می‌کند.
+
+## شکاف قابلیت (نه باگ) — تصمیم مالک
+
+**`GET /admin/warehouses` وجود ندارد** — فقط `POST`. پنل می‌تواند انبار بسازد ولی هرگز
+فهرستش را نمی‌بیند، پس `{wid}` لازم برای عملیات موجودی را از کجا بیاورد؟ کد و قرارداد
+**هر دو** این مسیر را ندارند، پس واگرایی نیست؛ **قابلیت غایب** است. افزودنش تغییر قرارداد
+است و تصمیم مالک می‌خواهد.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
