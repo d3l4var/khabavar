@@ -80,7 +80,6 @@ var (
 	ErrInvalidRelationType  = errors.New("content: invalid relation_type")
 	ErrInvalidCitationType  = errors.New("content: invalid citation source_type")
 	ErrInvalidArticleSource = errors.New("content: invalid article source_type")
-	ErrCannotPublish        = errors.New("content: article is not in a publishable status")
 )
 
 // Topic mirrors topics (DB v2 §۱۲.۱). A topic tree via parent_id.

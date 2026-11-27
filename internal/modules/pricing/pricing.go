@@ -45,7 +45,6 @@ var (
 	ErrNoApprovedPrice      = errors.New("pricing: no approved price record in validity window")
 	ErrPriceAlreadyApproved = errors.New("pricing: price record already approved")
 	ErrInvalidTargetRate    = errors.New("pricing: target contribution rate must be in [0,1)")
-	ErrNegativeContribution = errors.New("pricing: calculated contribution is non-positive (BR-06)")
 )
 
 // CostRecord mirrors product_cost_records. Amounts are rials.

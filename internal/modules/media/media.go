@@ -40,7 +40,6 @@ const (
 // Sentinel errors. HTTP handlers map these to status codes.
 var (
 	ErrAssetNotFound    = errors.New("media: asset not found")
-	ErrStorageKeyReq    = errors.New("media: storage_key required")
 	ErrInvalidMediaType = errors.New("media: invalid media_type (must be IMAGE/VIDEO/DOCUMENT)")
 	ErrFilenameReq      = errors.New("media: filename required")
 	ErrUploadFailed     = errors.New("media: storage upload failed")

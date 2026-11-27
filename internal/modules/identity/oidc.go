@@ -42,7 +42,6 @@ var (
 	ErrOIDCInvalidPKCE      = errors.New("oidc: pkce verification failed")
 	ErrOIDCInvalidScope     = errors.New("oidc: requested scope not permitted for client")
 	ErrOIDCInvalidRefresh   = errors.New("oidc: invalid or expired refresh token")
-	ErrOIDCSubjectRequired  = errors.New("oidc: authenticated subject required")
 )
 
 // Supported scopes (R-07 §securitySchemes). Staff scope gates admin clients.

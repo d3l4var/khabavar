@@ -81,7 +81,6 @@ var (
 	ErrQuantityMustBePositive   = errors.New("fulfillment: quantity must be > 0")
 	ErrCarrierRequired          = errors.New("fulfillment: carrier required for shipment")
 	ErrOrderIDRequired          = errors.New("fulfillment: order_id required")
-	ErrShipmentNotModifiable    = errors.New("fulfillment: shipment is in a terminal status")
 )
 
 // FulfillmentOrder mirrors fulfillment_orders. One order may have multiple

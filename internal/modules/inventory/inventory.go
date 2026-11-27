@@ -60,7 +60,6 @@ var (
 	ErrWarehouseNameReq       = errors.New("inventory: warehouse name required")
 	ErrDuplicateWarehouseCode = errors.New("inventory: warehouse_code already exists")
 	ErrNegativeOnHand         = errors.New("inventory: on_hand_quantity cannot be negative")
-	ErrNegativeReserved       = errors.New("inventory: reserved_quantity cannot be negative")
 )
 
 // Warehouse mirrors warehouses.
