@@ -58,11 +58,11 @@ func ListAddressesHandler(store CustomerStore) http.HandlerFunc {
 // CreateAddressHandler serves POST /api/v1/me/addresses.
 func CreateAddressHandler(store CustomerStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		a, ok := decodeAddress(w, r)
+		customerID, ok := requireCustomer(w, r)
 		if !ok {
 			return
 		}
-		customerID, ok := requireCustomer(w, r)
+		a, ok := decodeAddress(w, r)
 		if !ok {
 			return
 		}
@@ -78,11 +78,11 @@ func CreateAddressHandler(store CustomerStore) http.HandlerFunc {
 // UpdateAddressHandler serves PATCH /api/v1/me/addresses/{id}.
 func UpdateAddressHandler(store CustomerStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		a, ok := decodeAddress(w, r)
+		customerID, ok := requireCustomer(w, r)
 		if !ok {
 			return
 		}
-		customerID, ok := requireCustomer(w, r)
+		a, ok := decodeAddress(w, r)
 		if !ok {
 			return
 		}
