@@ -41,7 +41,11 @@ func CreateCostRecordHandler(svc *Service) http.HandlerFunc {
 		variantID := r.PathValue("id")
 		var req costRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writePricingErr(w, errors.New("pricing: invalid JSON body"))
+			// A malformed body is the client's mistake: answer 400 here rather than routing
+			// it through writePricingErr, whose default branch is a 500.
+			writeJSONP(w, http.StatusBadRequest, map[string]any{
+				"error": "invalid JSON body", "code": "invalid_body",
+			})
 			return
 		}
 		c := CostRecord{
@@ -71,14 +75,18 @@ func CreateCostRecordHandler(svc *Service) http.HandlerFunc {
 			writePricingErr(w, err)
 			return
 		}
-		svc.audit(r, "pricing.cost.recorded", variantID, nil, map[string]any{
+		auditErr := svc.audit(r, "pricing.cost.recorded", variantID, nil, map[string]any{
 			"cost_record_id": id,
 			"total_cost":     TotalCost(c),
 			"currency":       c.Currency,
 		})
-		writeJSONP(w, http.StatusCreated, map[string]any{
-			"id": id, "total_cost": TotalCost(c), "currency": c.Currency,
-		})
+		body := map[string]any{"id": id, "total_cost": TotalCost(c), "currency": c.Currency}
+		if auditErr != nil {
+			// The record is saved; a 5xx would invite a duplicate retry, but the missing
+			// trail must not be silent either.
+			body["audit_warning"] = "the audit trail could not be written"
+		}
+		writeJSONP(w, http.StatusCreated, body)
 	}
 }
 
@@ -113,7 +121,11 @@ func CreatePriceRecordHandler(svc *Service) http.HandlerFunc {
 		variantID := r.PathValue("id")
 		var req priceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writePricingErr(w, errors.New("pricing: invalid JSON body"))
+			// A malformed body is the client's mistake: answer 400 here rather than routing
+			// it through writePricingErr, whose default branch is a 500.
+			writeJSONP(w, http.StatusBadRequest, map[string]any{
+				"error": "invalid JSON body", "code": "invalid_body",
+			})
 			return
 		}
 		p := PriceRecord{
@@ -138,7 +150,7 @@ func CreatePriceRecordHandler(svc *Service) http.HandlerFunc {
 			writePricingErr(w, err)
 			return
 		}
-		svc.audit(r, "pricing.price.recorded", variantID, nil, map[string]any{
+		auditErr := svc.audit(r, "pricing.price.recorded", variantID, nil, map[string]any{
 			"price_record_id": res.ID,
 			"selling_price":   req.SellingPrice,
 			"currency":        p.Currency,
@@ -146,6 +158,9 @@ func CreatePriceRecordHandler(svc *Service) http.HandlerFunc {
 		body := map[string]any{"id": res.ID, "status": "PENDING_APPROVAL"}
 		if len(res.Warnings) > 0 {
 			body["warnings"] = res.Warnings
+		}
+		if auditErr != nil {
+			body["audit_warning"] = "the audit trail could not be written"
 		}
 		writeJSONP(w, http.StatusCreated, body)
 	}
@@ -182,8 +197,12 @@ func ApprovePriceRecordHandler(svc *Service) http.HandlerFunc {
 			writePricingErr(w, err)
 			return
 		}
-		svc.audit(r, "pricing.price.approved", id, nil, map[string]any{"approved_by": approver})
-		writeJSONP(w, http.StatusOK, map[string]string{"status": "APPROVED", "approved_by": approver})
+		auditErr := svc.audit(r, "pricing.price.approved", id, nil, map[string]any{"approved_by": approver})
+		okBody := map[string]string{"status": "APPROVED", "approved_by": approver}
+		if auditErr != nil {
+			okBody["audit_warning"] = "the audit trail could not be written"
+		}
+		writeJSONP(w, http.StatusOK, okBody)
 	}
 }
 
@@ -199,11 +218,13 @@ func UnitEconomicsHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
-// audit records a sensitive pricing action (IAM §۷). A nil recorder is a no-op.
-func (s *Service) audit(r *http.Request, action, entityID string, oldV, newV any) {
+// audit records a sensitive pricing action (IAM §۷). A nil recorder is a no-op. The error is
+// returned rather than swallowed: the caller decides how to surface it, because the record
+// is already written and a 5xx would invite a duplicate retry.
+func (s *Service) audit(r *http.Request, action, entityID string, oldV, newV any) error {
 	if s.auditor == nil {
-		return
+		return nil
 	}
-	_ = s.auditor.Record(r.Context(), "ADMIN", shared.ActorID(r.Context()), action, "variant", entityID,
+	return s.auditor.Record(r.Context(), "ADMIN", shared.ActorID(r.Context()), action, "variant", entityID,
 		oldV, newV, "")
 }

@@ -220,6 +220,13 @@ func (s *Service) CreateCostRecord(ctx context.Context, c CostRecord) (string, e
 // callers surface it as a warning via CreatePriceRecordWithWarning or by inspecting the
 // returned contribution. ErrNoValidCost is returned when no cost record covers `now`.
 func (s *Service) CreatePriceRecord(ctx context.Context, p PriceRecord) (string, int64, error) {
+	// The contract bounds the target rate to [0,1) (minimum 0, maximum 1). ErrInvalidTargetRate
+	// existed but nothing returned it, so an out-of-range rate was stored silently.
+	if p.TargetContributionRate != nil {
+		if *p.TargetContributionRate < 0 || *p.TargetContributionRate >= 1 {
+			return "", 0, ErrInvalidTargetRate
+		}
+	}
 	if p.Currency == "" {
 		p.Currency = DefaultCurrency
 	}
