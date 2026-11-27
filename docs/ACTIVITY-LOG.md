@@ -2470,6 +2470,41 @@ conformance: exit 0
 
 ---
 
+### ۴.۹۴ inventory — نگاشت خطا و شاخه‌های رزرو — کامیت `test(inventory-errors)`
+
+آستانهٔ inventory **۹۰٪** است (منطق مالی/موجودی)، نه ۷۵٪.
+
+**`TestErrorMappingPinsStatusCodes`** — `writeInvSvcErr` ۳۳٪ بود:
+- هر sentinel به کد وضعیت درست نگاشت می‌شود (۴۰۴/۴۰۹/۴۰۰) و خطای ناشناخته → **۵۰۰**
+- **هر شاخه JSON برمی‌گرداند**، نه بدنهٔ خالی
+
+**`TestHandlersSurfaceStoreFailures`** — `writeAdminErr` و `writeInvErr` **۰٪** بودند:
+- pool بسته‌شده → خطای واقعی درایور → **۵۰۰ با بدنهٔ JSON**، نه panic و نه ۲۰۰ خالی
+- مسیر ادمین هم بدنه دارد
+
+**`TestGetStockBalanceHandler`** — بدون `warehouse_id` → ۴۰۰؛ موجودی ناشناخته → 4xx
+
+**`TestPG_ReservationServiceEdges`** — `ReleaseReservation` ۷۳٪، `ConvertReservation` ۷۳٪،
+`ListMovements` ۶۶٪:
+- گاردها: رزرو ناشناخته → `ErrReservationNotFound`
+- **release واقعاً `reserved_quantity` را صفر می‌کند** و حرکت **منفی** ثبت می‌کند
+- **release دوم رد می‌شود** (`ErrReservationNotActive`)
+- **convert `on_hand` را کم می‌کند** (۱۰ → ۷) و `reserved` را صفر می‌کند
+- **convert دوم رد می‌شود**
+- سقف `limit` (۰ و ۵۰۰۰) به بازهٔ مجاز می‌افتد
+
+**سه اصطکاک با schema که فقط با اجرا معلوم شد:**
+- `Warehouse` فیلد `WarehouseCode` دارد نه `Code`، و `Status` دارد نه `IsActive`
+- `variant_id` در `stock_balances` و `inventory_reservations` **FK به `product_variants`**
+  است — باید variant واقعی seed شود
+- `testpg.Setup` برای pool بسته‌شده cleanup را رد می‌کند؛ در آن تست cleanup عمداً رد شد
+
+**پوشش: inventory ۷۸.۴٪ → ۸۱.۵٪ → ۸۲.۳٪** — **آستانهٔ ۹۰٪ هنوز برآورده نشده.**
+شکاف باقی‌مانده در handlerهای نوشتن است: `CreateWarehouseHandler` ۷۱٪،
+`ReceiveStockHandler` ۶۸٪، `ConvertReservationHandler` ۶۷٪، `parsePositiveInt` ۳۳٪.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
