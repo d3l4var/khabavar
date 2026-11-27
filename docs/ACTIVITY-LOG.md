@@ -3600,6 +3600,31 @@ GET  /admin/variants/{variantId}/price-records   → PathValue("id")
 
 ---
 
+### ۴.۱۲۸ اثبات زنجیرهٔ قیمت روی باینری — کامیت `docs(pricing-verified)`
+
+پس از رفع شش باگ مسیر، زنجیرهٔ کامل روی باینری و با توکن واقعی:
+
+```
+GET  /admin/variants/V/cost-records    200 {"data":[]}
+POST /admin/variants/V/cost-records    201 {"total_cost":120000,"currency":"IRR"}
+GET  /admin/variants/V/cost-records    200 [{"supply_type":"OWNED_INVENTORY",…}]
+POST /admin/variants/V/price-records   201 {"status":"PENDING_APPROVAL"}
+GET  /admin/variants/V/price-records   200 [{"selling_price":260000,…}]
+```
+
+پایگاه داده: `OWNED_INVENTORY|120000|IRR|created_by=set` و `260000|IRR`.
+تریل: `admin.post|pricing.cost.manage` و `admin.post|pricing.price.approve`.
+
+**دو قاعدهٔ کسب‌وکار که درست کار می‌کنند:**
+- `POST price-records` بدون cost record → **۴۰۹ `no_valid_cost`** (نمی‌توان بدون بهای تمام‌شده
+  قیمت گذاشت)
+- `supply_type` نامعتبر → **۴۰۰ `invalid supply type`**، نه ۵۰۰
+
+**درس:** سه ۵۰۰ اولیه از **باینری کهنه** بود، نه از کد — `/tmp/khabavar` پس از اصلاح مسیرها
+دوباره ساخته نشده بود. هر بار که handler عوض می‌شود، باینری باید بازساخته شود.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
