@@ -2212,6 +2212,26 @@ if !allowedTransition(...)    { return ErrInvalidStatus }   // تعارض واق
 
 ---
 
+### ۴.۸۵ catalog به آستانه رسید — کامیت `test(catalog-threshold)`
+
+**`TestPG_AdminProductList`** — `NewAdminListStore`, `List`, `ListProductsHandler` هر سه
+**۰٪** بودند:
+- فیلتر `status` (PUBLISHED → ۰، DRAFT → هر دو)
+- فیلتر `q` روی title و slug
+- **پرچم `publish_gate_satisfied` در هر ردیف** — محصول کامل `true`، ناقص `false`
+- `page_size=5000` → سقف **۱۰۰**؛ `page=abc` → پیش‌فرض ۱/۲۰
+
+**`TestPG_UpdateProductPartialPatch`** — `DBStore.UpdateProduct` **۰٪** بود:
+- patch فقط `title` → slug و توضیح دست‌نخورده می‌مانند
+- جایگزینی مجموعهٔ دسته‌بندی درست کار می‌کند
+- patch خالی no-op است، نه خطا
+- id ناشناخته → `ErrProductNotFound` (نه خطای درایور)
+- **slug تکراری رد می‌شود** (تعارض قابل نگاشت، نه ۵۰۰ خام)
+
+**پوشش: catalog ۶۳.۴٪ → ۷۱.۰٪ → ۷۷.۲٪** — آستانهٔ ۷۵٪ برآورده شد.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
