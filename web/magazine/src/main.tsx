@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Badge, Button, Card, Container, Footer, Grid, Header, StateBlock, useAsync } from '../../shared/components'
-import { getArticle, listArticles, listArticlesByTopic, listTopics, type Article, type Topic } from '../../shared/api'
+import { getArticle, getArticleProducts, listArticles, listArticlesByTopic, listTopics, type Article, type Topic } from '../../shared/api'
 import { ErrorBoundary } from '../../shared/ErrorBoundary'
 import '../../shared/tokens.css'
 
@@ -156,6 +156,9 @@ function TopicScreen({ id }: { id: string }) {
 
 function ArticleScreen({ slug }: { slug: string }) {
   const article = useAsync(() => getArticle(slug), [slug])
+  // The reason a magazine sits beside a shop: send the reader to the product the article is
+  // about. The relation rows existed in the database and nothing ever showed them.
+  const products = useAsync(() => getArticleProducts(slug), [slug])
   if (article.loading) return <Container><StateBlock kind="loading" /></Container>
   if (article.error) return <Container><StateBlock kind="error" message={article.error} onRetry={article.retry} /></Container>
   if (!article.data) return <Container><StateBlock kind="empty" message="مقاله پیدا نشد." /></Container>
@@ -181,6 +184,33 @@ function ArticleScreen({ slug }: { slug: string }) {
             {p}
           </p>
         ))}
+        {(products.data?.data ?? []).length > 0 ? (
+          <section style={{ marginTop: 'var(--kh-space-5)', borderTop: '1px solid var(--kh-border, #e5e5e5)', paddingTop: 'var(--kh-space-4)' }}>
+            <h2 style={{ fontSize: 'var(--kh-text-lg)' }}>محصولات مرتبط</h2>
+            <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 'var(--kh-space-3)' }}>
+              {(products.data?.data ?? []).map((p) => (
+                <li key={p.product_id}>
+                  <Card>
+                    <strong>{p.title}</strong>
+                    {p.sales_pitch ? (
+                      <p style={{ margin: 'var(--kh-space-1) 0', color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>
+                        {p.sales_pitch}
+                      </p>
+                    ) : null}
+                    {p.relation_reason ? (
+                      <p style={{ margin: 0, color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>
+                        {p.relation_reason}
+                      </p>
+                    ) : null}
+                    <a href={`https://shop.khabavar.ir/#/product/${encodeURIComponent(p.product_id)}`}>
+                      مشاهده در فروشگاه
+                    </a>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </article>
       <p style={{ marginTop: 'var(--kh-space-5)', color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>
         محتوای مجله جایگزین توصیهٔ پزشکی نیست.

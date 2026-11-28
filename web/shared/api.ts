@@ -209,6 +209,20 @@ export async function listArticles(page = 1, pageSize = 20) {
   return request<{ data: Article[]; total: number }>(`/articles?page=${page}&page_size=${pageSize}`)
 }
 
+export type RelatedProduct = {
+  product_id: string
+  title: string
+  slug: string
+  sales_pitch?: string
+  relation_type: string
+  relation_reason?: string
+}
+
+// The magazine's link to the shop: the published products an article is about.
+export async function getArticleProducts(slug: string) {
+  return request<{ data: RelatedProduct[] }>(`/magazine/articles/${encodeURIComponent(slug)}/products`)
+}
+
 export async function getArticle(slug: string) {
   return request<{ data: Article }>(`/articles/${encodeURIComponent(slug)}`)
 }

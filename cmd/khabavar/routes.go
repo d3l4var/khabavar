@@ -261,6 +261,8 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/catalog/products/{id}/articles", content.PublishedArticlesForProductHandler(s.content))
 	api.public("GET /api/v1/magazine/articles", content.ListPublishedArticlesHandler(s.content))
 	api.public("GET /api/v1/magazine/articles/{slug}", content.GetArticleBySlugHandler(s.content))
+	// The magazine's link to the shop: published products the article is about.
+	api.public("GET /api/v1/magazine/articles/{slug}/products", content.ListArticleProductsHandler(s.content))
 	api.public("GET /api/v1/magazine/topics", content.ListTopicsHandler(s.content))
 
 	// ── pricing (P5b) ──

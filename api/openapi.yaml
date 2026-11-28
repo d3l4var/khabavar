@@ -3419,6 +3419,22 @@ paths:
         "409": { description: پرداخت لغو شد یا تأیید نشد }
         "502": { description: درگاه در دسترس نیست؛ سفارش تغییر نکرد }
 
+  /magazine/articles/{slug}/products:
+    get:
+      operationId: getMagazineArticlesSlugProducts
+      tags: [magazine]
+      summary: محصولات مرتبط با یک مقاله
+      description: >
+        محصولات منتشرشده‌ای که مقاله به آن‌ها اشاره دارد
+        (`product_article_relations`). رابطه با محصول منتشرنشده حذف می‌شود تا مجله
+        پیش‌نویس محصول را لو ندهد. اگر مقاله منتشر نشده باشد ۴۰۴.
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: فهرست محصولات مرتبط (ممکن است خالی باشد) }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /orders/{id}/confirm-payment:
     post:
       operationId: postOrdersIdConfirmpayment

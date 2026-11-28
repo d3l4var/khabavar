@@ -524,3 +524,29 @@ func isUniqueViolation(err error) bool {
 	var pgErr interface{ SQLState() string }
 	return errors.As(err, &pgErr) && pgErr.SQLState() == "23505"
 }
+
+// ListRelatedProducts joins product_article_relations with products, keeping only PUBLISHED
+// ones. The magazine links to the shop; it must not leak a draft product by id.
+func (s *DBStore) ListRelatedProducts(ctx context.Context, articleID string) ([]RelatedProduct, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT r.product_id, p.title, p.slug,
+		        coalesce(p.short_description, ''), r.relation_type, coalesce(r.relation_reason, '')
+		   FROM product_article_relations r
+		   JOIN products p ON p.id = r.product_id
+		  WHERE r.article_id = $1 AND p.status = 'PUBLISHED'
+		  ORDER BY r.created_at`, articleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []RelatedProduct{}
+	for rows.Next() {
+		var rp RelatedProduct
+		if err := rows.Scan(&rp.ProductID, &rp.Title, &rp.Slug, &rp.SalesPitch, &rp.Relation, &rp.Reason); err != nil {
+			return nil, err
+		}
+		out = append(out, rp)
+	}
+	return out, rows.Err()
+}
