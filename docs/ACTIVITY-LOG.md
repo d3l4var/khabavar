@@ -3715,39 +3715,44 @@ boto3 list_objects_v2         [('IMAGE/7ad29f…/moto.webp', 22)]
    هزینهٔ خرید، تأیید تأمین، وضعیت ارسال. هر چهار تست، خطای auditor را برمی‌گردانند.
 5. **پوشش SQL** — `scripts/audit-pg-coverage.py`: ۸۹ از ۸۹ متد SQL تست PG دارند.
 
-### باز (به ترتیب اولویت)
+### باز (به ترتیب اولویت) — بازنویسی ۲۰۲۶-۱۱-۲۸ با اندازه‌گیری
 
-1. **پوشش تست به آستانهٔ R-CI §۳** (≥۹۰٪ مالی/موجودی، ≥۷۵٪ سایر). اندازه‌گیری واقعی
-   روی schema با تست PG:
+> بخش قبلی چهار ادعای کهنه داشت. همه با خروجی دستور رد شدند و اینجا با اعداد واقعی
+> جایگزین شده‌اند. سندی که وضعیت غلط گزارش کند همان چیزی است که R-19 §۹ منع می‌کند.
 
-   ```
-   audit=0.0  shared=0.0  ecosystem=40.0  content=45.4  inventory=47.2
-   media=47.4  identity=51.2  catalog=59.3  suppliers=60.2  fulfillment=60.8
-   pricing=61.7  commerce=68.3  authorization=76.1  notifications=83.3  worker=86.5
-   ```
+**۱) پوشش تست — آستانه برآورده شده.** اندازه‌گیری با `KH_TEST_PG_DSN` (تست‌های PG اجرا
+می‌شوند، نه رد):
 
-   مالی/موجودی زیر آستانه: **inventory ۴۷.۲، pricing ۶۱.۷، commerce ۶۸.۳**.
-   گام coverage در CI فعلاً `continue-on-error` است؛ **blocking کردن آن فقط بعد از
-   رسیدن به آستانه مجاز است** و آستانه‌ها نباید پایین بیایند.
+```
+audit 85.2 · authorization 82.8 · catalog 77.3 · commerce 85.9 · content 78.5
+ecosystem 97.8 · fulfillment 75.0 · identity 78.8 · inventory 91.2 · media 79.8
+notifications 83.3 · pricing 89.8 · shared 100.0 · suppliers 78.4 · worker 86.5
+```
 
-2. **`audit` و `shared` صفر درصد** — `audit` خودِ ماژول audit است (نوشتن رکورد) و
-   `shared` توابع کمکی؛ هر دو فقط از طریق بسته‌های دیگر پوشش داده می‌شوند و تست مستقیم
-   ندارند. باید یا تست مستقیم بگیرند یا در گزارش coverage از مخرج خارج شوند (تصمیم).
+مالی/موجودی: **inventory ۹۱.۲، pricing ۸۹.۸، commerce ۸۵.۹** — هر سه بالای ۸۵٪.
+اعداد قبلی (۴۷.۲ / ۶۱.۷ / ۶۸.۳) از اجرای **بدون** DSN آمده بودند که تست‌های `_pg_test.go`
+را رد می‌کند. `audit` و `shared` هم صفر نبودند: **۸۵.۲ و ۱۰۰**.
 
-3. **چهار کامپوننت بی‌استفادهٔ OpenAPI** — `AcceptLanguage`، `SessionInfo`،
-   `RefundStatus`، `ArticleStatus`. انتخاب بین «وصل کردن» و «حذف» **تصمیم مالک** است.
+**۲) بوت OIDC پنل — تأیید شد.** زنجیرهٔ کامل در مرورگر: فرم ورود → `/oauth/authorize` →
+صفحهٔ کارکنان با continuation → `redirect_url` با code → `/auth/callback` (SPA fallback) →
+تبادل کد → پنل با دادهٔ واقعی. `scripts/serve-spa.py` شکاف preview محلی را بست؛
+`deploy/nginx/khabavar.conf` از قبل `try_files` داشت.
 
-4. **اختلاف مسیر با R-07** — قرارداد `/catalog/products/{slug}` می‌خواهد، کد
-   `/api/v1/products/{id}` هم دارد؛ کدام مرجع است، تصمیم مالک.
+**۳) ساخت محصول از UI — کار می‌کند.** «محصول جدید» → فرم → `POST /admin/products` → صفحهٔ
+جزئیات با DRAFT و «دروازهٔ انتشار ناقص». اسلاگ تکراری → ۴۰۹ `duplicate_slug` با پیام فارسی.
 
-5. **مسیر بوت OIDC پنل** — سمت سرور تأییدشده (کوکی HttpOnly + PKCE + state)؛ سمت مرورگر
-   در Lightpanda قفل می‌کند. سه تلاش مستند شده و شاهدها نشان می‌دهند محدودیت daemon
-   مرورگر است، نه باگ اپ — ولی **تأیید نهایی روی مرورگر واقعی انجام نشده**.
+**۴) تصمیم‌های مالک (باز):**
 
-6. **فرم کامل محصول در پنل** — ویرایش و انتشار هست؛ ساخت محصول جدید از UI نیست.
+- **چهار کامپوننت بی‌استفادهٔ OpenAPI** — `AcceptLanguage`، `SessionInfo`، `RefundStatus`،
+  `ArticleStatus`: وصل شوند یا حذف؟
+- **اختلاف مسیر با R-07** — قرارداد `/catalog/products/{slug}` می‌خواهد، کد
+  `/api/v1/products/{id}` هم دارد. کدام مرجع است؟
+- **`order_item_id` در مرجوعی** — ستون هست، در API پر نمی‌شود.
+- **SMS و درگاه واقعی** — درز آماده (`KH_SMS_ADAPTER`، `KH_PAYMENT_ADAPTER`)، آداپتور واقعی
+  فقط برای زرین‌پال و S3 نوشته شده.
 
-7. **`PROJECT_MANIFEST.md`** — پس از این بازنویسی هم‌تراز شد؛ با هر تغییر وضعیت باید
-   به‌روز شود.
+**۵) اجرای واقعی CI — تنها شکاف غیرقابل‌بستن از این ماشین.** شش گیت blocking
+(lint، unit، conformance، role-audit، concurrency، a11y) هرگز در GitHub اجرا نشده‌اند.
 
 ## ۶. بازتولید کامل تأیید
 
