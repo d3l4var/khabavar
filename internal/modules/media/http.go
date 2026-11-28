@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -71,7 +72,7 @@ func GetContentHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		defer rc.Close()
-		w.Header().Set("Content-Type", contentTypeFor(asset.MediaType))
+		w.Header().Set("Content-Type", contentTypeFor(asset.MediaType, asset.StorageKey))
 		w.Header().Set("Content-Disposition", `inline; filename="`+filepath.Base(asset.StorageKey)+`"`)
 		_, _ = io.Copy(w, rc)
 	}
@@ -102,15 +103,37 @@ func sanitizeFilename(name string) string {
 	return name
 }
 
-// contentTypeFor maps media_type to a Content-Type header for inline serving.
-func contentTypeFor(mediaType string) string {
+// contentTypeFor picks the Content-Type for inline serving.
+//
+// It used to answer "image/*" for every image. A wildcard is not a media type a browser can
+// render: the asset downloaded instead of displaying, and <img> showed a broken icon. The
+// extension on the storage key is the real answer; media_type is only the fallback.
+func contentTypeFor(mediaType, storageKey string) string {
+	switch strings.ToLower(path.Ext(storageKey)) {
+	case ".webp":
+		return "image/webp"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".avif":
+		return "image/avif"
+	case ".svg":
+		return "image/svg+xml"
+	case ".mp4":
+		return "video/mp4"
+	case ".webm":
+		return "video/webm"
+	case ".pdf":
+		return "application/pdf"
+	}
 	switch mediaType {
 	case MediaTypeImage:
-		return "image/*"
+		return "image/jpeg"
 	case MediaTypeVideo:
-		return "video/*"
-	case MediaTypeDocument:
-		return "application/octet-stream"
+		return "video/mp4"
 	default:
 		return "application/octet-stream"
 	}

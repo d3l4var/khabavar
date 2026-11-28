@@ -166,7 +166,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	comSvc.SetPaymentProvider(cfg.PaymentAdapter)
 	comSvc.SetAuditor(auditor)
 
-	mediaSvc := media.NewService(media.NewDBStore(pool.Pool), media.NewLocalStorage(cfg.StorageLocalRoot))
+	mediaSvc := media.NewService(media.NewDBStore(pool.Pool), mediaStorage(cfg))
 
 	pricingSvc := pricing.NewService(pricing.NewDBStore(pool.Pool))
 	pricingSvc.SetAuditor(auditor)
@@ -301,6 +301,31 @@ func serve(ctx context.Context, addr string, mux *http.ServeMux, logger *slog.Lo
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutCtx)
+}
+
+// mediaStorage selects the object-store adapter. Local disk is the default; s3 covers ArvanCloud,
+// AWS, MinIO and anything else speaking the protocol.
+func mediaStorage(cfg config.Config) media.StorageAdapter {
+	switch cfg.StorageAdapter {
+	case "", "local":
+		return media.NewLocalStorage(cfg.StorageLocalRoot)
+	case "s3":
+		st, err := media.NewS3Storage(media.S3Config{
+			Endpoint:  cfg.S3Endpoint,
+			Region:    cfg.S3Region,
+			Bucket:    cfg.S3Bucket,
+			AccessKey: cfg.S3AccessKey,
+			SecretKey: cfg.S3SecretKey,
+			PathStyle: cfg.S3PathStyle,
+		})
+		if err != nil {
+			// Starting with no storage means every upload fails at request time; refuse now.
+			panic("media storage: " + err.Error())
+		}
+		return st
+	default:
+		panic("unknown KH_STORAGE_ADAPTER: " + cfg.StorageAdapter)
+	}
 }
 
 // smsProvider selects the SMS adapter. Only the mock exists today; a real provider is a new

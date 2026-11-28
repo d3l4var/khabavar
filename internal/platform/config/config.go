@@ -33,6 +33,12 @@ type Config struct {
 	SmsAdapter           string
 	StorageAdapter       string
 	StorageLocalRoot     string
+	S3Endpoint           string
+	S3Region             string
+	S3Bucket             string
+	S3AccessKey          string
+	S3SecretKey          string
+	S3PathStyle          bool
 	Cache                string
 }
 
@@ -63,6 +69,12 @@ func Load() (Config, error) {
 		StorefrontBaseURL:    getenv("KH_STOREFRONT_BASE_URL", "https://shop.khabavar.ir"),
 		SmsAdapter:           getenv("KH_SMS_ADAPTER", "mock"),
 		StorageAdapter:       getenv("KH_STORAGE_ADAPTER", "local"),
+		S3Endpoint:           getenv("KH_S3_ENDPOINT", ""),
+		S3Region:             getenv("KH_S3_REGION", "default"),
+		S3Bucket:             getenv("KH_S3_BUCKET", ""),
+		S3AccessKey:          getenv("KH_S3_ACCESS_KEY", ""),
+		S3SecretKey:          getenv("KH_S3_SECRET_KEY", ""),
+		S3PathStyle:          getenv("KH_S3_PATH_STYLE", "true") == "true",
 		StorageLocalRoot:     getenv("KH_STORAGE_LOCAL_ROOT", "/var/lib/khabavar/media"),
 		Cache:                getenv("KH_CACHE", "none"),
 	}

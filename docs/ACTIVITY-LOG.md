@@ -3657,6 +3657,37 @@ KH_SMS_ADAPTER=kavenegar            panic: unknown KH_SMS_ADAPTER
 
 ---
 
+### ۴.۱۳۰ S3Storage + باگ Content-Type — کامیت `feat(s3-storage)`
+
+کامنت خود کد می‌گفت «S3Storage (production — not implemented here)». نبود، پس هر استقرار فقط
+می‌توانست روی دیسک محلی بنویسد.
+
+`S3Storage` با aws-sdk-go-v2 نوشته شد: `Put/Get/Delete/Exists`، پشتیبانی از endpoint سفارشی
+(ابرآروان، MinIO، Wasabi) و `PathStyle`. `Exists` از `HeadObject` استفاده می‌کند، نه `Get` —
+یک فایل ۱۰ مگابایتی نباید برای پاسخ بله/خیر دانلود شود.
+
+`KH_STORAGE_ADAPTER=s3` + `KH_S3_ENDPOINT/REGION/BUCKET/ACCESS_KEY/SECRET_KEY/PATH_STYLE`.
+آداپتور ناشناخته در startup panic می‌کند.
+
+**اثبات end-to-end روی باینری با یک S3-compatible سرور محلی:**
+```
+POST /admin/media           201  storage_key=IMAGE/03c9…/asset.webp
+fake s3 log:                OK PUT media/IMAGE/03c9…/asset.webp
+GET  /media/{id}/content    200  27b  type=image/webp
+fake s3 log:                OK GET media/IMAGE/03c9…/asset.webp
+KH_STORAGE_ADAPTER=gcs      panic: unknown KH_STORAGE_ADAPTER
+```
+
+**باگ — Content-Type همهٔ تصاویر `image/*` بود.** wildcard یک media type نیست که مرورگر
+رندر کند: فایل دانلود می‌شد و `<img>` آیکون شکسته نشان می‌داد. حالا از پسوند کلید
+(`image/webp`, `image/jpeg`, `image/png`, `image/avif`…) و با fallback به media_type.
+
+**محدودیت صادقانه:** MinIO دانلود نشد (`dl.min.io` از این ماشین در دسترس نیست)، پس تست‌ها
+روی یک سرگر S3-compatible درون‌برنامه‌ای اجرا می‌شوند که امضا و path-style را بررسی می‌کند.
+سازگاری با یک provider واقعی اثبات نشده است.
+
+---
+
 ## ۵. کارهای باقی‌مانده (به ترتیب اولویت)
 
 > این بخش در ۲۰۲۶-۱۱-۲۷ **بازنویسی شد**. نسخهٔ قبلی سه ادعای کهنه داشت که با خروجی
