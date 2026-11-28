@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client'
 import { Button, Card, Container, Footer, Grid, Header, StateBlock, useAsync } from '../../shared/components'
 import {
   createOrder,
+  createPaymentIntent,
   formatToman,
   getOrderByNumber,
   getProduct,
@@ -76,6 +77,11 @@ function useHashRoute() {
 }
 
 function parseRoute(hash: string) {
+  // The payment gateway returns the browser to a PATH with a query string, not a hash route:
+  // /mock-payment?authority=...&amount=... . Serve it before the hash router looks at anything.
+  if (window.location.pathname.replace(/\/$/, '') === '/mock-payment') {
+    return { name: 'payment', param: '' }
+  }
   const segs = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
   if (segs.length === 0) return { name: 'list', param: '' }
   if (segs[0] === 'product' && segs[1]) return { name: 'product', param: decodeURIComponent(segs[1]) }
@@ -84,6 +90,73 @@ function parseRoute(hash: string) {
 }
 
 // ── screens ───────────────────────────────────────────────────────────────────
+
+// PaymentScreen stands in for the gateway page. A real provider hosts this itself; the mock
+// adapter sends the customer here so the whole flow — intent, redirect, callback, PAID — can be
+// walked in a browser without credentials.
+function PaymentScreen() {
+  const params = new URLSearchParams(window.location.search)
+  const authority = params.get('authority') ?? ''
+  const amount = Number(params.get('amount') ?? '0')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  // The callback lives on the API origin, not this one. Asking the API to decide keeps the
+  // browser from being able to mark anything paid by itself.
+  const callback = (status: string) => {
+    const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api/v1'
+    const origin = base.startsWith('http') ? new URL(base).origin : window.location.origin
+    return `${origin}/api/v1/payments/callback?Authority=${encodeURIComponent(authority)}&Status=${status}`
+  }
+
+  const pay = async (status: 'OK' | 'NOK') => {
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch(callback(status), { headers: { Accept: 'application/json' } })
+      const body = await res.json().catch(() => ({}))
+      if (res.ok && body.order_id) {
+        // Navigate to the root path: the payment route is matched on pathname, so setting only
+        // the hash left the customer staring at the gateway page after paying.
+        window.location.href = `/#/order/${encodeURIComponent(body.order_id)}`
+        return
+      }
+      setError(body.error === 'payment_cancelled' ? 'پرداخت لغو شد.' : 'پرداخت تأیید نشد.')
+    } catch {
+      setError('ارتباط با درگاه برقرار نشد.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Container>
+      <h1 style={{ marginTop: 'var(--kh-space-5)' }}>درگاه پرداخت (آزمایشی)</h1>
+      <Card>
+        <p style={{ margin: 0 }}>مبلغ قابل پرداخت</p>
+        <p style={{ margin: 'var(--kh-space-2) 0', fontSize: 'var(--kh-text-lg)', fontWeight: 700 }}>
+          {formatToman(amount)}
+        </p>
+        <p style={{ margin: 0, color: 'var(--kh-text-muted)', fontSize: 'var(--kh-text-sm)' }}>
+          شناسهٔ تراکنش: {authority || '—'}
+        </p>
+        {error ? (
+          <p role="alert" style={{ color: 'var(--kh-danger, #b3261e)', marginTop: 'var(--kh-space-3)' }}>
+            {error}
+          </p>
+        ) : null}
+        <div style={{ display: 'flex', gap: 'var(--kh-space-3)', marginTop: 'var(--kh-space-4)' }}>
+          <button type="button" onClick={() => pay('OK')} disabled={busy || !authority}>
+            پرداخت
+          </button>
+          <button type="button" onClick={() => pay('NOK')} disabled={busy || !authority}>
+            لغو
+          </button>
+        </div>
+      </Card>
+    </Container>
+  )
+}
 
 function ListScreen({ cart }: { cart: ReturnType<typeof useCart> }) {
   const [term, setTerm] = useState('')
@@ -286,6 +359,21 @@ function CheckoutScreen({ cart }: { cart: ReturnType<typeof useCart> }) {
       // Remember the phone so the confirmation can read the guest order it just created: a
       // guest order is readable only by the phone that placed it.
       try { localStorage.setItem('kh.lastPhone', phone) } catch { /* private mode */ }
+      // Hand the customer to the gateway. Without this step the order existed and nobody was
+      // ever asked to pay for it.
+      try {
+        const intent = await createPaymentIntent(created.id)
+        if (intent.redirect_url) {
+          if (intent.redirect_url.startsWith('http')) {
+            window.location.href = intent.redirect_url
+          } else {
+            window.location.href = intent.redirect_url
+          }
+          return
+        }
+      } catch {
+        // The order is real even if the gateway is down; show it rather than losing the sale.
+      }
       window.location.hash = `#/order/${encodeURIComponent(created.id)}`
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ثبت سفارش ناموفق بود.')
@@ -373,6 +461,9 @@ function App() {
       break
     case 'order':
       screen = <OrderScreen id={route.param} />
+      break
+    case 'payment':
+      screen = <PaymentScreen />
       break
     default:
       screen = <Container><StateBlock kind="empty" message="صفحه پیدا نشد." /></Container>

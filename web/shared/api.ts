@@ -179,6 +179,15 @@ export async function createOrder(input: OrderInput, idempotencyKey?: string) {
   })
 }
 
+// createPaymentIntent opens a transaction at the gateway and returns the URL to send the
+// customer to. Without the redirect the order exists and nobody is ever asked to pay.
+export async function createPaymentIntent(orderID: string) {
+  return request<{ id: string; redirect_url: string }>(
+    `/orders/${encodeURIComponent(orderID)}/payment-intents`,
+    { method: 'POST' },
+  )
+}
+
 // A guest order is readable only by the phone that placed it (commerce.mayReadOrder). Without
 // it the confirmation page answered 403 order_forbidden, so every guest checkout ended on a raw
 // English error after the order had already been created.
