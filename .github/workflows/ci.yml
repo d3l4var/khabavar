@@ -139,6 +139,9 @@ jobs:
       - name: path params (route vs handler)
         run: python3 scripts/audit-pathparams.py --fail
 
+      - name: nginx routing (deployment config vs role tables)
+        run: python3 scripts/audit-nginx.py --fail
+
       - name: contract conformance (declared query params must be read)
         run: python3 scripts/audit-contract-conformance.py --fail
       - name: coverage thresholds (enforced set only)
