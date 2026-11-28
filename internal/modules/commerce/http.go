@@ -370,12 +370,14 @@ func CreatePaymentIntentHandler(svc *Service) http.Handler {
 				id = id[:idx]
 			}
 		}
-		pid, err := svc.CreatePaymentIntent(r.Context(), id)
+		pid, redirectURL, err := svc.StartPayment(r.Context(), id)
 		if err != nil {
 			writeError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]string{"id": pid})
+		// redirect_url is what the customer needs; without it the panel had an intent id and
+		// nothing to do with it.
+		writeJSON(w, http.StatusCreated, map[string]string{"id": pid, "redirect_url": redirectURL})
 	})
 }
 

@@ -85,7 +85,9 @@ func (s *DBStore) CreateOrder(ctx context.Context, o Order, items []OrderItem) (
 		o.ID, o.OrderNumber, nullableStr(o.CustomerID), nullableStr(o.GuestPhone),
 		o.Status, o.Currency,
 		o.Subtotal, o.DiscountTotal, o.ShippingTotal, o.TaxTotal, o.GrandTotal,
-		o.ShippingAddrSnap); err != nil {
+		// json.RawMessage is a []byte, which pgx sends as bytea for a jsonb column and the
+		// driver turns into NULL. Send the JSON text and let Postgres cast it.
+		string(o.ShippingAddrSnap)); err != nil {
 		return "", err
 	}
 

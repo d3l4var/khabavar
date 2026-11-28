@@ -18,6 +18,7 @@
 package commerce
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -244,6 +245,41 @@ func (s *Service) SetPaymentProvider(name string) {
 	}
 }
 
+// SetPaymentGateway installs the adapter that actually opens a transaction. Without one the
+// intent is created and the customer is never sent anywhere to pay.
+func (s *Service) SetPaymentGateway(gw PaymentGateway) {
+	if gw != nil {
+		s.gateway = gw
+		s.provider = gw.Name()
+	}
+}
+
+// StartPayment creates the intent and asks the gateway to open a transaction. It returns the
+// intent id and the URL the customer must be sent to.
+func (s *Service) StartPayment(ctx context.Context, orderID string) (string, string, error) {
+	pid, err := s.CreatePaymentIntent(ctx, orderID)
+	if err != nil {
+		return "", "", err
+	}
+	if s.gateway == nil {
+		// No adapter configured: the intent exists, but there is nowhere to send the customer.
+		return pid, "", nil
+	}
+	o, err := s.store.GetOrder(ctx, orderID)
+	if err != nil || o == nil {
+		return pid, "", fmt.Errorf("load order for gateway: %w", err)
+	}
+	res, err := s.gateway.Start(ctx, StartPayment{
+		OrderID:     orderID,
+		Amount:      o.GrandTotal,
+		Description: "سفارش " + o.OrderNumber,
+	})
+	if err != nil {
+		return pid, "", err
+	}
+	return pid, res.RedirectURL, nil
+}
+
 // ── Store: persistence boundary ───────────────────────────────────────────────
 
 // Store is the persistence boundary for commerce. The DB implementation uses pgx;
@@ -292,6 +328,7 @@ type Service struct {
 	attempts PaymentAttemptStore // optional; wired via SetAttemptStore (nil → no attempt rows)
 	auditor  AuditRecorder       // optional; wired via SetAuditor (nil → no audit writes)
 	provider string              // payment provider stamped on attempts (default mock)
+	gateway  PaymentGateway      // nil means no adapter: intents are created but nobody is sent to pay
 	now      func() time.Time
 }
 
@@ -407,6 +444,11 @@ func validateOrderInput(in OrderInput) error {
 	}
 	if len(in.Items) == 0 {
 		return ErrCartEmpty
+	}
+	// orders.shipping_address_snapshot is NOT NULL. Without this check the INSERT failed with a
+	// constraint violation and the caller got 500 for what is plainly a missing field.
+	if len(bytes.TrimSpace(in.ShippingAddr)) == 0 || string(bytes.TrimSpace(in.ShippingAddr)) == "null" {
+		return ErrShippingAddressReq
 	}
 	for i, it := range in.Items {
 		// An empty or malformed id used to reach the uuid column and answer 500. Validate here,

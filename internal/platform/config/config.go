@@ -28,6 +28,10 @@ type Config struct {
 	WorkerBatchSize      int // outbox claim batch size (default 100)
 	PaymentAdapter       string
 	SMSAdapter           string
+	PaymentCallbackURL   string
+	ZarinpalBaseURL      string
+	ZarinpalStartURL     string
+	ZarinpalMerchantID   string
 	PaymentWebhookSecret string // HMAC key for gateway notifications (empty disables it)
 	StorefrontBaseURL    string // where /payments/return sends the browser
 	SmsAdapter           string
@@ -65,6 +69,10 @@ func Load() (Config, error) {
 		WorkerBatchSize:      getenvInt("KH_WORKER_BATCH_SIZE", 100),
 		PaymentAdapter:       getenv("KH_PAYMENT_ADAPTER", "mock"),
 		SMSAdapter:           getenv("KH_SMS_ADAPTER", "mock"),
+		PaymentCallbackURL:   getenv("KH_PAYMENT_CALLBACK_URL", ""),
+		ZarinpalBaseURL:      getenv("KH_ZARINPAL_BASE_URL", "https://payment.zarinpal.com/pg/v4/payment"),
+		ZarinpalStartURL:     getenv("KH_ZARINPAL_START_URL", "https://payment.zarinpal.com/pg/StartPay/"),
+		ZarinpalMerchantID:   getenv("KH_ZARINPAL_MERCHANT_ID", ""),
 		PaymentWebhookSecret: getenv("KH_PAYMENT_WEBHOOK_SECRET", ""),
 		StorefrontBaseURL:    getenv("KH_STOREFRONT_BASE_URL", "https://shop.khabavar.ir"),
 		SmsAdapter:           getenv("KH_SMS_ADAPTER", "mock"),

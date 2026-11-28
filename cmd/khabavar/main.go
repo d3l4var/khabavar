@@ -163,7 +163,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	comSvc.SetRefundStore(commerce.NewDBStore(pool.Pool))
 	comSvc.SetAttemptStore(commerce.NewDBStore(pool.Pool))
 	comSvc.SetCartStore(commerce.NewDBStore(pool.Pool))
-	comSvc.SetPaymentProvider(cfg.PaymentAdapter)
+	comSvc.SetPaymentGateway(paymentGateway(cfg))
 	comSvc.SetAuditor(auditor)
 
 	mediaSvc := media.NewService(media.NewDBStore(pool.Pool), mediaStorage(cfg))
@@ -301,6 +301,24 @@ func serve(ctx context.Context, addr string, mux *http.ServeMux, logger *slog.Lo
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutCtx)
+}
+
+// paymentGateway selects the payment adapter. Only the mock exists today; a real provider is a
+// new implementation of commerce.PaymentGateway plus a case here.
+func paymentGateway(cfg config.Config) commerce.PaymentGateway {
+	switch cfg.PaymentAdapter {
+	case "", "mock":
+		return commerce.MockGateway{}
+	case "zarinpal":
+		return commerce.ZarinpalGateway{
+			BaseURL:     cfg.ZarinpalBaseURL,
+			StartURL:    cfg.ZarinpalStartURL,
+			MerchantID:  cfg.ZarinpalMerchantID,
+			CallbackURL: cfg.PaymentCallbackURL,
+		}
+	default:
+		panic("unknown KH_PAYMENT_ADAPTER: " + cfg.PaymentAdapter)
+	}
 }
 
 // mediaStorage selects the object-store adapter. Local disk is the default; s3 covers ArvanCloud,
