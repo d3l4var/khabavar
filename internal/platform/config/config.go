@@ -48,6 +48,30 @@ type Config struct {
 	Cache                string
 }
 
+// validate refuses to start on a configuration that cannot work. Every one of these used to be
+// discovered at request time — an empty signing key minted tokens nobody could verify, and a
+// missing DSN surfaced as a 500 on the first query. A service that starts and is broken is worse
+// than one that refuses to start, because the orchestrator reports it healthy.
+func (c Config) validate() error {
+	if c.DBURL == "" {
+		return fmt.Errorf("KH_DB_URL is required")
+	}
+	// 32 bytes is the minimum for HMAC-SHA256 to be worth anything; the smoke-test key is 32.
+	if len(c.TokenSigningKey) < 32 {
+		return fmt.Errorf("KH_TOKEN_SIGNING_KEY must be at least 32 characters, got %d", len(c.TokenSigningKey))
+	}
+	if c.PaymentAdapter == "zarinpal" && c.ZarinpalMerchantID == "" {
+		return fmt.Errorf("KH_ZARINPAL_MERCHANT_ID is required when KH_PAYMENT_ADAPTER=zarinpal")
+	}
+	if c.StorageAdapter == "s3" && c.S3Bucket == "" {
+		return fmt.Errorf("KH_S3_BUCKET is required when KH_STORAGE_ADAPTER=s3")
+	}
+	if c.AccessTokenTTL <= 0 {
+		return fmt.Errorf("KH_ACCESS_TOKEN_TTL_SECONDS must be positive")
+	}
+	return nil
+}
+
 func Load() (Config, error) {
 	role := getenv("KH_ROLE", "api")
 	if role != "identity" && role != "api" && role != "worker" {
@@ -92,6 +116,9 @@ func Load() (Config, error) {
 	}
 	if c.DBURL == "" {
 		return c, fmt.Errorf("KH_DB_URL is required")
+	}
+	if err := c.validate(); err != nil {
+		return Config{}, err
 	}
 	return c, nil
 }
