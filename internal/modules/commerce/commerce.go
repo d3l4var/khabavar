@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -245,6 +246,9 @@ func (s *Service) SetPaymentProvider(name string) {
 	}
 }
 
+// SetLogger wires the diagnostic logger. A 500 with no log line is undiagnosable from outside.
+func (s *Service) SetLogger(l *slog.Logger) { s.logger = l }
+
 // SetPaymentGateway installs the adapter that actually opens a transaction. Without one the
 // intent is created and the customer is never sent anywhere to pay.
 func (s *Service) SetPaymentGateway(gw PaymentGateway) {
@@ -344,6 +348,7 @@ type Service struct {
 	auditor  AuditRecorder       // optional; wired via SetAuditor (nil → no audit writes)
 	provider string              // payment provider stamped on attempts (default mock)
 	gateway  PaymentGateway      // nil means no adapter: intents are created but nobody is sent to pay
+	logger   *slog.Logger        // optional; wired via SetLogger (nil → no diagnostics)
 	now      func() time.Time
 }
 
@@ -600,22 +605,29 @@ func (s *Service) ConfirmPaymentForOrder(ctx context.Context, orderID string) er
 		return fmt.Errorf("load intent: %w", err)
 	}
 	if pi == nil {
-		return ErrIntentNotSucceeded
-	}
-	// A concurrent callback that already settled this intent is not a failure: the money
-	// arrived. Answering ErrIntentNotSucceeded turned a duplicate gateway callback into a 500.
-	if pi.Status == IntentSucceeded {
-		return ErrAlreadyPaid
-	}
-	if pi.Status != IntentRequiresPayment && pi.Status != IntentProcessing {
+		// GetActivePaymentIntent only returns intents still awaiting payment. None means either
+		// a concurrent callback already settled this one (the order is PAID by now, because the
+		// order is written before the intent) or this order never had a payment to confirm.
+		if fresh, _ := s.store.GetOrder(ctx, orderID); fresh != nil && fresh.Status == OrderPaid {
+			return ErrAlreadyPaid
+		}
 		return ErrIntentNotSucceeded
 	}
 
-	if err := s.store.UpdatePaymentIntentStatus(ctx, pi.ID, IntentSucceeded); err != nil {
-		return fmt.Errorf("update intent: %w", err)
-	}
+	// The ORDER transition is the authority, and it is atomic: only one caller can move
+	// PENDING_PAYMENT to PAID. Doing the intent first meant a second callback could arrive
+	// between the two writes, find no active intent, and answer 500 for a payment that had
+	// already succeeded.
 	if err := s.store.UpdateOrderPaid(ctx, orderID, o.GrandTotal, OrderPaid); err != nil {
+		if errors.Is(err, ErrOrderNotFound) {
+			return ErrAlreadyPaid
+		}
 		return fmt.Errorf("update order paid: %w", err)
+	}
+	if pi.ID != "" {
+		if err := s.store.UpdatePaymentIntentStatus(ctx, pi.ID, IntentSucceeded); err != nil {
+			return fmt.Errorf("update intent: %w", err)
+		}
 	}
 
 	// Record the provider attempt (DB v2 §10.5). A refund must reference the

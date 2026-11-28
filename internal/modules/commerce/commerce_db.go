@@ -208,8 +208,12 @@ func (s *DBStore) UpdateOrderStatus(ctx context.Context, id, status string) erro
 // UpdateOrderPaid records a payment against an order. Money must never be "recorded"
 // against a row that does not exist, so a zero-row update is an error.
 func (s *DBStore) UpdateOrderPaid(ctx context.Context, id string, paidTotal int64, status string) error {
+	// The status guard is what makes confirmation safe under concurrency: only the caller that
+	// moves PENDING_PAYMENT to PAID affects a row. A second callback affects none, which means
+	// the order was already settled — not that it is missing.
 	ct, err := s.pool.Exec(ctx,
-		`UPDATE orders SET paid_total = $2, status = $3, updated_at = now() WHERE id = $1`,
+		`UPDATE orders SET paid_total = $2, status = $3, updated_at = now()
+		  WHERE id = $1 AND status = 'PENDING_PAYMENT'`,
 		id, paidTotal, status)
 	if err != nil {
 		return err

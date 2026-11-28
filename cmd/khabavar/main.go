@@ -164,6 +164,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, pool *d
 	comSvc.SetAttemptStore(commerce.NewDBStore(pool.Pool))
 	comSvc.SetCartStore(commerce.NewDBStore(pool.Pool))
 	comSvc.SetPaymentGateway(paymentGateway(cfg))
+	comSvc.SetLogger(logger)
 	comSvc.SetAuditor(auditor)
 
 	mediaSvc := media.NewService(media.NewDBStore(pool.Pool), mediaStorage(cfg))

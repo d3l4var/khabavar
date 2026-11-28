@@ -66,6 +66,11 @@ func PaymentCallbackHandler(svc *Service, redirectOK, redirectFail string) http.
 			// The only safe way to call that a success is to look: if the order is PAID, the
 			// money arrived and this caller lost a race, not a payment.
 			if paid, _ := svc.orderIsPaid(r.Context(), orderID); !paid {
+				// A silent 500 is undiagnosable from the outside; say what happened.
+				if svc.logger != nil {
+					svc.logger.Error("payment callback: confirm failed",
+						"order_id", orderID, "intent_id", intentID, "err", err.Error())
+				}
 				writeJSON(w, http.StatusInternalServerError, map[string]any{
 					"error": "could not confirm order", "code": "confirm_failed",
 				})

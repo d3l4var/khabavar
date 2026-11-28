@@ -15,8 +15,52 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8090"
-PRODUCT = "3b8efdfb-994a-471b-8fe9-636247eff2ef"
-VARIANT = "6b8d24fc-869f-48f2-92b7-eee637b20bb3"
+# Discovered at runtime: a fresh database has no products, so a hardcoded id made this gate
+# pass only on the machine it was written on.
+PRODUCT = ""
+VARIANT = ""
+
+
+def discover_catalog():
+    """Find a published product and one of its variants, or create them through the admin API."""
+    global PRODUCT, VARIANT
+    st, body = get("/api/v1/catalog/products")
+    for item in (body.get("data") or []):
+        p = item.get("product") or {}
+        if p.get("id"):
+            PRODUCT = p["id"]
+            break
+    if PRODUCT:
+        st, detail = get(f"/api/v1/products/{PRODUCT}")
+        for v in (detail.get("variants") or []):
+            if v.get("id"):
+                VARIANT = v["id"]
+                break
+    if PRODUCT and VARIANT:
+        return True
+
+    # Nothing seeded: create a product and a variant as staff.
+    st, tok = post("/api/v1/auth/admin/login",
+                   {"email": "smoke-ops@khabavar.ir", "password": "SmokeTest!2026"})
+    token = tok.get("access_token", "")
+    if not token:
+        print("   no catalog and no staff login; cannot run")
+        return False
+    auth = {"Authorization": "Bearer " + token}
+    slug = f"concurrency-{int(time.time() * 1000)}"
+    st, created = post("/api/v1/admin/products",
+                       {"title": "همزمانی", "slug": slug}, auth)
+    PRODUCT = created.get("id", "")
+    if not PRODUCT:
+        print(f"   could not create a product: {st} {created}")
+        return False
+    st, var = post("/api/v1/admin/variants",
+                   {"product_id": PRODUCT, "sku": f"SKU-{slug}", "status": "ACTIVE"}, auth)
+    VARIANT = var.get("id", "")
+    if not VARIANT:
+        print(f"   could not create a variant: {st} {var}")
+        return False
+    return True
 N = 8
 
 
@@ -44,6 +88,10 @@ def get(path):
 
 
 def main():
+    if not discover_catalog():
+        return 1
+    print(f"catalog: product={PRODUCT} variant={VARIANT}")
+
     # A fresh key per run: reusing one replays the stored response, which is correct behaviour
     # but tests nothing about this run.
     key = f"concurrency-check-{int(time.time() * 1000)}"
