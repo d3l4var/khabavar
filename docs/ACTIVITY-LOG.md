@@ -3682,9 +3682,17 @@ KH_STORAGE_ADAPTER=gcs      panic: unknown KH_STORAGE_ADAPTER
 رندر کند: فایل دانلود می‌شد و `<img>` آیکون شکسته نشان می‌داد. حالا از پسوند کلید
 (`image/webp`, `image/jpeg`, `image/png`, `image/avif`…) و با fallback به media_type.
 
-**محدودیت صادقانه:** MinIO دانلود نشد (`dl.min.io` از این ماشین در دسترس نیست)، پس تست‌ها
-روی یک سرگر S3-compatible درون‌برنامه‌ای اجرا می‌شوند که امضا و path-style را بررسی می‌کند.
-سازگاری با یک provider واقعی اثبات نشده است.
+**MinIO دانلود نشد** (`dl.min.io` بعد از ۱۳۶ ثانیه timeout). به‌جایش **moto 5.2.6** نصب شد —
+پیاده‌سازی کامل AWS S3 که در تست‌های واقعی استفاده می‌شود. زنجیره روی آن:
+
+```
+POST /admin/media             201  storage_key=IMAGE/7ad29f…/moto.webp
+GET  /media/{id}/content      200  22b  type=image/webp  «real-s3-via-moto-bytes»
+GET  /media/{missing}/content 404
+boto3 list_objects_v2         [('IMAGE/7ad29f…/moto.webp', 22)]
+```
+
+شیء در سطل moto هست، با همان ۲۲ بایت. **سازگاری با یک پیاده‌سازی واقعی S3 اثبات شد.**
 
 ---
 
