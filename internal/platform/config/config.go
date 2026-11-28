@@ -29,6 +29,8 @@ type Config struct {
 	PaymentAdapter       string
 	SMSAdapter           string
 	PaymentCallbackURL   string
+	PaymentSuccessURL    string
+	PaymentFailureURL    string
 	ZarinpalBaseURL      string
 	ZarinpalStartURL     string
 	ZarinpalMerchantID   string
@@ -70,6 +72,8 @@ func Load() (Config, error) {
 		PaymentAdapter:       getenv("KH_PAYMENT_ADAPTER", "mock"),
 		SMSAdapter:           getenv("KH_SMS_ADAPTER", "mock"),
 		PaymentCallbackURL:   getenv("KH_PAYMENT_CALLBACK_URL", ""),
+		PaymentSuccessURL:    getenv("KH_PAYMENT_SUCCESS_URL", ""),
+		PaymentFailureURL:    getenv("KH_PAYMENT_FAILURE_URL", ""),
 		ZarinpalBaseURL:      getenv("KH_ZARINPAL_BASE_URL", "https://payment.zarinpal.com/pg/v4/payment"),
 		ZarinpalStartURL:     getenv("KH_ZARINPAL_START_URL", "https://payment.zarinpal.com/pg/StartPay/"),
 		ZarinpalMerchantID:   getenv("KH_ZARINPAL_MERCHANT_ID", ""),

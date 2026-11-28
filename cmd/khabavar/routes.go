@@ -315,6 +315,10 @@ func mountRoutes(api *apiMux, s services) {
 	api.public("GET /api/v1/orders/{id}", commerce.GetOrderHandler(s.commerce))
 	api.public("POST /api/v1/orders/{id}/payment-intents", commerce.CreatePaymentIntentHandler(s.commerce))
 	api.public("POST /api/v1/orders/{id}/confirm-payment", commerce.ConfirmPaymentHandler(s.commerce, commerce.PaymentWebhookSecret(s.cfg.PaymentWebhookSecret)))
+	// The gateway returns the customer's browser here. Public by necessity: the caller is a
+	// redirect, not a signed server. Nothing is trusted — Verify decides, not the query string.
+	api.public("GET /api/v1/payments/callback", commerce.PaymentCallbackHandler(s.commerce,
+		s.cfg.PaymentSuccessURL, s.cfg.PaymentFailureURL))
 	api.public("POST /api/v1/orders/{id}/cancel", commerce.CancelOrderHandler(s.commerce))
 	api.admin("POST /api/v1/admin/orders/{orderNumber}/refunds", commerce.CreateRefundHandler(s.commerce))
 	api.admin("GET /api/v1/admin/orders/{orderNumber}/refunds", commerce.ListRefundsHandler(s.commerce))

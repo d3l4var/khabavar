@@ -3395,6 +3395,30 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /payments/callback:
+    get:
+      operationId: getPaymentsCallback
+      tags: [payments]
+      summary: بازگشت مرورگر مشتری از درگاه پرداخت
+      description: >
+        درگاه‌های ایرانی (زرین‌پال، آیدی‌پی، زیبال) مرورگر مشتری را با
+        `?Authority=...&Status=OK` به این مسیر برمی‌گردانند و هیچ امضایی نمی‌فرستند.
+        هیچ‌چیز از query string اعتماد نمی‌شود: `Status=OK` فقط یعنی «درگاه این را
+        می‌گوید»؛ مبلغ و تسویه با Verify از خود درگاه پرسیده می‌شود و تنها پس از آن
+        سفارش PAID می‌شود. اگر درگاه در دسترس نباشد ۵۰۲ برمی‌گردد و سفارش دست‌نخورده
+        می‌ماند تا webhook یا reconcile آن را تسویه کند.
+      security: []
+      parameters:
+        - { name: Authority, in: query, required: true, schema: { type: string } }
+        - { name: Status, in: query, required: false, schema: { type: string, enum: [OK, NOK] } }
+      responses:
+        "303": { description: هدایت به صفحهٔ نتیجه (وقتی KH_PAYMENT_SUCCESS_URL تنظیم شده) }
+        "200": { description: پرداخت تأیید و سفارش PAID شد }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { description: پرداخت ناشناخته }
+        "409": { description: پرداخت لغو شد یا تأیید نشد }
+        "502": { description: درگاه در دسترس نیست؛ سفارش تغییر نکرد }
+
   /orders/{id}/confirm-payment:
     post:
       operationId: postOrdersIdConfirmpayment

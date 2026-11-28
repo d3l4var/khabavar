@@ -277,6 +277,21 @@ func (s *Service) StartPayment(ctx context.Context, orderID string) (string, str
 	if err != nil {
 		return pid, "", err
 	}
+	// Record the gateway's handle against the intent. Without this row the callback cannot
+	// resolve which order the authority belongs to, and the payment is unclaimable.
+	if s.attempts != nil && res.Authority != "" {
+		if _, err := s.attempts.CreateAttempt(ctx, PaymentAttempt{
+			PaymentIntentID:   pid,
+			Provider:          s.provider,
+			ProviderReference: res.Authority,
+			Amount:            o.GrandTotal,
+			Status:            AttemptRedirected,
+			IdempotencyKey:    "start:" + pid,
+			CreatedAt:         s.now(),
+		}); err != nil {
+			return pid, "", fmt.Errorf("record payment attempt: %w", err)
+		}
+	}
 	return pid, res.RedirectURL, nil
 }
 

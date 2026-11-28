@@ -20,6 +20,7 @@ type memStore struct {
 	orderByNumber map[string]string // number → id
 	items         map[string][]OrderItem
 	intents       map[string][]*PaymentIntent // orderID → intents (newest last)
+	intentByRef   map[string]string           // provider reference → intent id
 	orderSeq      int
 }
 
