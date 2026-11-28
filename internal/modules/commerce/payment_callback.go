@@ -62,10 +62,15 @@ func PaymentCallbackHandler(svc *Service, redirectOK, redirectFail string) http.
 		}
 
 		if err := svc.ConfirmPayment(r.Context(), intentID); err != nil && !errors.Is(err, ErrAlreadyPaid) {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": "could not confirm order", "code": "confirm_failed",
-			})
-			return
+			// A concurrent callback may have settled the order between our read and our write.
+			// The only safe way to call that a success is to look: if the order is PAID, the
+			// money arrived and this caller lost a race, not a payment.
+			if paid, _ := svc.orderIsPaid(r.Context(), orderID); !paid {
+				writeJSON(w, http.StatusInternalServerError, map[string]any{
+					"error": "could not confirm order", "code": "confirm_failed",
+				})
+				return
+			}
 		}
 
 		// A browser landed here, so send it somewhere a human can read.
@@ -102,6 +107,16 @@ func (s *Service) VerifyWithGateway(ctx context.Context, authority, orderID stri
 		return false, nil
 	}
 	return true, nil
+}
+
+// orderIsPaid re-reads the order. Used only to decide whether a failed transition was a lost
+// race or a real failure.
+func (s *Service) orderIsPaid(ctx context.Context, orderID string) (bool, error) {
+	o, err := s.store.GetOrder(ctx, orderID)
+	if err != nil || o == nil {
+		return false, err
+	}
+	return o.Status == OrderPaid, nil
 }
 
 func firstNonEmpty(vals ...string) string {

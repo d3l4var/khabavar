@@ -2,6 +2,7 @@ package commerce
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -117,5 +118,23 @@ func TestPaymentCallback_CancelledAndUnknown(t *testing.T) {
 		"/api/v1/payments/callback?Authority=UNKNOWN", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown: status=%d want 404", rec.Code)
+	}
+}
+
+// TestConfirmPayment_SecondSettleIsNotAnError pins the race a gateway produces for free: it
+// retries its callback. The second settle used to answer ErrIntentNotSucceeded, which the
+// callback handler turned into a 500 for a payment that had already succeeded.
+func TestConfirmPayment_SecondSettleIsNotAnError(t *testing.T) {
+	store := newMemStore()
+	svc := NewService(store, nil)
+	store.orders["ord-2"] = &Order{ID: "ord-2", OrderNumber: "KHA-2", Status: OrderPendingPayment, GrandTotal: 25000, Currency: "IRR"}
+	store.intents["ord-2"] = []*PaymentIntent{{ID: "intent-2", OrderID: "ord-2", Amount: 25000, Status: IntentRequiresPayment}}
+
+	if err := svc.ConfirmPayment(context.Background(), "intent-2"); err != nil {
+		t.Fatalf("first confirm: %v", err)
+	}
+	err := svc.ConfirmPayment(context.Background(), "intent-2")
+	if !errors.Is(err, ErrAlreadyPaid) {
+		t.Fatalf("second confirm = %v, want ErrAlreadyPaid", err)
 	}
 }

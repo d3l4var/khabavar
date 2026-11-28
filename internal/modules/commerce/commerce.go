@@ -602,6 +602,11 @@ func (s *Service) ConfirmPaymentForOrder(ctx context.Context, orderID string) er
 	if pi == nil {
 		return ErrIntentNotSucceeded
 	}
+	// A concurrent callback that already settled this intent is not a failure: the money
+	// arrived. Answering ErrIntentNotSucceeded turned a duplicate gateway callback into a 500.
+	if pi.Status == IntentSucceeded {
+		return ErrAlreadyPaid
+	}
 	if pi.Status != IntentRequiresPayment && pi.Status != IntentProcessing {
 		return ErrIntentNotSucceeded
 	}
